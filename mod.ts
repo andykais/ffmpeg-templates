@@ -752,11 +752,23 @@ async function render(
     const info = clip_info_map[clip_id]
     const geometry = clip_geometry_map[clip_id]
 
+    const video_input_filters = []
+    if (clip.transition?.fade_in) {
+      const transition_duration = parse_duration(clip.transition.fade_in, template)
+      video_input_filters.push(`fade=t=in:st=0:d=${transition_duration}:alpha=1`)
+    }
+    if (clip.transition?.fade_out) {
+      const transition_duration = parse_duration(clip.transition.fade_out, template)
+      video_input_filters.push(
+        `fade=t=out:st=${duration - transition_duration}:d=${transition_duration}:alpha=1`
+      )
+    }
     const pts_speed = clip.speed ? `${1 / parse_percentage(clip.speed)}*` : ''
     const setpts =
       start_at === 0 ? `setpts=${pts_speed}PTS-STARTPTS` : `setpts=${pts_speed}PTS+${start_at}/TB`
     const vscale = `scale=${geometry.scale.width}:${geometry.scale.height}`
-    const video_input_filters = [setpts, vscale]
+
+    video_input_filters.push(setpts, vscale)
     if (geometry.rotate) {
       const { degrees, width, height } = geometry.rotate
       video_input_filters.push(`rotate=${degrees}*PI/180:fillcolor=black@0:out_w=${width}:out_h=${height}`)

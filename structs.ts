@@ -82,6 +82,8 @@ interface ClipBase {
   duration?: Timestamp
   /** Increase or decrease the playback speed */
   speed: Percentage
+  /** Effect to transition a clip in or out of the page */
+  transition?: { fade_in?: Timestamp; fade_out?: Timestamp }
 }
 
 interface MediaClip extends ClipBase {
