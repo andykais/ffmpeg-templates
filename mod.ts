@@ -82,7 +82,6 @@ function parse_template(template_input: Template, cwd: string): TemplateParsed {
         font_color: 'white',
         font_size: 12,
         font_outline_color: 'black',
-        trim: { end: 'fit' },
         ...clip,
       })
     }
@@ -193,12 +192,7 @@ async function probe_clips(
     }
 
     if (['mjpeg', 'jpeg', 'jpg', 'png'].includes(video_stream.codec_name)) {
-      // TODO deal with this in timelime computation
-      // if (!clip.duration) throw new InputError(`Cannot specify image clip ${clip.file} without a duration`)
-      const duration = clip.duration ? parse_duration(clip.duration, template) : NaN
-      // if (clip.trim) {
-      //   throw new InputError(`Cannot use 'trim' with an image clip`)
-      // }
+      const duration = NaN
       return { type: 'image' as const, filepath, id, width, height, aspect_ratio, has_audio, duration }
     } else {
       // ffprobe's duration is unreliable. The best solutions I have are:
@@ -305,7 +299,7 @@ function compute_geometry(
       // we want scaling to happen before rotation because (on average) we scale down, and if we can scale
       // sooner, then we have less pixels to rotate/crop/etc
       ;({ width, height } = compute_rotated_size({ width, height }, clip.rotate))
-      rotate = { degrees: clip.rotate, width, height, }
+      rotate = { degrees: clip.rotate, width, height }
     }
 
     let crop: ClipGeometryMap[string]['crop']
@@ -409,10 +403,6 @@ function compute_timeline(template: TemplateParsed, clip_info_map: ClipInfoMap) 
     )
   )
 
-  // fonts need a backup info duration. This means that if only fonts are specified without duration
-  // they will create an output of zero length
-  const surrogate_font_info = { duration: 0 }
-
   function calculate_layer_duration(layer: ClipID[], index: number, skip_trim_fit: boolean) {
     let layer_duration = 0
     for (const clip_index of layer.keys()) {
@@ -425,11 +415,16 @@ function compute_timeline(template: TemplateParsed, clip_info_map: ClipInfoMap) 
       const clip = template.clips.find(c => c.id === clip_id)
       if (clip === undefined)
         throw new InputError(`Clip ${clip_id} does not exist. I cannot be used in the timeline.`)
-      const info = is_media_clip(clip) ? get_clip(clip_info_map, clip_id) : surrogate_font_info
+      const info = get_clip(clip_info_map, clip_id)
+      let clip_duration = info.duration
+
+      if (Number.isNaN(clip_duration)) {
+        if (clip.duration) clip_duration = parse_duration(clip.duration, template)
+        // Images and Fonts have no file duration, so if a manual duration isnt specified, they do nothing
+        else continue
+      }
 
       const { trim } = clip
-
-      let clip_duration = info.duration
 
       if (trim?.start === 'fit') {
       } else if (trim?.start) {
@@ -475,9 +470,9 @@ function compute_timeline(template: TemplateParsed, clip_info_map: ClipInfoMap) 
     }
   }
   const total_duration = all_clips_trim_to_fit ? shortest_duration : longest_duration
-  if (total_duration === 0) {
+  if (total_duration === 0 || Number.isNaN(total_duration)) {
     throw new InputError(
-      'Output duration cannot be zero. If all clips are font clips, at least one must specify a duration.'
+      'Output duration cannot be zero. If all clips are font or image clips, at least one must specify a duration.'
     )
   }
 
@@ -496,9 +491,10 @@ function compute_timeline(template: TemplateParsed, clip_info_map: ClipInfoMap) 
           if (math.gt(seconds_until_complete, 0)) layer_start_position += seconds_until_complete
         } else {
           const clip = template.clips.find(c => c.id === clip_id)!
-          const info = is_media_clip(clip) ? get_clip(clip_info_map, clip_id) : surrogate_font_info
+          const info = get_clip(clip_info_map, clip_id)
           const { trim } = clip
           let clip_duration = info.duration
+          if (Number.isNaN(clip_duration)) clip_duration = total_duration
           const speed = clip.speed ? parse_percentage(clip.speed) : 1
           clip_duration *= 1 / speed
           let trim_start = 0
@@ -617,6 +613,8 @@ async function replace_font_clips_with_image_clips(
         'none',
         '-pointsize',
         clip.font_size.toString(),
+        // TODO make tiktok text with this
+        // '-undercolor','red',
         '-gravity',
         'Center',
       ]

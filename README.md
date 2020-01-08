@@ -154,3 +154,6 @@ complicated tutorials, no hidden settings in a application preferences. Its just
 - [X] make `YAMLError`s recoverable
 - [ ] make background color a parameter
 - [ ] add border param
+- [ ] add transitions
+    - cross fade
+    - screen wipe?
