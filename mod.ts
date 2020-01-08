@@ -1,4 +1,5 @@
 import * as io from 'https://deno.land/std@0.75.0/io/mod.ts'
+import * as fs from 'https://deno.land/std@0.75.0/fs/mod.ts'
 import * as path from 'https://deno.land/std@0.75.0/path/mod.ts'
 import * as math from './float_math.ts'
 import { ProbeError, CommandError, InputError } from './errors.ts'
@@ -32,7 +33,8 @@ interface MediaClipParsed extends MediaClip {
 }
 interface FontClipParsed extends FontClip {
   id: ClipID
-  color: string
+  font_color: string
+  font_outline_color: string
   font_size: number
 }
 type ClipParsed = MediaClipParsed | FontClipParsed
@@ -75,7 +77,14 @@ function parse_template(template_input: Template, cwd: string): TemplateParsed {
       clips.push({ id, filepath, ...clip })
     } else {
       // its a font
-      clips.push({ id, color: '#000000', font_size: 12, trim: { end: 'fit' }, ...clip })
+      clips.push({
+        id,
+        font_color: 'white',
+        font_size: 12,
+        font_outline_color: 'black',
+        trim: { end: 'fit' },
+        ...clip,
+      })
     }
   }
   const timeline = template_input.timeline ?? { '00:00:00': clips.map(clip => [clip.id]) }
@@ -140,76 +149,93 @@ interface ClipInfoMap {
 // So for now, if you edit a file, you restart the watcher
 // This is fair enough since its how most video editors function (and how often are people manipulating source files?)
 const clip_info_map_cache: ClipInfoMap = {}
-async function probe_clips(template: TemplateParsed): Promise<ClipInfoMap> {
-  const probe_clips_promises = template.clips
-    // only probe media clips
-    .filter(is_media_clip)
-    .map(async (clip: MediaClipParsed) => {
-      const { id, filepath } = clip
-      if (clip_info_map_cache[filepath]) return clip_info_map_cache[filepath]
-      console.log(`Probing file ${clip.file}`)
-      const result = await exec([
-        'ffprobe',
-        '-v',
-        'error',
-        '-print_format',
-        'json',
-        '-show_streams',
-        '-show_entries',
-        'stream=width,height,display_aspect_ratio,codec_type,codec_name:stream_tags=rotate',
-        // 'format=duration',
-        filepath,
-      ])
-      const info = JSON.parse(result)
-      const video_stream = info.streams.find((s: any) => s.codec_type === 'video')
-      const audio_stream = info.streams.find((s: any) => s.codec_type === 'audio')
+async function probe_clips(
+  template: TemplateParsed,
+  clips: TemplateParsed['clips'],
+  use_cache = true
+): Promise<ClipInfoMap> {
+  // only probe media clips
+  const media_clips = clips.filter(is_media_clip)
 
-      if (!video_stream) throw new ProbeError(`Input "${clip.file}" has no video stream`)
-      const has_audio = audio_stream !== undefined
-      let rotation = video_stream.tags?.rotate ? (parseInt(video_stream.tags?.rotate) * Math.PI) / 180.0 : 0
-      let { width, height } = video_stream
-      // this is slightly out of order, but its important because geometry should use the expected width & height
-      if (clip.rotate) rotation += (clip.rotate * Math.PI) / 180.0
-      ;[height, width] = [
-        Math.abs(width * Math.sin(rotation)) + Math.abs(height * Math.cos(rotation)),
-        Math.abs(width * Math.cos(rotation)) + Math.abs(height * Math.sin(rotation)),
-      ].map(Math.floor)
+  const unique_files = new Set<string>()
+  // we only need to probe files once
+  const unique_media_clips = media_clips.filter(c => unique_files.size < unique_files.add(c.filepath).size)
 
-      let aspect_ratio = width / height
-      if (video_stream.display_aspect_ratio) {
-        aspect_ratio = parse_aspect_ratio(video_stream.display_aspect_ratio, rotation)
-      }
+  const probe_clips_promises = unique_media_clips.map(async (clip: MediaClipParsed) => {
+    const { id, filepath } = clip
+    if (use_cache && clip_info_map_cache[filepath]) return clip_info_map_cache[filepath]
+    console.log(`Probing file ${clip.file}`)
+    const result = await exec([
+      'ffprobe',
+      '-v',
+      'error',
+      '-print_format',
+      'json',
+      '-show_streams',
+      '-show_entries',
+      'stream=width,height,display_aspect_ratio,codec_type,codec_name:stream_tags=rotate',
+      // 'format=duration',
+      filepath,
+    ])
+    const info = JSON.parse(result)
+    const video_stream = info.streams.find((s: any) => s.codec_type === 'video')
+    const audio_stream = info.streams.find((s: any) => s.codec_type === 'audio')
 
-      if (['mjpeg', 'jpeg', 'jpg', 'png'].includes(video_stream.codec_name)) {
-        if (!clip.duration) throw new InputError(`Cannot specify image clip ${clip.file} without a duration`)
-        const duration = parse_duration(clip.duration, template)
-        if (clip.trim) {
-          throw new InputError(`Cannot use 'trim' with an image clip`)
-        }
-        return { type: 'image' as const, filepath, id, width, height, aspect_ratio, has_audio, duration }
-      } else {
-        // ffprobe's duration is unreliable. The best solutions I have are:
-        // 1. ffmpeg guessing: https://stackoverflow.com/a/33115316/3795137
-        // 2. ffprobe packets: https://stackoverflow.com/a/33346572/3795137 but this is a ton of output, so were using ffmpeg
-        // I picked #2 because #1 is very slow to complete, it has to iterate the whole video, often at regular playback speed
-        let packet_str_buffer: string[] = []
-        const out = await exec(['ffprobe', '-v', 'error', '-show_packets', '-i', filepath], line => {
-          if (line === '[PACKET]') packet_str_buffer = []
-          packet_str_buffer.push(line)
-        })
-        const packet = parse_ffmpeg_packet(packet_str_buffer)
-        const duration = parseFloat(packet.dts_time)
-        return { type: 'video' as const, filepath, id, width, height, aspect_ratio, has_audio, duration }
-      }
-    })
+    if (!video_stream) throw new ProbeError(`Input "${clip.file}" has no video stream`)
+    const has_audio = audio_stream !== undefined
+    let rotation = video_stream.tags?.rotate ? (parseInt(video_stream.tags?.rotate) * Math.PI) / 180.0 : 0
+    let { width, height } = video_stream
+    // this is slightly out of order, but its important because geometry should use the expected width & height
+    if (clip.rotate) rotation += (clip.rotate * Math.PI) / 180.0
+    ;[height, width] = [
+      Math.abs(width * Math.sin(rotation)) + Math.abs(height * Math.cos(rotation)),
+      Math.abs(width * Math.cos(rotation)) + Math.abs(height * Math.sin(rotation)),
+    ].map(Math.floor)
+
+    let aspect_ratio = width / height
+    if (video_stream.display_aspect_ratio) {
+      aspect_ratio = parse_aspect_ratio(video_stream.display_aspect_ratio, rotation)
+    }
+
+    if (['mjpeg', 'jpeg', 'jpg', 'png'].includes(video_stream.codec_name)) {
+      // TODO deal with this in timelime computation
+      // if (!clip.duration) throw new InputError(`Cannot specify image clip ${clip.file} without a duration`)
+      const duration = clip.duration ? parse_duration(clip.duration, template) : NaN
+      // if (clip.trim) {
+      //   throw new InputError(`Cannot use 'trim' with an image clip`)
+      // }
+      return { type: 'image' as const, filepath, id, width, height, aspect_ratio, has_audio, duration }
+    } else {
+      // ffprobe's duration is unreliable. The best solutions I have are:
+      // 1. ffmpeg guessing: https://stackoverflow.com/a/33115316/3795137
+      // 2. ffprobe packets: https://stackoverflow.com/a/33346572/3795137 but this is a ton of output, so were using ffmpeg
+      // I picked #2 because #1 is very slow to complete, it has to iterate the whole video, often at regular playback speed
+      let packet_str_buffer: string[] = []
+      const out = await exec(['ffprobe', '-v', 'error', '-show_packets', '-i', filepath], line => {
+        if (line === '[PACKET]') packet_str_buffer = []
+        packet_str_buffer.push(line)
+      })
+      const packet = parse_ffmpeg_packet(packet_str_buffer)
+      const duration = parseFloat(packet.dts_time)
+      return { type: 'video' as const, filepath, id, width, height, aspect_ratio, has_audio, duration }
+    }
+  })
 
   const probed_clips = await Promise.all(probe_clips_promises)
-  return probed_clips.reduce((acc: ClipInfoMap, clip_info, i) => {
-    const { id, filepath } = clip_info
-    clip_info_map_cache[clip_info.filepath] = clip_info
-    acc[clip_info.id] = clip_info
+  for (const probed_clip of probed_clips) {
+    clip_info_map_cache[probed_clip.filepath] = probed_clip
+  }
+  return media_clips.reduce((acc: ClipInfoMap, clip, i) => {
+    const clip_info = clip_info_map_cache[clip.filepath]
+    acc[clip.id] = clip_info
     return acc
   }, {})
+  // return probed_clips.reduce((acc: ClipInfoMap, clip_info, i) => {
+  //   const { id, filepath } = clip_info
+  //   clip_info_map_cache[clip_info.filepath] = clip_info
+  //   acc[clip_info.id] = clip_info
+  //   return acc
+  // }, {})
 }
 
 function get_clip(clip_info_map: ClipInfoMap, clip_id: ClipID) {
@@ -234,7 +260,7 @@ interface ClipGeometryMap {
     }
   }
 }
-function compute_geometry(template: TemplateParsed, clip_info_map: ClipInfoMap) {
+function compute_background_size(template: TemplateParsed, clip_info_map: ClipInfoMap) {
   const { size } = template
 
   const background_width = parse_unit(size.width, {
@@ -243,16 +269,17 @@ function compute_geometry(template: TemplateParsed, clip_info_map: ClipInfoMap) 
   const background_height = parse_unit(size.height, {
     percentage: p => Math.floor(p * get_clip(clip_info_map, size.relative_to).height),
   })
-  // font clips need some 'fake' backup data
-  const surrogate_font_info = {
-    width: background_width,
-    height: background_height,
-    aspect_ratio: background_width / background_height,
-  }
-
+  return { background_width, background_height }
+}
+function compute_geometry(
+  template: TemplateParsed,
+  background_width: number,
+  background_height: number,
+  clip_info_map: ClipInfoMap
+) {
   const clip_geometry_map: ClipGeometryMap = {}
   for (const clip of template.clips) {
-    const info = is_media_clip(clip) ? get_clip(clip_info_map, clip.id) : surrogate_font_info
+    const info = get_clip(clip_info_map, clip.id)
     const { layout } = clip
 
     const input_width = parse_unit(layout?.width, {
@@ -362,7 +389,7 @@ function compute_geometry(template: TemplateParsed, clip_info_map: ClipInfoMap) 
     }
     clip_geometry_map[clip.id] = { x, y, width, height, scale, rotate, crop }
   }
-  return { background_width, background_height, clip_geometry_map }
+  return clip_geometry_map
 }
 
 interface TimelineClip {
@@ -401,7 +428,9 @@ function compute_timeline(template: TemplateParsed, clip_info_map: ClipInfoMap) 
       // PAD does nothing while calculating longest duration
       if (clip_id === TIMELINE_ENUMS.PAD) continue
 
-      const clip = template.clips.find(c => c.id === clip_id)!
+      const clip = template.clips.find(c => c.id === clip_id)
+      if (clip === undefined)
+        throw new InputError(`Clip ${clip_id} does not exist. I cannot be used in the timeline.`)
       const info = is_media_clip(clip) ? get_clip(clip_info_map, clip_id) : surrogate_font_info
 
       const { trim } = clip
@@ -550,61 +579,205 @@ function compute_tempo(val: number) {
 // generate font assets and replace font clips with media clips
 async function replace_font_clips_with_image_clips(
   template: TemplateParsed,
+  background_width: number,
+  background_height: number,
   clip_info_map: ClipInfoMap,
-  clip_geometry_map: ClipGeometryMap,
   cwd: string
 ): Promise<MediaClipParsed[]> {
   const font_clips: FontClipParsed[] = template.clips.filter(is_font_clip)
-  const font_assets_path = path.join('/tmp', cwd, `font_assets/`)
+  const font_assets_path = path.join('/tmp/ffmpeg-templates', cwd, `font_assets/`)
   if (font_clips.length) await Deno.mkdir(font_assets_path, { recursive: true })
 
   const font_generation_promises: Promise<MediaClipParsed>[] = font_clips.map(
     async (clip: FontClipParsed) => {
-      const geometry = clip_geometry_map[clip.id]
       const filepath = path.join(font_assets_path, `${clip.id}.png`)
-      const font_args = []
-      if (clip.font) font_args.push('-font', clip.font)
+      // we remove the file so we can be certain it was created
+      if (await fs.exists(filepath)) await Deno.remove(filepath)
+
+      const width = parse_unit(clip.layout?.width, {
+        percentage: p => p * background_width,
+        undefined: () => null,
+      })
+      const height = parse_unit(clip.layout?.height, {
+        percentage: p => p * background_height,
+        undefined: () => null,
+      })
+
+      let text_type = 'label'
+      const size_args = []
+      if (width && height) {
+        text_type = 'caption'
+        size_args.push('-size', `${width}x${height}`)
+      } else if (width) {
+        text_type = 'caption'
+        size_args.push('-size', `${width}x`)
+      } else if (height) {
+        text_type = 'caption'
+        size_args.push('-size', `x${height}`)
+      }
+
       const magick_command = [
         'magick',
-        '-size',
-        `${geometry.width}x${geometry.height}`,
-        'xc:none',
+        '-background',
+        'none',
         '-pointsize',
-        `${clip.font_size}`,
+        clip.font_size.toString(),
         '-gravity',
-        'Center',
-        '-fill',
-        clip.color,
-        ...font_args,
-        '-annotate',
-        '0',
-        clip.text,
+        'Center'
       ]
+      if (clip.font) magick_command.push('-font', clip.font)
+      if (clip.font_outline_size) {
+        magick_command.push(...size_args)
+        magick_command.push('-strokewidth', clip.font_outline_size.toString())
+        magick_command.push('-stroke', clip.font_outline_color)
+        magick_command.push(`${text_type}:${clip.text}`)
+      }
+      magick_command.push(...size_args)
+      magick_command.push('-fill', clip.font_color)
+      magick_command.push('-stroke', 'none')
+      magick_command.push(`${text_type}:${clip.text}`)
+      magick_command.push('-compose', 'over', '-composite')
+      magick_command.push('-trim', '+repage')
       magick_command.push(filepath)
+
+
+      // const optional_font_args = []
+      // if (clip.font) optional_font_args.push('-font', clip.font)
+      // if (clip.font_outline_size) {
+      //   optional_font_args.push('-strokewidth', clip.font_outline_size.toString())
+      //   if (clip.font_outline_color) optional_font_args.push('-stroke', clip.font_outline_color)
+
+      //   // optional_font_args.push('-annotate', '0', clip.text)
+      //   // optional_font_args.push(
+      //   //   '-pointsize',
+      //   //   clip.font_size.toString(),
+      //   //   `label:"${clip.text}"`,
+      //   //   '-compose',
+      //   //   'over',
+      //   //   '-composite'
+      //   // )
+      // }
+      // if (width && height) {
+      //   text_type = 'caption'
+      //   optional_font_args.push('-size', `${width}x${height}`)
+      // } else if (width) {
+      //   text_type = 'caption'
+      //   optional_font_args.push('-size', `${width}x`)
+      // } else if (height) {
+      //   text_type = 'caption'
+      //   optional_font_args.push('-size', `x${width}`)
+      // }
+
+      // const magick_command = [
+      //   'magick',
+      //   '-background',
+      //   'none',
+      //   '-pointsize',
+      //   clip.font_size.toString(),
+      //   '-fill',
+      //   clip.font_color,
+      //   '-gravity',
+      //   'Center',
+      //   ...optional_font_args,
+      //   `${text_type}:${clip.text}`,
+      //   // 'magick',
+      //   // 'xc:lightblue',
+      //   // '-size', '100x100',
+      //   // // '(',
+      //   // '-pointsize', '16',
+      //   // '-fill', 'black',
+      //   // '-gravity', 'Center',
+      //   // 'caption:"Test me 1"',
+      //   // // ')',
+      //   // '(',
+      //   // '-size', '100x100',
+      //   // '-background',
+      //   // 'none',
+      //   // '-pointsize', '16',
+      //   // '-fill', 'black',
+      //   // '-gravity','Center',
+      //   // 'caption:"Test me 2"',
+      //   // '-flatten',
+      //   // ')',
+      //   // '-composite'
+
+      //   // 'convert',
+      //   // 'logo:',
+      //   // // '-size',
+      //   // // `${geometry.width}x${geometry.height}`,
+      //   // // 'xc:none',
+      //   // '-background',
+      //   // 'none',
+      //   // '-pointsize', '30',
+      //   // '-gravity',
+      //   // 'Center',
+
+      //   // '-strokewidth', '4',
+      //   // '-stroke','black',
+      //   // '-pointsize', '30',
+      //   // // `label:"${clip.text}"`,
+      //   // 'label:My Text Here',
+      //   // '-compose', 'over', '-composite',
+      //   // '-fill',
+      //   // clip.font_color,
+      //   // '-stroke',
+      //   // 'none',
+      //   // // // '-annotate',
+      //   // // // '0',
+      //   // // `label:"${clip.text}"`,
+      //   // 'label:My Text Here',
+      //   // '-compose', 'over', '-composite',
+
+      //   // 'logo:',
+      //   // '-size',
+      //   // `${geometry.width}x${geometry.height}`,
+      //   // 'xc:none',
+      //   // '-pointsize',
+      //   // clip.font_size.toString(),
+      //   // ...optional_font_args,
+      //   // '-fill',
+      //   // clip.font_color,
+      //   // '-stroke',
+      //   // 'none',
+      //   // // // '-annotate',
+      //   // // // '0',
+      //   // `label:"${clip.text}"`,
+      //   // '-compose',
+      //   // 'over',
+      //   // '-composite',
+      // ]
+      // magick_command.push(filepath)
+      console.log(magick_command.join(' '))
       const proc = Deno.run({ cmd: magick_command })
       const result = await proc.status()
       if (!result.success) {
         throw new CommandError(`Command "${magick_command.join(' ')}" failed.\n\n`)
+      } else if (!(await fs.exists(filepath))) {
+        throw new CommandError(`Command "${magick_command.join(' ')}" failed. No image was produced.\n\n`)
       }
-      const { text, font_size, color, ...base_clip_params } = clip
+      const { text, font_size, font_color, ...base_clip_params } = clip
       return { ...base_clip_params, filepath, file: filepath, audio_volume: 0 }
     }
   )
 
   const font_media_clips = await Promise.all(font_generation_promises)
-  for (const clip of font_media_clips) {
-    // add some dummy data for the final steps (NaN fields are unused)
-    clip_info_map[clip.id] = {
-      id: clip.id,
-      filepath: clip.filepath,
-      has_audio: false,
-      type: 'image' as const,
-      width: NaN,
-      height: NaN,
-      aspect_ratio: NaN,
-      duration: NaN,
-    }
+  const font_media_clip_info_map = await probe_clips(template, font_media_clips, false)
+  for (const clip of Object.values(font_media_clip_info_map)) {
+    clip_info_map[clip.id] = clip
   }
+  // for (const clip of font_media_clips) {
+  //   // add some dummy data for the final steps (NaN fields are unused)
+  //   clip_info_map[clip.id] = {
+  //     id: clip.id,
+  //     filepath: clip.filepath,
+  //     has_audio: false,
+  //     type: 'image' as const,
+  //     width: NaN,
+  //     height: NaN,
+  //     aspect_ratio: NaN,
+  //     duration: NaN,
+  //   }
+  // }
   const clips: MediaClipParsed[] = template.clips.map(clip => {
     if (is_media_clip(clip)) return clip
     else {
@@ -675,14 +848,16 @@ async function render(
 
   const sample_frame = options?.render_sample_frame ? parse_duration(template.preview, template) : undefined
 
-  const clip_info_map = await probe_clips(template)
-  const { background_width, background_height, clip_geometry_map } = compute_geometry(template, clip_info_map)
+  const clip_info_map = await probe_clips(template, template.clips)
+  const { background_width, background_height } = compute_background_size(template, clip_info_map)
   const clips: MediaClipParsed[] = await replace_font_clips_with_image_clips(
     template,
+    background_width,
+    background_height,
     clip_info_map,
-    clip_geometry_map,
     cwd
   )
+  const clip_geometry_map = compute_geometry(template, background_width, background_height, clip_info_map)
   const { timeline, total_duration } = compute_timeline(template, clip_info_map)
 
   const complex_filter_inputs = [

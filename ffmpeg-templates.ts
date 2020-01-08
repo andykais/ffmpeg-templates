@@ -71,19 +71,22 @@ function progress_callback(execution_start_time: number, ffmpeg_progress: Ffmpeg
 
 async function read_template(template_filepath: string): Promise<Template> {
   const file_contents = decoder.decode(await Deno.readFile(template_filepath))
+  let error_message = undefined
   try {
     const template: Template = JSON.parse(file_contents)
     return template
   } catch (e) {
     if (e.name !== 'SyntaxError') throw e
+    error_message = e.toString()
   }
   try {
     const template: Template = yaml.parse(file_contents) as any
     return template
   } catch (e) {
-    if (e.name !== 'SyntaxError') throw e
+    if (!['SyntaxError', 'YAMLError'].includes(e.name)) throw e
+    error_message = e.toString()
   }
-  throw new errors.InputError(`template ${template_filepath} is not valid JSON or YAML`)
+  throw new errors.InputError(`template ${template_filepath} is not valid JSON or YAML\n${error_message}`)
 }
 
 async function try_render_video(

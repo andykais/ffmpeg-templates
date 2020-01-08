@@ -3,6 +3,7 @@ import type { TemplateParsed } from './mod.ts'
 
 type Seconds = number
 
+class UnitError extends InputError {}
 function parse_percentage(percentage: string): number {
   if (percentage.endsWith('%')) {
     const percent = parseFloat(percentage.substr(0, percentage.length - 1))
@@ -10,7 +11,7 @@ function parse_percentage(percentage: string): number {
       return percent / 100
     }
   }
-  throw new InputError(`Invalid percentage "${percentage}"`)
+  throw new UnitError(`Invalid percentage "${percentage}"`)
 }
 
 function parse_pixels(pixels: string): number {
@@ -34,13 +35,13 @@ function parse_unit<T = number, U = number, V = number>(
   try {
     return (post_processors?.percentage ?? (p => p))(parse_percentage(value))
   } catch (e) {
-    if (e instanceof InputError == false) throw e
+    if (e instanceof UnitError == false) throw e
   }
 
   try {
     return (post_processors?.pixels ?? (p => p))(parse_pixels(value))
   } catch (e) {
-    if (e instanceof InputError == false) throw e
+    if (e instanceof UnitError == false) throw e
   }
   throw new InputError(`Value "${value}" is neither a percentage or pixels`)
 }

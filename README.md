@@ -115,8 +115,8 @@ complicated tutorials, no hidden settings in a application preferences. Its just
 - [ ] Cache trimmed clips in watch mode
 - [ ] Support audio only inputs
 - [ ] Add `--render-sample-thumbnails [num_thumbnails]` flag as alternative to `--render-sample-frame`
-- [ ] Make `--render-sample-frame` interactive (e.g., -> moves forward one frame, `<-` backward. `Shift` + `->` Skips ahead 1 second)
-- [X] Add trim.stop or a similar word to signify trimming to a 'stop' timestamp (trim.end trims in reverse). A negative duration on trim.end would work as well.
+- [ ]  [REJECTED]Make `--render-sample-frame` interactive (e.g., -> moves forward one frame, `<-` backward. `Shift` + `->` Skips ahead 1 second)
+- [X] Add trim.stop or a similar word to signify trimming to a 'stop' timestamp (trim.end trims in reverse). A negative duration on trim.end would work as well. 
 - [X] Add `clip[].speed` filter (`setpts={speed}*PTS`)
 - [ ] Alternatively to implementing more terminal-ui things, we could create a real web page which has the
       preview window and a timeline. All still config driven. The preview window does however let you change
@@ -129,12 +129,13 @@ complicated tutorials, no hidden settings in a application preferences. Its just
 - [x] Intelligently inspect previews. Only include clips that are relevant to the desired frame.
 - [x] support duration expressions like `"00:02:12 - 00:00:03.4"`
 - [X] support image inputs
-- [ ] support font inputs
+- [X] support font inputs
 - [X] add timeline variables
 - [X] add rotation clip option
 - [ ] durations should support '00:00:00' and '00:00' and '00' and '0'
 - [ ] zoompan
   - during previews, arrows should represent where the zoom is going from and going to
+  - automatic face tracking option?
 - [ ] create placeholder loading image (from imagemagick) that immediately shows up on preview
 - [ ] add warning about unused clips in timeline
 - [ ] report this one as a bug?
@@ -150,6 +151,6 @@ complicated tutorials, no hidden settings in a application preferences. Its just
     at async render_sample_frame (mod.ts:659:10)
     at async try_render_video (ffmpeg-templates.ts:103:9)
 ```
-- [ ] make `YAMLError`s recoverable
+- [X] make `YAMLError`s recoverable
 - [ ] make background color a parameter
 - [ ] add border param

@@ -20,6 +20,12 @@ type Pixels = string
 type Degrees = number
 
 /**
+ * Hexidecimal color
+ * "#000000"
+ */
+type HexColor = string
+
+/**
  * A hour, minute, second timestamp formatted like so:
  * 00:00:05 or 01:23:02.75
  */
@@ -90,7 +96,13 @@ interface FontClip extends ClipBase {
   text: string
 
   /** Hex color code for font (default is #00000) */
-  color?: string
+  font_color?: HexColor
+
+  /** Hex color code for font outline (default is #000000) */
+  font_outline_color?: HexColor
+
+  /** Text outline size (default is zero) */
+  font_outline_size?: number
 
   /** Font size (default is 12) */
   font_size?: number
