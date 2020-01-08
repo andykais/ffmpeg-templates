@@ -185,12 +185,7 @@ async function probe_clips(
     const has_audio = audio_stream !== undefined
     let rotation = video_stream.tags?.rotate ? (parseInt(video_stream.tags?.rotate) * Math.PI) / 180.0 : 0
     let { width, height } = video_stream
-    // this is slightly out of order, but its important because geometry should use the expected width & height
-    if (clip.rotate) rotation += (clip.rotate * Math.PI) / 180.0
-    ;[height, width] = [
-      Math.abs(width * Math.sin(rotation)) + Math.abs(height * Math.cos(rotation)),
-      Math.abs(width * Math.cos(rotation)) + Math.abs(height * Math.sin(rotation)),
-    ].map(Math.floor)
+    ;({ width, height } = compute_rotated_size({ width, height }, rotation))
 
     let aspect_ratio = width / height
     if (video_stream.display_aspect_ratio) {
@@ -230,12 +225,17 @@ async function probe_clips(
     acc[clip.id] = clip_info
     return acc
   }, {})
-  // return probed_clips.reduce((acc: ClipInfoMap, clip_info, i) => {
-  //   const { id, filepath } = clip_info
-  //   clip_info_map_cache[clip_info.filepath] = clip_info
-  //   acc[clip_info.id] = clip_info
-  //   return acc
-  // }, {})
+}
+
+function compute_rotated_size(size: { width: number; height: number }, rotation?: number) {
+  if (!rotation) return size
+  const radians = (rotation * Math.PI) / 180.0
+  const [height, width] = [
+    Math.abs(size.width * Math.sin(radians)) + Math.abs(size.height * Math.cos(radians)),
+    Math.abs(size.width * Math.cos(radians)) + Math.abs(size.height * Math.sin(radians)),
+  ].map(Math.floor)
+
+  return { width, height }
 }
 
 function get_clip(clip_info_map: ClipInfoMap, clip_id: ClipID) {
@@ -263,11 +263,16 @@ interface ClipGeometryMap {
 function compute_background_size(template: TemplateParsed, clip_info_map: ClipInfoMap) {
   const { size } = template
 
+  const compute_size = () => {
+    const info = get_clip(clip_info_map, size.relative_to)
+    const { rotate } = template.clips.find(c => c.id === size.relative_to)!
+    return compute_rotated_size(info, rotate)
+  }
   const background_width = parse_unit(size.width, {
-    percentage: p => Math.floor(p * get_clip(clip_info_map, size.relative_to).width),
+    percentage: p => Math.floor(p * compute_size().width),
   })
   const background_height = parse_unit(size.height, {
-    percentage: p => Math.floor(p * get_clip(clip_info_map, size.relative_to).height),
+    percentage: p => Math.floor(p * compute_size().height),
   })
   return { background_width, background_height }
 }
@@ -299,19 +304,8 @@ function compute_geometry(
     if (clip.rotate) {
       // we want scaling to happen before rotation because (on average) we scale down, and if we can scale
       // sooner, then we have less pixels to rotate/crop/etc
-      const unrotate_for_scale = (-clip.rotate * Math.PI) / 180.0
-      const [scale_height, scale_width] = [
-        Math.abs(width * Math.sin(unrotate_for_scale)) + Math.abs(height * Math.cos(unrotate_for_scale)),
-        Math.abs(width * Math.cos(unrotate_for_scale)) + Math.abs(height * Math.sin(unrotate_for_scale)),
-      ].map(Math.floor)
-      scale.width = scale_width
-      scale.height = scale_height
-
-      rotate = {
-        degrees: clip.rotate,
-        width: width,
-        height: height,
-      }
+      ;({ width, height } = compute_rotated_size({ width, height }, clip.rotate))
+      rotate = { degrees: clip.rotate, width, height, }
     }
 
     let crop: ClipGeometryMap[string]['crop']
@@ -590,7 +584,8 @@ async function replace_font_clips_with_image_clips(
 
   const font_generation_promises: Promise<MediaClipParsed>[] = font_clips.map(
     async (clip: FontClipParsed) => {
-      const filepath = path.join(font_assets_path, `${clip.id}.png`)
+      const filename = `${clip.id}.png`
+      const filepath = path.join(font_assets_path, filename)
       // we remove the file so we can be certain it was created
       if (await fs.exists(filepath)) await Deno.remove(filepath)
 
@@ -623,7 +618,7 @@ async function replace_font_clips_with_image_clips(
         '-pointsize',
         clip.font_size.toString(),
         '-gravity',
-        'Center'
+        'Center',
       ]
       if (clip.font) magick_command.push('-font', clip.font)
       if (clip.font_outline_size) {
@@ -640,114 +635,6 @@ async function replace_font_clips_with_image_clips(
       magick_command.push('-trim', '+repage')
       magick_command.push(filepath)
 
-
-      // const optional_font_args = []
-      // if (clip.font) optional_font_args.push('-font', clip.font)
-      // if (clip.font_outline_size) {
-      //   optional_font_args.push('-strokewidth', clip.font_outline_size.toString())
-      //   if (clip.font_outline_color) optional_font_args.push('-stroke', clip.font_outline_color)
-
-      //   // optional_font_args.push('-annotate', '0', clip.text)
-      //   // optional_font_args.push(
-      //   //   '-pointsize',
-      //   //   clip.font_size.toString(),
-      //   //   `label:"${clip.text}"`,
-      //   //   '-compose',
-      //   //   'over',
-      //   //   '-composite'
-      //   // )
-      // }
-      // if (width && height) {
-      //   text_type = 'caption'
-      //   optional_font_args.push('-size', `${width}x${height}`)
-      // } else if (width) {
-      //   text_type = 'caption'
-      //   optional_font_args.push('-size', `${width}x`)
-      // } else if (height) {
-      //   text_type = 'caption'
-      //   optional_font_args.push('-size', `x${width}`)
-      // }
-
-      // const magick_command = [
-      //   'magick',
-      //   '-background',
-      //   'none',
-      //   '-pointsize',
-      //   clip.font_size.toString(),
-      //   '-fill',
-      //   clip.font_color,
-      //   '-gravity',
-      //   'Center',
-      //   ...optional_font_args,
-      //   `${text_type}:${clip.text}`,
-      //   // 'magick',
-      //   // 'xc:lightblue',
-      //   // '-size', '100x100',
-      //   // // '(',
-      //   // '-pointsize', '16',
-      //   // '-fill', 'black',
-      //   // '-gravity', 'Center',
-      //   // 'caption:"Test me 1"',
-      //   // // ')',
-      //   // '(',
-      //   // '-size', '100x100',
-      //   // '-background',
-      //   // 'none',
-      //   // '-pointsize', '16',
-      //   // '-fill', 'black',
-      //   // '-gravity','Center',
-      //   // 'caption:"Test me 2"',
-      //   // '-flatten',
-      //   // ')',
-      //   // '-composite'
-
-      //   // 'convert',
-      //   // 'logo:',
-      //   // // '-size',
-      //   // // `${geometry.width}x${geometry.height}`,
-      //   // // 'xc:none',
-      //   // '-background',
-      //   // 'none',
-      //   // '-pointsize', '30',
-      //   // '-gravity',
-      //   // 'Center',
-
-      //   // '-strokewidth', '4',
-      //   // '-stroke','black',
-      //   // '-pointsize', '30',
-      //   // // `label:"${clip.text}"`,
-      //   // 'label:My Text Here',
-      //   // '-compose', 'over', '-composite',
-      //   // '-fill',
-      //   // clip.font_color,
-      //   // '-stroke',
-      //   // 'none',
-      //   // // // '-annotate',
-      //   // // // '0',
-      //   // // `label:"${clip.text}"`,
-      //   // 'label:My Text Here',
-      //   // '-compose', 'over', '-composite',
-
-      //   // 'logo:',
-      //   // '-size',
-      //   // `${geometry.width}x${geometry.height}`,
-      //   // 'xc:none',
-      //   // '-pointsize',
-      //   // clip.font_size.toString(),
-      //   // ...optional_font_args,
-      //   // '-fill',
-      //   // clip.font_color,
-      //   // '-stroke',
-      //   // 'none',
-      //   // // // '-annotate',
-      //   // // // '0',
-      //   // `label:"${clip.text}"`,
-      //   // '-compose',
-      //   // 'over',
-      //   // '-composite',
-      // ]
-      // magick_command.push(filepath)
-      console.log(magick_command.join(' '))
       const proc = Deno.run({ cmd: magick_command })
       const result = await proc.status()
       if (!result.success) {
@@ -756,7 +643,7 @@ async function replace_font_clips_with_image_clips(
         throw new CommandError(`Command "${magick_command.join(' ')}" failed. No image was produced.\n\n`)
       }
       const { text, font_size, font_color, ...base_clip_params } = clip
-      return { ...base_clip_params, filepath, file: filepath, audio_volume: 0 }
+      return { ...base_clip_params, filepath, file: filename, audio_volume: 0 }
     }
   )
 
@@ -765,19 +652,6 @@ async function replace_font_clips_with_image_clips(
   for (const clip of Object.values(font_media_clip_info_map)) {
     clip_info_map[clip.id] = clip
   }
-  // for (const clip of font_media_clips) {
-  //   // add some dummy data for the final steps (NaN fields are unused)
-  //   clip_info_map[clip.id] = {
-  //     id: clip.id,
-  //     filepath: clip.filepath,
-  //     has_audio: false,
-  //     type: 'image' as const,
-  //     width: NaN,
-  //     height: NaN,
-  //     aspect_ratio: NaN,
-  //     duration: NaN,
-  //   }
-  // }
   const clips: MediaClipParsed[] = template.clips.map(clip => {
     if (is_media_clip(clip)) return clip
     else {
@@ -887,7 +761,7 @@ async function render(
     const video_input_filters = [setpts, vscale]
     if (geometry.rotate) {
       const { degrees, width, height } = geometry.rotate
-      video_input_filters.push(`rotate=${degrees}*PI/180:out_w=${width}:out_h=${height}`)
+      video_input_filters.push(`rotate=${degrees}*PI/180:fillcolor=black@0:out_w=${width}:out_h=${height}`)
     }
     if (geometry.crop) {
       const { crop } = geometry
