@@ -74,7 +74,7 @@ async function probe_video(filepath: string) {
   const info = JSON.parse(result)
   const { width, height } = info.streams[0]
   const has_audio = Boolean(info.streams.find((s: any) => s.codec_type === 'audio'))
-  console.log(info)
+  // console.log(info)
   // TODO include duration to vet the sample-frame position
   // const duration = date_fns.parse(info.streams[0].tags.DURATION)
   return { filepath, width, height, has_audio }
@@ -113,10 +113,6 @@ async function render_video(template_filepath: string, output_filepath: string) 
     let id = input_id
     // TODO add start_at, respect first layer's video length
     // https://superuser.com/questions/508859/how-can-i-specify-how-long-i-want-an-overlay-on-a-video-to-last-with-ffmpeg
-    // let filter = 'crop=100:100:0:0'
-
-    if (layer.crop) {
-    }
 
     const widthInput =
       typeof layout?.width === 'string'
@@ -138,24 +134,36 @@ async function render_video(template_filepath: string, output_filepath: string) 
       : info.height
     const width_before_crop = width
     const height_before_crop = height
-    if (layer.crop) {
+
+    if (layer.crop && Object.keys(layer.crop).length) {
       const { left, right, top, bottom } = layer.crop
 
-      const xCrop = left !== undefined ? left : 0
-      const yCrop = top !== undefined ? top : 0
-      let widthCrop = right !== undefined ? `in_w - ${right}` : 'in_w'
-      let heightCrop = bottom !== undefined ? `in_h - ${bottom}` : 'in_h'
-      if (xCrop) widthCrop = `${widthCrop} - ${xCrop}`
-      if (yCrop) heightCrop = `${heightCrop} - ${yCrop}`
-      // console.log('crop', { x, y, height, width })
+      let xCrop = 0
+      let yCrop = 0
+      let widthCrop = 'in_w'
+      let heightCrop = 'in_h'
+      if (right) {
+        widthCrop = `in_w - ${right}`
+        width -= right
+      }
+      if (bottom) {
+        heightCrop = `in_h - ${bottom}`
+        height -= bottom
+      }
+      if (left) {
+        xCrop = left
+        width -= left
+        widthCrop = `${widthCrop} - ${xCrop}`
+      }
+      if (top) {
+        yCrop = top
+        height -= top
+        heightCrop = `${heightCrop} - ${yCrop}`
+      }
       const id_cropped = `${id}_crop`
 
-      complex_filter_crops += `[${id}]crop=${widthCrop}:${heightCrop}:${xCrop}:${yCrop}:keep_aspect=1[${id_cropped}];`
+      complex_filter_crops += `[${id}]crop=w=${widthCrop}:h=${heightCrop}:x=${xCrop}:y=${yCrop}:keep_aspect=1[${id_cropped}];`
       id = id_cropped
-      if (left) width -= left
-      if (right) width -= right
-      if (top) height -= top
-      if (bottom) height -= bottom
     }
 
     let x =
@@ -204,7 +212,7 @@ async function render_video(template_filepath: string, output_filepath: string) 
     const filter = `overlay=shortest=1:x=${x}:y=${y}`
 
     ffmpeg_cmd.push('-i', layer.video)
-    console.log({ x, y, width, height, info })
+    // console.log({ x, y, width, height, info })
     if (i === 0) {
       complex_filters += `[${id}] ${filter}`
     } else {
@@ -221,7 +229,7 @@ async function render_video(template_filepath: string, output_filepath: string) 
     const audio_weights = template.layers
       .map(l => (l.audio_volume === undefined ? 1 : l.audio_volume))
       .filter((_, i) => probed_info[i].has_audio)
-    console.log({ audio_weights })
+    // console.log({ audio_weights })
     const no_audio = audio_weights.every(w => w === 0)
 
     if (no_audio) {
