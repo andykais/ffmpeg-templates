@@ -1,5 +1,4 @@
 import * as flags from 'https://deno.land/std@0.75.0/flags/mod.ts'
-// import * as date_fns from 'https://deno.land/x/date_fns@v2.15.0/index.js'
 
 type Alignment = 'center' | 'topleft' | 'bottomright'
 type Fraction = string
@@ -11,7 +10,10 @@ type Offset =
   // | 'fit'
   // | 'fill'
   | Pixels // TODO negative numbers are allowed and translate to 'main_w - ${right}' or 'main_h - ${bottom}'
+type Seconds = number
 type Duration = string
+
+type Timestamp = string
 
 type Size =
   | 'inherit' // inherit the size from the first layer
@@ -35,6 +37,12 @@ type Template = {
       top?: Pixels
       bottom?: Pixels
     }
+    timeline?: {
+      align?: 'start' | 'end' // defaults to 'start'
+      offset?: string // defaults to 00:00:00 (also accepts negative durations: -00:00:01)
+      trim?: { start?: 'fit' | string; end?: 'fit' | string }
+      duration?: string
+    }
   }[]
 }
 
@@ -49,6 +57,13 @@ function parse_fraction(fraction: string): number {
   return numerator / denominator
 }
 
+function parse_duration(duration: string): Seconds {
+  const duration_split = duration.split(':')
+  if (duration_split.length !== 3) throw new Error(`Invalid duration "${duration}". Cannot parse`)
+  const [hours, minutes, seconds] = duration_split.map(v => parseFloat(v))
+  return hours * 60 * 60 + minutes * 60 + seconds
+}
+
 async function exec(cmd: string[]) {
   const proc = Deno.run({ cmd, stdout: 'piped', stdin: 'piped' })
   const result = await proc.status()
@@ -60,8 +75,8 @@ async function exec(cmd: string[]) {
   }
 }
 
-type ProbeInfo = { width: number; height: number }
-async function probe_video(filepath: string) {
+type ProbeInfo = { width: number; height: number; has_audio: boolean; duration: Seconds }
+async function probe_video(filepath: string): Promise<ProbeInfo> {
   const result = await exec([
     'ffprobe',
     '-v',
@@ -72,12 +87,77 @@ async function probe_video(filepath: string) {
     filepath,
   ])
   const info = JSON.parse(result)
-  const { width, height } = info.streams[0]
-  const has_audio = Boolean(info.streams.find((s: any) => s.codec_type === 'audio'))
-  // console.log(info)
+  const video_stream = info.streams.find((s: any) => s.codec_type === 'video')
+  const audio_stream = info.streams.find((s: any) => s.codec_type === 'audio')
+
+  if (!video_stream) throw new Error(`ProbeError: input "${filepath}" has no video stream`)
+  const has_audio = audio_stream !== undefined
+  const { width, height } = video_stream
+
+  // throw new Error('e')
   // TODO include duration to vet the sample-frame position
-  // const duration = date_fns.parse(info.streams[0].tags.DURATION)
-  return { filepath, width, height, has_audio }
+  const duration = parse_duration(video_stream.tags.DURATION)
+  return { width, height, has_audio, duration }
+}
+
+function compute_longest_duration(template: Template, probed_info: ProbeInfo[]): Seconds {
+  const every_layer_is_fit = template.layers.every(
+    l => l.timeline?.trim?.start === 'fit' || l.timeline?.trim?.end === 'fit'
+  )
+
+  let shortest_duration = Infinity
+  let longest_duration = 0
+  for (const i of template.layers.keys()) {
+    const { timeline } = template.layers[i]
+    const info = probed_info[i]
+    const parsed_offset = timeline?.offset ? parse_duration(timeline.offset) : 0
+    let duration = info.duration + parsed_offset
+
+    if (timeline?.trim?.start === 'fit') {
+      // if we are fitting this layer, we dont care how long it is
+      if (!every_layer_is_fit) continue
+    } else if (timeline?.trim?.start) duration -= parse_duration(timeline.trim.start)
+
+    if (timeline?.trim?.end === 'fit') {
+      // if we are fitting this layer, we dont care how long it is
+      if (!every_layer_is_fit) continue
+    } else if (timeline?.trim?.end) duration -= parse_duration(timeline.trim.end)
+
+    shortest_duration = Math.min(shortest_duration, duration)
+    longest_duration = Math.max(longest_duration, duration)
+  }
+
+  if (every_layer_is_fit) return shortest_duration
+  else return longest_duration
+}
+
+function compute_timeline(
+  timeline: Template['layers'][0]['timeline'],
+  probed_duration: Seconds,
+  longest_duration: Seconds
+) {
+  const { align, offset, trim, duration } = timeline || {}
+
+  let seconds_from_start = offset ? parse_duration(offset) : 0
+  let computed_duration: number = duration ? parse_duration(duration) : probed_duration
+  let trim_end = 0
+  let trim_start = 0
+  if (trim?.end === 'fit') {
+    if (probed_duration > longest_duration) computed_duration = longest_duration
+    computed_duration -= seconds_from_start
+  } else if (trim?.end) computed_duration -= parse_duration(trim.end)
+
+  if (trim?.start === 'fit') {
+    if (trim?.end !== 'fit' && probed_duration > longest_duration) {
+      trim_start = probed_duration - longest_duration
+    }
+    computed_duration -= seconds_from_start
+  } else if (trim?.start) {
+    trim_start = parse_duration(trim.start)
+    computed_duration -= trim_start
+  }
+
+  return { start: seconds_from_start, trim_start, computed_duration }
 }
 
 async function render_video(template_filepath: string, output_filepath: string) {
@@ -86,7 +166,7 @@ async function render_video(template_filepath: string, output_filepath: string) 
     throw new Error(`template "layers" must have at least one layer present.`)
   }
 
-  const ffmpeg_cmd = [
+  const ffmpeg_cmd: (string | number)[] = [
     'ffmpeg',
     // debugging turn off:
     // '-v',
@@ -94,13 +174,16 @@ async function render_video(template_filepath: string, output_filepath: string) 
   ]
 
   const probed_info = await Promise.all(template.layers.map(l => probe_video(l.video)))
+  console.log(probed_info)
+  // Deno.exit()
+  const longest_duration = compute_longest_duration(template, probed_info)
 
   const background_width =
     template.size.width === 'inherit' ? probed_info[0].width : template.size.width
   const background_height =
     template.size.height === 'inherit' ? probed_info[0].height : template.size.height
 
-  let complex_filter_inputs = `color=s=${background_width}x${background_height}:c=black[base];`
+  let complex_filter_inputs = `color=s=${background_width}x${background_height}:c=black:d=${longest_duration}[base];`
   let complex_filter_crops = ''
   let complex_filters = '[base]'
   for (const i of template.layers.keys()) {
@@ -111,8 +194,6 @@ async function render_video(template_filepath: string, output_filepath: string) 
 
     const input_id = `v_in_${i}`
     let id = input_id
-    // TODO add start_at, respect first layer's video length
-    // https://superuser.com/questions/508859/how-can-i-specify-how-long-i-want-an-overlay-on-a-video-to-last-with-ffmpeg
 
     const widthInput =
       typeof layout?.width === 'string'
@@ -206,10 +287,13 @@ async function render_video(template_filepath: string, output_filepath: string) 
         y = `(main_h / 2) - ${height / 2} + ${y}`
         break
     }
-    // complex_filter_inputs += `[${i}] setpts=PTS-STARTPTS, scale=${width_before_crop}:${height_before_crop} [${input_id}];`
-    complex_filter_inputs += `[${i}:v] scale=${width_before_crop}:${height_before_crop} [${input_id}];`
-    // const filter = `overlay=x=${x}:y=${y}`
-    const filter = `overlay=shortest=1:x=${x}:y=${y}`
+    const time = compute_timeline(layer.timeline, info.duration, longest_duration)
+    console.log({ time })
+
+    complex_filter_inputs += `[${i}] setpts=PTS+${time.start}/TB, scale=${width_before_crop}:${height_before_crop} [${input_id}];`
+    ffmpeg_cmd.push('-ss', time.trim_start, '-t', time.computed_duration)
+
+    const filter = `overlay=x=${x}:y=${y}:enable='between(t,${time.start},${time.computed_duration})'`
 
     ffmpeg_cmd.push('-i', layer.video)
     // console.log({ x, y, width, height, info })
@@ -220,8 +304,6 @@ async function render_video(template_filepath: string, output_filepath: string) 
     }
   }
 
-  // console.log(probed_info)
-  // Deno.exit()
   if (args['render-sample-frame']) {
     ffmpeg_cmd.push('-ss', args['render-sample-frame'], '-vframes', '1')
   } else {
@@ -243,15 +325,21 @@ async function render_video(template_filepath: string, output_filepath: string) 
 
   const complex_filter = `${complex_filter_inputs} ${complex_filter_crops} ${complex_filters}`
   ffmpeg_cmd.push('-filter_complex', `${complex_filter}`)
-  // if (args['render-sample-frame']) {
-  //   ffmpeg_cmd.push('-c:v', 'mjpeg') // TODO we lost frame capturing?
-  // }
   ffmpeg_cmd.push(output_filepath)
   if (args.overwrite) ffmpeg_cmd.push('-y')
-  // console.log(ffmpeg_cmd.map(a => `'${a}'`).join(' '))
 
-  // ffmpeg_cmd.push('-abdf')
+  // console.log(ffmpeg_cmd.map(a => `'${a}'`).join(' '))
   await exec(ffmpeg_cmd as string[])
+  console.log('ffmpeg command complete.')
+}
+
+async function try_render_video(template_filepath: string, output_filepath: string) {
+  try {
+    await render_video(template_filepath, output_filepath)
+  } catch (e) {
+    // TODO bubble up unexpected errors
+    console.error(e)
+  }
 }
 
 const args = flags.parse(Deno.args)
@@ -287,15 +375,16 @@ if (!args['render-sample-frame'] && output_filepath_is_image) {
   )
 }
 
-await render_video(template_filepath, output_filepath)
+await try_render_video(template_filepath, output_filepath)
 
 if (args.watch) {
   let lock = false
   for await (const event of Deno.watchFs(template_filepath)) {
     if (event.kind === 'modify' && !lock) {
       lock = true
-      await render_video(template_filepath, output_filepath)
-      lock = false
+      try_render_video(template_filepath, output_filepath).then(() => {
+        lock = false
+      })
     }
   }
 }
