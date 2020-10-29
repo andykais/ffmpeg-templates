@@ -1,15 +1,11 @@
 import * as flags from 'https://deno.land/std@0.75.0/flags/mod.ts'
 
-type Alignment = 'center' | 'topleft' | 'bottomright'
 type Fraction = string
 type Pixels = number
 type Percentage = number
 type Offset = Fraction | Pixels
 type Seconds = number
 type Duration = string
-
-type Timestamp = string
-
 type Size = Pixels | 'inherit' // inherit the size from the first layer
 
 type Template = {
@@ -19,10 +15,10 @@ type Template = {
     audio_volume: Percentage
     start_at: Duration
     layout: {
-      x: Offset | { offset?: Offset; align?: 'left' | 'right' | 'center' }
-      y: Offset | { offset?: Offset; align?: 'top' | 'bottom' | 'center' }
-      width: Fraction | Pixels
-      height: Fraction | Pixels
+      x?: Offset | { offset?: Offset; align?: 'left' | 'right' | 'center' }
+      y?: Offset | { offset?: Offset; align?: 'top' | 'bottom' | 'center' }
+      width?: Fraction | Pixels
+      height?: Fraction | Pixels
     }
     crop?: {
       left?: Pixels
@@ -132,7 +128,7 @@ function compute_timeline(
   probed_duration: Seconds,
   longest_duration: Seconds
 ) {
-  const { align, offset, trim, duration } = timeline || {}
+  const { align, offset, trim, duration } = timeline ?? {}
 
   let seconds_from_start = offset ? parse_duration(offset) : 0
   let computed_duration: number = duration ? parse_duration(duration) : probed_duration
@@ -172,7 +168,6 @@ async function render_video(template_filepath: string, output_filepath: string) 
   const audio_input_ids: string[] = []
 
   const probed_info = await Promise.all(template.layers.map(l => probe_video(l.video)))
-  // Deno.exit()
   const longest_duration = compute_longest_duration(template, probed_info)
 
   const background_width =
@@ -181,16 +176,12 @@ async function render_video(template_filepath: string, output_filepath: string) 
     template.size.height === 'inherit' ? probed_info[0].height : template.size.height
 
   let complex_filter_inputs = `color=s=${background_width}x${background_height}:c=black:d=${longest_duration}[base];`
-  let complex_filter_crops = ''
   let complex_filters = '[base]'
   for (const i of template.layers.keys()) {
     const info = probed_info[i]
     const layer = template.layers[i]
-
     const { layout } = layer
-
-    const input_id = `v_in_${i}`
-    let id = input_id
+    const video_id = `v_in_${i}`
 
     const widthInput =
       typeof layout?.width === 'string'
@@ -210,8 +201,13 @@ async function render_video(template_filepath: string, output_filepath: string) 
       : widthInput
       ? widthInput / (info.width / info.height)
       : info.height
-    const width_before_crop = width
-    const height_before_crop = height
+
+    const time = compute_timeline(layer.timeline, info.duration, longest_duration)
+
+    const setpts = `setpts=PTS+${time.start}/TB`
+    // NOTE it is intentional that we are using the width and height before they are manipulated by crop
+    const vscale = `scale=${width}:${height}`
+    const video_input_filters: string[] = [setpts, vscale]
 
     if (layer.crop && Object.keys(layer.crop).length) {
       const { left, right, top, bottom } = layer.crop
@@ -238,18 +234,20 @@ async function render_video(template_filepath: string, output_filepath: string) 
         height -= top
         heightCrop = `${heightCrop} - ${yCrop}`
       }
-      const id_cropped = `${id}_crop`
-
-      complex_filter_crops += `[${id}]crop=w=${widthCrop}:h=${heightCrop}:x=${xCrop}:y=${yCrop}:keep_aspect=1[${id_cropped}];`
-      id = id_cropped
+      const crop = `crop=w=${widthCrop}:h=${heightCrop}:x=${xCrop}:y=${yCrop}:keep_aspect=1`
+      video_input_filters.push(crop)
     }
 
-    let x =
-      typeof layout?.x === 'object' ? layout.x.offset || 0 : layout?.x === undefined ? 0 : layout.x
-    let y =
-      typeof layout?.y === 'object' ? layout.y.offset || 0 : layout?.y === undefined ? 0 : layout.y
-    let xAlign = typeof layout?.x === 'object' ? layout.x.align : 'left'
-    let yAlign = typeof layout?.y === 'object' ? layout.y.align : 'top'
+    let x: string | number = 0
+    let y: string | number = 0
+    let xAlign = 'left'
+    let yAlign = 'top'
+    if (typeof layout?.x === 'object') x = layout.x.offset ?? 0
+    else if (typeof layout?.x === 'number') x = layout.x
+    if (typeof layout?.y === 'object') y = layout.y.offset ?? 0
+    else if (typeof layout?.y === 'number') y = layout.y
+    xAlign = typeof layout?.x === 'object' ? layout.x.align ?? 'left' : 'left'
+    yAlign = typeof layout?.y === 'object' ? layout.y.align ?? 'top' : 'top'
 
     if (typeof x === 'string') {
       const fraction = parse_fraction(x)
@@ -261,7 +259,7 @@ async function render_video(template_filepath: string, output_filepath: string) 
       case 'left':
         break
       case 'right':
-        x = `${background_width} - ${width} + ${x}`
+        x = `main_w - ${width} + ${x}`
         break
       case 'center':
         x = `(main_w / 2) - ${width / 2} + ${x}`
@@ -277,35 +275,31 @@ async function render_video(template_filepath: string, output_filepath: string) 
       case 'top':
         break
       case 'bottom':
-        y = `${background_height} - ${height} + ${y}`
+        y = `main_h - ${height} + ${y}`
         break
       case 'center':
         y = `(main_h / 2) - ${height / 2} + ${y}`
         break
     }
-    const time = compute_timeline(layer.timeline, info.duration, longest_duration)
 
-    const setpts = `setpts=PTS+${time.start}/TB`
-    const vscale = `scale=${width_before_crop}:${height_before_crop}`
-    complex_filter_inputs += `[${i}:v] ${setpts}, ${vscale} [${input_id}];`
-    // if (layer.audio_volume > 0 && !args['render-sample-frame']) {
-    if (!args['render-sample-frame']) {
-      const atrim = `atrim=0:${time.computed_duration}`
-      const adelay = `adelay=${time.start * 1000}:all=1`
-      const volume = `volume=${layer.audio_volume || 0}`
-      // TODO use anullsink for audio_volume === 0 to avoid extra processing
-      complex_filter_inputs += `[${i}:a] asetpts=PTS-STARTPTS, ${volume}, ${atrim}, ${adelay}[a_in_${i}];`
-      audio_input_ids.push(`[a_in_${i}]`)
-    }
+    complex_filter_inputs += `[${i}:v] ${video_input_filters.join(', ')} [${video_id}];`
+
+    const atrim = `atrim=0:${time.computed_duration}`
+    const adelay = `adelay=${time.start * 1000}:all=1`
+    const volume = `volume=${layer.audio_volume ?? 0}`
+    // TODO use anullsink for audio_volume === 0 to avoid extra processing
+    complex_filter_inputs += `[${i}:a] asetpts=PTS-STARTPTS, ${volume}, ${atrim}, ${adelay}[a_in_${i}];`
+    audio_input_ids.push(`[a_in_${i}]`)
+
     ffmpeg_cmd.push('-ss', time.trim_start, '-t', time.computed_duration, '-i', layer.video)
 
-    const overlay_filter = `overlay=x=${x}:y=${y}:enable='between(t,${time.start},${
+    let overlay_filter = `overlay=x=${x}:y=${y}:enable='between(t,${time.start},${
       time.start + time.computed_duration
     })'`
     if (i === 0) {
-      complex_filters += `[${id}] ${overlay_filter}`
+      complex_filters += `[${video_id}] ${overlay_filter}`
     } else {
-      complex_filters += `[v_out_${i - 1}];[v_out_${i - 1}][${id}] ${overlay_filter}`
+      complex_filters += `[v_out_${i - 1}];[v_out_${i - 1}][${video_id}] ${overlay_filter}`
     }
   }
   complex_filters += '[video]'
@@ -320,17 +314,12 @@ async function render_video(template_filepath: string, output_filepath: string) 
     ffmpeg_cmd.push('-ss', args['render-sample-frame'], '-vframes', '1')
   } else {
     // we dont care about audio output for sample frame renders
-    const no_audio = !Boolean(audio_input_ids.length)
-    if (no_audio) {
-      ffmpeg_cmd.push('-an')
-    } else {
-      const audio_inputs = audio_input_ids.join('')
-      complex_filters += `;${audio_inputs} amix=inputs=2 [audio]`
-      ffmpeg_cmd.push('-map', '[audio]')
-    }
+    const audio_inputs = audio_input_ids.join('')
+    complex_filters += `;${audio_inputs} amix=inputs=2 [audio]`
+    ffmpeg_cmd.push('-map', '[audio]')
   }
 
-  const complex_filter = `${complex_filter_inputs} ${complex_filter_crops} ${complex_filters}`
+  const complex_filter = `${complex_filter_inputs} ${complex_filters}`
   ffmpeg_cmd.push('-filter_complex', `${complex_filter}`)
   ffmpeg_cmd.push(output_filepath)
   if (args.overwrite) ffmpeg_cmd.push('-y')
