@@ -4,20 +4,13 @@ type Alignment = 'center' | 'topleft' | 'bottomright'
 type Fraction = string
 type Pixels = number
 type Percentage = number
-type Offset =
-  | Fraction // TODO parse strings as fractions (e.g. 1/4 means a quarter of the screen)
-  // | 'auto' // auto usually means 'to fit' unless both axis have 'auto', then we center it
-  // | 'fit'
-  // | 'fill'
-  | Pixels // TODO negative numbers are allowed and translate to 'main_w - ${right}' or 'main_h - ${bottom}'
+type Offset = Fraction | Pixels
 type Seconds = number
 type Duration = string
 
 type Timestamp = string
 
-type Size =
-  | 'inherit' // inherit the size from the first layer
-  | Pixels
+type Size = Pixels | 'inherit' // inherit the size from the first layer
 
 type Template = {
   size: { width: Size; height: Size }
@@ -39,7 +32,7 @@ type Template = {
     }
     timeline?: {
       align?: 'start' | 'end' // defaults to 'start'
-      offset?: string // defaults to 00:00:00 (also accepts negative durations: -00:00:01)
+      offset?: string // defaults to 00:00:00 (TODO accept negative durations: -00:00:01)
       trim?: { start?: 'fit' | string; end?: 'fit' | string }
       duration?: string
     }
@@ -80,10 +73,12 @@ async function probe_video(filepath: string): Promise<ProbeInfo> {
   const result = await exec([
     'ffprobe',
     '-v',
-    'quiet',
+    'error',
     '-print_format',
     'json',
     '-show_streams',
+    '-show_entries',
+    'format=duration',
     filepath,
   ])
   const info = JSON.parse(result)
@@ -94,9 +89,9 @@ async function probe_video(filepath: string): Promise<ProbeInfo> {
   const has_audio = audio_stream !== undefined
   const { width, height } = video_stream
 
-  // throw new Error('e')
-  // TODO include duration to vet the sample-frame position
-  const duration = parse_duration(video_stream.tags.DURATION)
+  const duration = parseFloat(info.format.duration)
+  if (duration === NaN)
+    throw new Error(`ProbeError: ffprobe could not compute duration on input "${filepath}"`)
   return { width, height, has_audio, duration }
 }
 
@@ -111,7 +106,8 @@ function compute_longest_duration(template: Template, probed_info: ProbeInfo[]):
     const { timeline } = template.layers[i]
     const info = probed_info[i]
     const parsed_offset = timeline?.offset ? parse_duration(timeline.offset) : 0
-    let duration = info.duration + parsed_offset
+    const initial_duration = timeline?.duration ? parse_duration(timeline.duration) : info.duration
+    let duration = initial_duration + parsed_offset
 
     if (timeline?.trim?.start === 'fit') {
       // if we are fitting this layer, we dont care how long it is
@@ -150,6 +146,7 @@ function compute_timeline(
   if (trim?.start === 'fit') {
     if (trim?.end !== 'fit' && probed_duration > longest_duration) {
       trim_start = probed_duration - longest_duration
+      computed_duration = longest_duration
     }
     computed_duration -= seconds_from_start
   } else if (trim?.start) {
@@ -169,12 +166,12 @@ async function render_video(template_filepath: string, output_filepath: string) 
   const ffmpeg_cmd: (string | number)[] = [
     'ffmpeg',
     // debugging turn off:
-    // '-v',
-    // 'quiet',
+    '-v',
+    'error',
   ]
+  const audio_input_ids: string[] = []
 
   const probed_info = await Promise.all(template.layers.map(l => probe_video(l.video)))
-  console.log(probed_info)
   // Deno.exit()
   const longest_duration = compute_longest_duration(template, probed_info)
 
@@ -283,43 +280,53 @@ async function render_video(template_filepath: string, output_filepath: string) 
         y = `${background_height} - ${height} + ${y}`
         break
       case 'center':
-        // y = `${y} - ${height / 2}`
         y = `(main_h / 2) - ${height / 2} + ${y}`
         break
     }
     const time = compute_timeline(layer.timeline, info.duration, longest_duration)
-    console.log({ time })
 
-    complex_filter_inputs += `[${i}] setpts=PTS+${time.start}/TB, scale=${width_before_crop}:${height_before_crop} [${input_id}];`
-    ffmpeg_cmd.push('-ss', time.trim_start, '-t', time.computed_duration)
+    const setpts = `setpts=PTS+${time.start}/TB`
+    const vscale = `scale=${width_before_crop}:${height_before_crop}`
+    complex_filter_inputs += `[${i}:v] ${setpts}, ${vscale} [${input_id}];`
+    // if (layer.audio_volume > 0 && !args['render-sample-frame']) {
+    if (!args['render-sample-frame']) {
+      const atrim = `atrim=0:${time.computed_duration}`
+      const adelay = `adelay=${time.start * 1000}:all=1`
+      const volume = `volume=${layer.audio_volume || 0}`
+      // TODO use anullsink for audio_volume === 0 to avoid extra processing
+      complex_filter_inputs += `[${i}:a] asetpts=PTS-STARTPTS, ${volume}, ${atrim}, ${adelay}[a_in_${i}];`
+      audio_input_ids.push(`[a_in_${i}]`)
+    }
+    ffmpeg_cmd.push('-ss', time.trim_start, '-t', time.computed_duration, '-i', layer.video)
 
-    const filter = `overlay=x=${x}:y=${y}:enable='between(t,${time.start},${time.computed_duration})'`
-
-    ffmpeg_cmd.push('-i', layer.video)
-    // console.log({ x, y, width, height, info })
+    const overlay_filter = `overlay=x=${x}:y=${y}:enable='between(t,${time.start},${
+      time.start + time.computed_duration
+    })'`
     if (i === 0) {
-      complex_filters += `[${id}] ${filter}`
+      complex_filters += `[${id}] ${overlay_filter}`
     } else {
-      complex_filters += `[v_out_${i}];[v_out_${i}][${id}] ${filter}`
+      complex_filters += `[v_out_${i - 1}];[v_out_${i - 1}][${id}] ${overlay_filter}`
     }
   }
+  complex_filters += '[video]'
+  ffmpeg_cmd.push('-map', '[video]')
 
   if (args['render-sample-frame']) {
+    if (longest_duration < parse_duration(args['render-sample-frame'])) {
+      throw new Error(
+        `InputError: sample-frame position ${args['render-sample-frame']} is greater than duration of the output (${longest_duration})`
+      )
+    }
     ffmpeg_cmd.push('-ss', args['render-sample-frame'], '-vframes', '1')
   } else {
-    // we dont care about audio output for layout captures
-    const audio_weights = template.layers
-      .map(l => (l.audio_volume === undefined ? 1 : l.audio_volume))
-      .filter((_, i) => probed_info[i].has_audio)
-    // console.log({ audio_weights })
-    const no_audio = audio_weights.every(w => w === 0)
-
+    // we dont care about audio output for sample frame renders
+    const no_audio = !Boolean(audio_input_ids.length)
     if (no_audio) {
       ffmpeg_cmd.push('-an')
     } else {
-      complex_filters += `;amix=inputs=${
-        audio_weights.length
-      }:duration=first:dropout_transition=1:weights=${audio_weights.join(' ')}`
+      const audio_inputs = audio_input_ids.join('')
+      complex_filters += `;${audio_inputs} amix=inputs=2 [audio]`
+      ffmpeg_cmd.push('-map', '[audio]')
     }
   }
 
@@ -328,14 +335,14 @@ async function render_video(template_filepath: string, output_filepath: string) 
   ffmpeg_cmd.push(output_filepath)
   if (args.overwrite) ffmpeg_cmd.push('-y')
 
-  // console.log(ffmpeg_cmd.map(a => `'${a}'`).join(' '))
   await exec(ffmpeg_cmd as string[])
-  console.log('ffmpeg command complete.')
 }
 
 async function try_render_video(template_filepath: string, output_filepath: string) {
   try {
+    console.log('rendering...')
     await render_video(template_filepath, output_filepath)
+    console.log('ffmpeg command complete.')
   } catch (e) {
     // TODO bubble up unexpected errors
     console.error(e)
