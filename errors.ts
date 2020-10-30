@@ -1,7 +1,13 @@
-class InputError extends Error {}
+class InputError extends Error {
+  name = 'InputError'
+}
 
-class CommandError extends Error {}
+class CommandError extends Error {
+  name = 'CommandError'
+}
 
-class ProbeError extends Error {}
+class ProbeError extends Error {
+  name = 'ProbeError'
+}
 
 export { InputError, CommandError, ProbeError }

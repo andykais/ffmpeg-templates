@@ -48,10 +48,12 @@ function parse_fraction(fraction: string): number {
   return numerator / denominator
 }
 
-function parse_duration(duration: string): Seconds {
+function parse_duration(duration: string, { user_input = true } = {}): Seconds {
   const duration_split = duration.split(':')
-  if (duration_split.length !== 3)
-    throw new errors.InputError(`Invalid duration "${duration}". Cannot parse`)
+  if (duration_split.length !== 3) {
+    if (user_input) throw new errors.InputError(`Invalid duration "${duration}". Cannot parse`)
+    else throw new Error(`Invalid duration "${duration}". Cannot parse`)
+  }
   const [hours, minutes, seconds] = duration_split.map(v => parseFloat(v))
   return hours * 60 * 60 + minutes * 60 + seconds
 }
@@ -70,10 +72,11 @@ async function parse_template(template_filepath: string): Promise<Template> {
   }
 }
 
-async function exec(cmd: string[]) {
-  const proc = Deno.run({ cmd, stdout: 'piped', stdin: 'piped' })
+async function exec(cmd: string[], opts: Partial<Deno.RunOptions> = {}) {
+  const proc = Deno.run({ cmd, stdout: 'piped', ...opts })
   const result = await proc.status()
-  const output = decoder.decode(await proc.output())
+  const output_buffer = opts.stderr === 'piped' ? await proc.stderrOutput() : await proc.output()
+  const output = decoder.decode(output_buffer)
   await proc.close()
   if (result.success) {
     return output
@@ -103,9 +106,17 @@ async function probe_video(filepath: string): Promise<ProbeInfo> {
   const has_audio = audio_stream !== undefined
   const { width, height } = video_stream
 
-  const duration = parseFloat(info.format.duration)
-  if (duration === NaN)
-    throw new errors.ProbeError(`ffprobe could not compute duration on input "${filepath}"`)
+  // ffprobe's duration is unreliable. The best solutions I have are:
+  // ffmpeg guessing: https://stackoverflow.com/a/33115316/3795137
+  // ffprobe packets: https://stackoverflow.com/a/33346572/3795137 but this is a ton of output, so were using ffmpeg
+  const ffmpeg_stats_str = await exec(
+    ['ffmpeg', '-v', 'quiet', '-stats', '-i', filepath, '-f', 'null', '-'],
+    { stderr: 'piped' }
+  )
+  // doing this nonsense because this line actually is updated several times (with '\r') so a simple ffmpeg_stats_str.replace(/.*time=(.*?).*/, '$1') will not work
+  const duration_str_half = ffmpeg_stats_str.substr(ffmpeg_stats_str.lastIndexOf('time=') + 5)
+  const duration_str = duration_str_half.substr(0, duration_str_half.indexOf(' '))
+  const duration = parse_duration(duration_str, { user_input: false })
   return { width, height, has_audio, duration }
 }
 
@@ -308,8 +319,8 @@ async function render_video(
     else if (typeof layout?.y === 'number') y = layout.y
     x_align = typeof layout?.x === 'object' ? layout.x.align ?? 'left' : 'left'
     y_align = typeof layout?.y === 'object' ? layout.y.align ?? 'top' : 'top'
-    if (typeof x === 'string') x = `(main_w * ${parse_fraction(x)})`
-    if (typeof y === 'string') y = `(main_w * ${parse_fraction(y)})`
+    if (typeof layout.x === 'string') x = `(main_w * ${parse_fraction(layout.x)})`
+    if (typeof layout.y === 'string') y = `(main_w * ${parse_fraction(layout.y)})`
 
     switch (x_align) {
       case 'left':
@@ -340,8 +351,6 @@ async function render_video(
       const volume = `volume=${layer.audio_volume ?? 1}`
       // TODO use anullsink for audio_volume === 0 to avoid extra processing
       complex_filter_inputs += `[${i}:a] asetpts=PTS-STARTPTS, ${volume}, ${atrim}, ${adelay}[a_in_${i}];`
-      console.log(video_filepath,)
-      console.log(info)
       audio_input_ids.push(`[a_in_${i}]`)
     }
 

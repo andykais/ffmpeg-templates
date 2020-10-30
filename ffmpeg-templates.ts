@@ -42,7 +42,7 @@ async function try_render_video(template_filepath: string, output_filepath: stri
     // prettier-ignore
     console.log(`created ${output_filepath} out of ${template.layers.length} inputs in ${execution_time_seconds.toFixed(1)} seconds.`)
   } catch (e) {
-    if ([errors.InputError].some(eClass => e instanceof eClass)) {
+    if (e instanceof errors.InputError) {
       console.error(e)
     } else {
       throw e
