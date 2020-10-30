@@ -1,3 +1,4 @@
+import * as io from 'https://deno.land/std@0.75.0/io/mod.ts'
 import * as errors from './errors.ts'
 
 type Fraction = string
@@ -72,6 +73,7 @@ async function exec(cmd: string[]) {
   const proc = Deno.run({ cmd, stdout: 'piped', stdin: 'piped' })
   const result = await proc.status()
   const output = decoder.decode(await proc.output())
+  await proc.close()
   if (result.success) {
     return output
   } else {
@@ -104,6 +106,40 @@ async function probe_video(filepath: string): Promise<ProbeInfo> {
   if (duration === NaN)
     throw new errors.ProbeError(`ffprobe could not compute duration on input "${filepath}"`)
   return { width, height, has_audio, duration }
+}
+
+type FfmpegProgress = {
+  out_time: Duration
+  progress: 'continue' | 'end'
+  speed: string
+  percentage: Percentage
+}
+type OnProgress = (progress: FfmpegProgress) => void
+async function ffmpeg(
+  ffmpeg_cmd: (string | number)[],
+  longest_duration: number,
+  progress_callback?: OnProgress
+) {
+  const ffmpeg_safe_cmd = ffmpeg_cmd.map(a => a.toString())
+  if (progress_callback) {
+    ffmpeg_safe_cmd.push('-progress', 'pipe:1')
+    const proc = Deno.run({ cmd: ffmpeg_safe_cmd, stdout: 'piped', stdin: 'inherit' })
+    let progress: Partial<FfmpegProgress> = {}
+    for await (const line of io.readLines(proc.stdout!)) {
+      const [key, value] = line.split('=')
+      ;(progress as any)[key] = value
+      if (key === 'progress') {
+        progress.percentage =
+          value === 'end' ? 1 : parse_duration(progress.out_time!) / longest_duration
+        progress_callback(progress as FfmpegProgress)
+        progress = {}
+      }
+    }
+    const result = await proc.status()
+    await proc.close()
+  } else {
+    await exec(ffmpeg_safe_cmd)
+  }
 }
 
 function compute_longest_duration(template: Template, probed_info: ProbeInfo[]): Seconds {
@@ -175,14 +211,15 @@ function compute_timeline(
 
 type RenderOptions = {
   render_sample_frame?: Duration
-  overwrite: boolean
-  ffmpeg_verbosity: 'quiet' | 'error' | 'warning' | 'info' | 'debug'
+  overwrite?: boolean
+  ffmpeg_verbosity?: 'quiet' | 'error' | 'warning' | 'info' | 'debug'
+  progress_callback?: OnProgress
 }
 async function render_video(
   template_filepath: string,
   output_filepath: string,
   options?: RenderOptions
-) {
+): Promise<Template> {
   const template = await parse_template(template_filepath)
 
   const ffmpeg_cmd: (string | number)[] = ['ffmpeg', '-v', options?.ffmpeg_verbosity ?? 'info']
@@ -332,7 +369,10 @@ async function render_video(
   ffmpeg_cmd.push(output_filepath)
   if (options?.overwrite) ffmpeg_cmd.push('-y')
 
-  await exec(ffmpeg_cmd as string[])
+  const execution_start_time = performance.now()
+  await ffmpeg(ffmpeg_cmd, longest_duration, options?.progress_callback)
+  return template
 }
 
 export { render_video }
+export type { RenderOptions, FfmpegProgress }
