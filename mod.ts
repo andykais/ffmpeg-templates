@@ -137,6 +137,9 @@ async function ffmpeg(
       }
     }
     const result = await proc.status()
+    if (!result.success) {
+      throw new errors.CommandError(`Command "${ffmpeg_safe_cmd.join(' ')}" failed.\n\n`)
+    }
     await proc.close()
   } else {
     await exec(ffmpeg_safe_cmd)
@@ -337,6 +340,8 @@ async function render_video(
       const volume = `volume=${layer.audio_volume ?? 1}`
       // TODO use anullsink for audio_volume === 0 to avoid extra processing
       complex_filter_inputs += `[${i}:a] asetpts=PTS-STARTPTS, ${volume}, ${atrim}, ${adelay}[a_in_${i}];`
+      console.log(video_filepath,)
+      console.log(info)
       audio_input_ids.push(`[a_in_${i}]`)
     }
 
@@ -363,8 +368,10 @@ async function render_video(
       )
     }
     ffmpeg_cmd.push('-ss', options.render_sample_frame, '-vframes', '1')
+  } else if (audio_input_ids.length === 0) {
+    // do not include audio
   } else if (audio_input_ids.length === 1) {
-    ffmpeg_cmd.push('-map', '[a_in_0]')
+    ffmpeg_cmd.push('-map', audio_input_ids[0])
   } else {
     const audio_inputs = audio_input_ids.join('')
     complex_filters += `;${audio_inputs} amix=inputs=${audio_input_ids.length} [audio]`
@@ -376,7 +383,6 @@ async function render_video(
   ffmpeg_cmd.push(output_filepath)
   if (options?.overwrite) ffmpeg_cmd.push('-y')
 
-  const execution_start_time = performance.now()
   await ffmpeg(ffmpeg_cmd, longest_duration, options?.progress_callback)
   return template
 }
