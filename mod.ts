@@ -329,7 +329,7 @@ async function render_video(
 
     complex_filter_inputs += `[${i}:v] ${video_input_filters.join(', ')} [${video_id}];`
 
-    if (!options?.render_sample_frame) {
+    if (!options?.render_sample_frame && info.has_audio) {
       const atrim = `atrim=0:${time.computed_duration}`
       const adelay = `adelay=${time.start * 1000}:all=1`
       const volume = `volume=${layer.audio_volume ?? 0}`
@@ -340,9 +340,8 @@ async function render_video(
 
     ffmpeg_cmd.push('-ss', time.trim_start, '-t', time.computed_duration, '-i', video_filepath)
 
-    let overlay_filter = `overlay=x=${x}:y=${y}:enable='between(t,${time.start},${
-      time.start + time.computed_duration
-    })'`
+    const overlay_enable_timespan = `enable='between(t,${time.start},${time.start + time.computed_duration})'`
+    const overlay_filter = `overlay=x=${x}:y=${y}:${overlay_enable_timespan}`
     if (i === 0) {
       complex_filters += `[${video_id}] ${overlay_filter}`
     } else {
@@ -364,7 +363,7 @@ async function render_video(
     ffmpeg_cmd.push('-map', '[a_in_0]')
   } else {
     const audio_inputs = audio_input_ids.join('')
-    complex_filters += `;${audio_inputs} amix=inputs=2 [audio]`
+    complex_filters += `;${audio_inputs} amix=inputs=${audio_input_ids.length} [audio]`
     ffmpeg_cmd.push('-map', '[audio]')
   }
 
