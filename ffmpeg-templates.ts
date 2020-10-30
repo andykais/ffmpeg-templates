@@ -85,7 +85,7 @@ if (!args['render-sample-frame'] && output_filepath_is_image) {
   )
 }
 
-// await try_render_video(template_filepath, output_filepath)
+await try_render_video(template_filepath, output_filepath)
 
 if (args.watch) {
   console.log(`watching ${template_filepath} for changes`)

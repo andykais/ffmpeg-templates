@@ -1,4 +1,5 @@
 import * as io from 'https://deno.land/std@0.75.0/io/mod.ts'
+import * as path from 'https://deno.land/std@0.75.0/path/mod.ts'
 import * as errors from './errors.ts'
 
 type Fraction = string
@@ -225,7 +226,9 @@ async function render_video(
   const ffmpeg_cmd: (string | number)[] = ['ffmpeg', '-v', options?.ffmpeg_verbosity ?? 'info']
   const audio_input_ids: string[] = []
 
-  const probed_info = await Promise.all(template.layers.map(l => probe_video(l.video)))
+  // prettier-ignore
+  const video_filepaths = template.layers.map(l => path.resolve(path.dirname(template_filepath), l.video))
+  const probed_info = await Promise.all(video_filepaths.map(probe_video))
   const longest_duration = compute_longest_duration(template, probed_info)
 
   const background_width =
@@ -237,6 +240,7 @@ async function render_video(
   let complex_filters = '[base]'
   for (const i of template.layers.keys()) {
     const info = probed_info[i]
+    const video_filepath = video_filepaths[i]
     // console.log({ info })
     const layer = template.layers[i]
     const { layout } = layer
@@ -334,7 +338,7 @@ async function render_video(
       audio_input_ids.push(`[a_in_${i}]`)
     }
 
-    ffmpeg_cmd.push('-ss', time.trim_start, '-t', time.computed_duration, '-i', layer.video)
+    ffmpeg_cmd.push('-ss', time.trim_start, '-t', time.computed_duration, '-i', video_filepath)
 
     let overlay_filter = `overlay=x=${x}:y=${y}:enable='between(t,${time.start},${
       time.start + time.computed_duration
