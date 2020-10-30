@@ -189,7 +189,9 @@ function compute_timeline(
 
   if (trim?.end === 'fit') {
     if (probed_duration > longest_duration) computed_duration = longest_duration
-    computed_duration -= seconds_from_start
+    if (computed_duration + seconds_from_start > longest_duration) {
+      computed_duration -= computed_duration + seconds_from_start - longest_duration
+    }
   } else if (trim?.end) computed_duration -= parse_duration(trim.end)
 
   if (trim?.start === 'fit') {
@@ -332,7 +334,7 @@ async function render_video(
     if (!options?.render_sample_frame && info.has_audio) {
       const atrim = `atrim=0:${time.computed_duration}`
       const adelay = `adelay=${time.start * 1000}:all=1`
-      const volume = `volume=${layer.audio_volume ?? 0}`
+      const volume = `volume=${layer.audio_volume ?? 1}`
       // TODO use anullsink for audio_volume === 0 to avoid extra processing
       complex_filter_inputs += `[${i}:a] asetpts=PTS-STARTPTS, ${volume}, ${atrim}, ${adelay}[a_in_${i}];`
       audio_input_ids.push(`[a_in_${i}]`)
@@ -340,7 +342,9 @@ async function render_video(
 
     ffmpeg_cmd.push('-ss', time.trim_start, '-t', time.computed_duration, '-i', video_filepath)
 
-    const overlay_enable_timespan = `enable='between(t,${time.start},${time.start + time.computed_duration})'`
+    const overlay_enable_timespan = `enable='between(t,${time.start},${
+      time.start + time.computed_duration
+    })'`
     const overlay_filter = `overlay=x=${x}:y=${y}:${overlay_enable_timespan}`
     if (i === 0) {
       complex_filters += `[${video_id}] ${overlay_filter}`
