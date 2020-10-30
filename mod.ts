@@ -174,7 +174,9 @@ function compute_longest_duration(template: Template, probed_info: ProbeInfo[]):
     if (timeline?.trim?.start === 'fit') {
       // if we are fitting this layer, we dont care how long it is
       if (!every_layer_is_fit) continue
-    } else if (timeline?.trim?.start) duration -= parse_duration(timeline.trim.start)
+    } else if (timeline?.trim?.start) {
+      duration -= parse_duration(timeline.trim.start)
+    }
 
     if (timeline?.trim?.end === 'fit') {
       // if we are fitting this layer, we dont care how long it is
@@ -201,12 +203,21 @@ function compute_timeline(
   let seconds_from_start = offset ? parse_duration(offset) : 0
   let trim_start = 0
 
+  if (typeof trim?.end === 'number' && trim.end !== 'fit') {
+    computed_duration -= parse_duration(trim.end)
+  }
+  if (typeof trim?.start === 'string' && trim.start !== 'fit') {
+    trim_start = parse_duration(trim.start)
+    computed_duration -= trim_start
+  }
+
   if (trim?.end === 'fit') {
     if (probed_duration > longest_duration) computed_duration = longest_duration
     if (computed_duration + seconds_from_start > longest_duration) {
       computed_duration -= computed_duration + seconds_from_start - longest_duration
     }
-  } else if (trim?.end) computed_duration -= parse_duration(trim.end)
+  }
+  // else if (trim?.end) computed_duration -= parse_duration(trim.end)
 
   if (trim?.start === 'fit') {
     if (trim?.end !== 'fit' && probed_duration > longest_duration) {
@@ -214,10 +225,11 @@ function compute_timeline(
       computed_duration = longest_duration
     }
     computed_duration -= seconds_from_start
-  } else if (trim?.start) {
-    trim_start = parse_duration(trim.start)
-    computed_duration -= trim_start
   }
+  // else if (trim?.start) {
+  //   trim_start = parse_duration(trim.start)
+  //   computed_duration -= trim_start
+  // }
   if (align === 'end' && computed_duration < longest_duration) {
     // the align 'end' we ignore is if the longest duration _is_ for this layer
     seconds_from_start += longest_duration - computed_duration
@@ -319,8 +331,8 @@ async function render_video(
     else if (typeof layout?.y === 'number') y = layout.y
     x_align = typeof layout?.x === 'object' ? layout.x.align ?? 'left' : 'left'
     y_align = typeof layout?.y === 'object' ? layout.y.align ?? 'top' : 'top'
-    if (typeof layout.x === 'string') x = `(main_w * ${parse_fraction(layout.x)})`
-    if (typeof layout.y === 'string') y = `(main_w * ${parse_fraction(layout.y)})`
+    if (typeof layout?.x === 'string') x = `(main_w * ${parse_fraction(layout.x)})`
+    if (typeof layout?.y === 'string') y = `(main_w * ${parse_fraction(layout.y)})`
 
     switch (x_align) {
       case 'left':

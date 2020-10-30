@@ -1,8 +1,15 @@
+import * as path from 'https://deno.land/std@0.75.0/path/mod.ts'
 import * as flags from 'https://deno.land/std@0.75.0/flags/mod.ts'
 import * as errors from './errors.ts'
 import { render_video, RenderOptions, FfmpegProgress } from './mod.ts'
 
 const encoder = new TextEncoder()
+
+function construct_output_filepath(args: flags.Args, template_filepath: string) {
+  const { dir, name } = path.parse(template_filepath)
+  const render_ext = args['render-sample-frame'] ? '.jpg' : '.mp4'
+  return path.join(dir, `${name}${render_ext}`)
+}
 
 function human_readable_duration(duration_seconds: number): string {
   if (duration_seconds / 60 >= 100) return `${(duration_seconds / 60 / 60).toFixed(1)}hrs`
@@ -51,10 +58,10 @@ async function try_render_video(template_filepath: string, output_filepath: stri
 }
 
 const args = flags.parse(Deno.args)
-if (args._.length !== 2 || args['help']) {
+if ((args._.length < 1 && args._.length > 2) || args['help']) {
   console.error(`splitscreen-templates v0.1.0
 
-Usage: splitscreen-templates <template> <output_filepath> [options]
+Usage: splitscreen-templates <template> [output_filepath] [options]
 
 OPTIONS:
   --render-sample-frame <timestamp>         Instead of outputting the whole video, output a single frame as a jpg.
@@ -72,7 +79,10 @@ OPTIONS:
   Deno.exit(args['help'] ? 0 : 1)
 }
 
-const [template_filepath, output_filepath] = args._.map(a => a.toString())
+const positional_args = args._.map(a => a.toString())
+const template_filepath = positional_args[0]
+const output_filepath = positional_args[1] ?? construct_output_filepath(args, template_filepath)
+
 const output_filepath_is_image = ['.jpg', '.jpeg', '.png'].some(ext => output_filepath.endsWith(ext))
 if (args['render-sample-frame'] && !output_filepath_is_image) {
   throw new Error(
@@ -80,9 +90,7 @@ if (args['render-sample-frame'] && !output_filepath_is_image) {
   )
 }
 if (!args['render-sample-frame'] && output_filepath_is_image) {
-  throw new Error(
-    'Invalid commands. <output_filepath> must be an image filename when using --render-sample-frame.'
-  )
+  throw new Error('Invalid commands. <output_filepath> must be an video filename.')
 }
 
 await try_render_video(template_filepath, output_filepath)

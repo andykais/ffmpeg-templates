@@ -14,6 +14,7 @@ deno run --watch --unstable --allow-read --allow-write --allow-run ffmpeg-templa
 - [X] fraction support
 - [X] audio volume control
 - [X] cropping
-- [ ] duration control
+- [O] duration control
+  - [ ] 'insert after <index>'
 - [ ] borders
 - [ ] yaml template support
