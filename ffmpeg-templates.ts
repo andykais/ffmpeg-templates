@@ -11,9 +11,10 @@ function construct_output_filepath(args: flags.Args, template_filepath: string) 
   return path.join(dir, `${name}${render_ext}`)
 }
 
+// TODO make sure this is always the same length?
 function human_readable_duration(duration_seconds: number): string {
-  if (duration_seconds / 60 >= 100) return `${(duration_seconds / 60 / 60).toFixed(1)}hrs`
-  else if (duration_seconds >= 100) return `${(duration_seconds / 60).toFixed(1)}mins`
+  if (duration_seconds / 60 >= 100) return `${(duration_seconds / 60 / 60).toFixed(1)}h`
+  else if (duration_seconds >= 100) return `${(duration_seconds / 60).toFixed(1)}m`
   else return `${duration_seconds.toFixed(0)}s`
 }
 
@@ -26,7 +27,9 @@ function progress_callback(execution_start_time: number, ffmpeg_progress: Ffmpeg
   const prefix = `${human_readable_duration(execution_time_seconds).padStart(4)} [`
   const suffix = `] ${(percentage * 100).toFixed(1)}%`
   const total_bar_width = console_width - prefix.length - suffix.length
-  const bar = unicode_bar.repeat(percentage * total_bar_width)
+  // avoid progress bar being longer than 100%. We should probably fix the underlying issue of incorrect durations anyways
+  const bar = unicode_bar.repeat(Math.min(percentage, 1) * total_bar_width)
+  // const message = `${prefix}${bar.padEnd(total_bar_width, '-')}${suffix}`
   const message = `\r${prefix}${bar.padEnd(total_bar_width, '-')}${suffix}`
   Deno.stdout.write(encoder.encode(message))
 }
@@ -85,9 +88,7 @@ const output_filepath = positional_args[1] ?? construct_output_filepath(args, te
 
 const output_filepath_is_image = ['.jpg', '.jpeg', '.png'].some(ext => output_filepath.endsWith(ext))
 if (args['render-sample-frame'] && !output_filepath_is_image) {
-  throw new Error(
-    'Invalid commands. <output_filepath> must be a video filename when rendering video output.'
-  )
+  throw new Error('Invalid commands. <output_filepath> must be a video filename when rendering video output.')
 }
 if (!args['render-sample-frame'] && output_filepath_is_image) {
   throw new Error('Invalid commands. <output_filepath> must be an video filename.')

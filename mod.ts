@@ -1,6 +1,7 @@
 import * as io from 'https://deno.land/std@0.75.0/io/mod.ts'
 import * as path from 'https://deno.land/std@0.75.0/path/mod.ts'
 import * as errors from './errors.ts'
+import { parse_duration, parse_fraction, parse_timeline_dsl, TIMELINE_ENUMS } from './text_parsers.ts'
 
 type Fraction = string
 type Pixels = number
@@ -9,13 +10,13 @@ type Offset = Fraction | Pixels
 type Seconds = number
 type Duration = string
 type Size = Pixels | 'inherit' // inherit the size from the first layer
+type TimelineDSL = string
 
 type Template = {
-  size: { width: Size; height: Size }
+  size?: { width: Size; height: Size }
   layers: {
     video: string
     audio_volume: Percentage
-    start_at: Duration
     layout: {
       x?: Offset | { offset?: Offset; align?: 'left' | 'right' | 'center' }
       y?: Offset | { offset?: Offset; align?: 'top' | 'bottom' | 'center' }
@@ -34,29 +35,38 @@ type Template = {
       trim?: { start?: 'fit' | string; end?: 'fit' | string }
       duration?: string
     }
+    // trim?: { start?: 'fit' | string; end?: 'fit' | string }
+    // duration?: string
+    // timeline: TimelineDSL
   }[]
 }
 
+// type ParsedClip = {
+//   input: string
+//   audio_volume: Percentage
+//   layout: {
+//     x: Pixels | string
+//     y: Pixels | string
+//     width: Pixels | string
+//     height: Pixels | string
+//   }
+//   crop?: {
+//     left?: Pixels
+//     right?: Pixels
+//     top?: Pixels
+//     bottom?: Pixels
+//   }
+//   seek: Seconds
+//   duration: Seconds
+//   start_at: Seconds
+// }
+// type Clip = ParsedClip | Duration | keyof typeof TIMELINE_ENUMS
+// type ParsedTemplate = {
+//   size: { width: Pixels; height: Pixels }
+//   clips: Clip[]
+// }
+
 const decoder = new TextDecoder()
-
-function parse_fraction(fraction: string): number {
-  const result = fraction.split('/')
-  if (result.length !== 2) throw new errors.InputError(`Invalid fraction "${fraction} specified."`)
-  const [numerator, denominator] = result.map(v => parseInt(v))
-  if (numerator === NaN || denominator === NaN)
-    throw new errors.InputError(`Invalid fraction "${fraction} specified."`)
-  return numerator / denominator
-}
-
-function parse_duration(duration: string, { user_input = true } = {}): Seconds {
-  const duration_split = duration.split(':')
-  if (duration_split.length !== 3) {
-    if (user_input) throw new errors.InputError(`Invalid duration "${duration}". Cannot parse`)
-    else throw new Error(`Invalid duration "${duration}". Cannot parse`)
-  }
-  const [hours, minutes, seconds] = duration_split.map(v => parseFloat(v))
-  return hours * 60 * 60 + minutes * 60 + seconds
-}
 
 async function parse_template(template_filepath: string): Promise<Template> {
   try {
@@ -72,10 +82,16 @@ async function parse_template(template_filepath: string): Promise<Template> {
   }
 }
 
-async function exec(cmd: string[], opts: Partial<Deno.RunOptions> = {}) {
-  const proc = Deno.run({ cmd, stdout: 'piped', ...opts })
+type OnReadLine = (line: string) => void
+async function exec(cmd: string[], readline_cb?: OnReadLine) {
+  const proc = Deno.run({ cmd, stdout: 'piped' })
+  if (readline_cb) {
+    for await (const line of io.readLines(proc.stdout)) {
+      readline_cb(line)
+    }
+  }
   const result = await proc.status()
-  const output_buffer = opts.stderr === 'piped' ? await proc.stderrOutput() : await proc.output()
+  const output_buffer = await proc.output()
   const output = decoder.decode(output_buffer)
   await proc.close()
   if (result.success) {
@@ -83,6 +99,15 @@ async function exec(cmd: string[], opts: Partial<Deno.RunOptions> = {}) {
   } else {
     throw new errors.CommandError(`Command "${cmd.join(' ')}" failed.\n\n${output}`)
   }
+}
+
+function parse_ffmpeg_packet(packet_buffer: string[]) {
+  const object: { [key: string]: string } = {}
+  for (const line of packet_buffer) {
+    const [key, value] = line.split('=')
+    object[key] = value
+  }
+  return object
 }
 
 type ProbeInfo = { width: number; height: number; has_audio: boolean; duration: Seconds }
@@ -95,7 +120,8 @@ async function probe_video(filepath: string): Promise<ProbeInfo> {
     'json',
     '-show_streams',
     '-show_entries',
-    'format=duration',
+    'stream=width,height,codec_type:stream_tags=rotate',
+    // 'format=duration',
     filepath,
   ])
   const info = JSON.parse(result)
@@ -104,19 +130,24 @@ async function probe_video(filepath: string): Promise<ProbeInfo> {
 
   if (!video_stream) throw new errors.ProbeError(`Input "${filepath}" has no video stream`)
   const has_audio = audio_stream !== undefined
-  const { width, height } = video_stream
+  const rotation = video_stream.tags?.rotate ? (parseInt(video_stream.tags?.rotate) * Math.PI) / 180.0 : 0
+  let { width, height } = video_stream
+  ;[height, width] = [
+    Math.abs(width * Math.sin(rotation)) + Math.abs(height * Math.cos(rotation)),
+    Math.abs(width * Math.cos(rotation)) + Math.abs(height * Math.sin(rotation)),
+  ].map(Math.floor)
 
   // ffprobe's duration is unreliable. The best solutions I have are:
-  // ffmpeg guessing: https://stackoverflow.com/a/33115316/3795137
-  // ffprobe packets: https://stackoverflow.com/a/33346572/3795137 but this is a ton of output, so were using ffmpeg
-  const ffmpeg_stats_str = await exec(
-    ['ffmpeg', '-v', 'quiet', '-stats', '-i', filepath, '-f', 'null', '-'],
-    { stderr: 'piped' }
-  )
-  // doing this nonsense because this line actually is updated several times (with '\r') so a simple ffmpeg_stats_str.replace(/.*time=(.*?).*/, '$1') will not work
-  const duration_str_half = ffmpeg_stats_str.substr(ffmpeg_stats_str.lastIndexOf('time=') + 5)
-  const duration_str = duration_str_half.substr(0, duration_str_half.indexOf(' '))
-  const duration = parse_duration(duration_str, { user_input: false })
+  // 1. ffmpeg guessing: https://stackoverflow.com/a/33115316/3795137
+  // 2. ffprobe packets: https://stackoverflow.com/a/33346572/3795137 but this is a ton of output, so were using ffmpeg
+  // I picked #2 because #1 is very slow to complete, it has to iterate the whole video, often at regular playback speed
+  let packet_str_buffer: string[] = []
+  const out = await exec(['ffprobe', '-v', 'error', '-show_packets', '-i', filepath], line => {
+    if (line === '[PACKET]') packet_str_buffer = []
+    packet_str_buffer.push(line)
+  })
+  const packet = parse_ffmpeg_packet(packet_str_buffer)
+  const duration = parseFloat(packet.dts_time)
   return { width, height, has_audio, duration }
 }
 
@@ -141,8 +172,7 @@ async function ffmpeg(
       const [key, value] = line.split('=')
       ;(progress as any)[key] = value
       if (key === 'progress') {
-        progress.percentage =
-          value === 'end' ? 1 : parse_duration(progress.out_time!) / longest_duration
+        progress.percentage = parse_duration(progress.out_time!) / longest_duration
         progress_callback(progress as FfmpegProgress)
         progress = {}
       }
@@ -216,8 +246,7 @@ function compute_timeline(
     if (computed_duration + seconds_from_start > longest_duration) {
       computed_duration -= computed_duration + seconds_from_start - longest_duration
     }
-  }
-  // else if (trim?.end) computed_duration -= parse_duration(trim.end)
+  } else if (trim?.end) computed_duration -= parse_duration(trim.end)
 
   if (trim?.start === 'fit') {
     if (trim?.end !== 'fit' && probed_duration > longest_duration) {
@@ -225,11 +254,10 @@ function compute_timeline(
       computed_duration = longest_duration
     }
     computed_duration -= seconds_from_start
+  } else if (trim?.start) {
+    trim_start = parse_duration(trim.start)
+    computed_duration -= trim_start
   }
-  // else if (trim?.start) {
-  //   trim_start = parse_duration(trim.start)
-  //   computed_duration -= trim_start
-  // }
   if (align === 'end' && computed_duration < longest_duration) {
     // the align 'end' we ignore is if the longest duration _is_ for this layer
     seconds_from_start += longest_duration - computed_duration
@@ -260,33 +288,34 @@ async function render_video(
   const longest_duration = compute_longest_duration(template, probed_info)
 
   const background_width =
-    template.size.width === 'inherit' ? probed_info[0].width : template.size.width
+    template.size === undefined || template.size.width === 'inherit'
+      ? probed_info[0].width
+      : template.size.width
   const background_height =
-    template.size.height === 'inherit' ? probed_info[0].height : template.size.height
+    template.size === undefined || template.size.height === 'inherit'
+      ? probed_info[0].height
+      : template.size.height
 
+  console.log({ longest_duration })
   let complex_filter_inputs = `color=s=${background_width}x${background_height}:color=black:duration=${longest_duration}[base];`
   let complex_filters = '[base]'
   for (const i of template.layers.keys()) {
     const info = probed_info[i]
     const video_filepath = video_filepaths[i]
-    // console.log({ info })
+    console.log({ info })
     const layer = template.layers[i]
     const { layout } = layer
     const video_id = `v_in_${i}`
 
     const input_width =
-      typeof layout?.width === 'string'
-        ? parse_fraction(layout.width) * background_width
-        : layout?.width
+      typeof layout?.width === 'string' ? parse_fraction(layout.width) * background_width : layout?.width
     const input_height =
-      typeof layout?.height === 'string'
-        ? parse_fraction(layout?.height) * background_height
-        : layout?.height
+      typeof layout?.height === 'string' ? parse_fraction(layout?.height) * background_height : layout?.height
     let width = input_width ?? (input_height ? input_height * (info.width / info.height) : info.width)
     let height = input_height ?? (input_width ? input_width / (info.width / info.height) : info.height)
 
     const time = compute_timeline(layer.timeline, info.duration, longest_duration)
-    // console.log({ time })
+    console.log({ time })
 
     const setpts = `setpts=PTS+${time.start}/TB`
     // NOTE it is intentional that we are using the width and height before they are manipulated by crop
@@ -368,9 +397,7 @@ async function render_video(
 
     ffmpeg_cmd.push('-ss', time.trim_start, '-t', time.computed_duration, '-i', video_filepath)
 
-    const overlay_enable_timespan = `enable='between(t,${time.start},${
-      time.start + time.computed_duration
-    })'`
+    const overlay_enable_timespan = `enable='between(t,${time.start},${time.start + time.computed_duration})'`
     const overlay_filter = `overlay=x=${x}:y=${y}:${overlay_enable_timespan}`
     if (i === 0) {
       complex_filters += `[${video_id}] ${overlay_filter}`
@@ -409,4 +436,4 @@ async function render_video(
 }
 
 export { render_video }
-export type { RenderOptions, FfmpegProgress }
+export type { RenderOptions, FfmpegProgress, Seconds, Template }
