@@ -20,53 +20,22 @@ function parse_duration(duration: string, { user_input = true } = {}): Seconds {
   return hours * 60 * 60 + minutes * 60 + seconds
 }
 
+function parse_ffmpeg_packet(packet_buffer: string[]) {
+  const object: { [key: string]: string } = {}
+  for (const line of packet_buffer) {
+    const [key, value] = line.split('=')
+    object[key] = value
+  }
+  return object
+}
+
 const TIMELINE_ENUMS = {
   PAD: 'PAD',
 } as const
-const duration = `[0-9]{2}:[0-9]{2}:[0-9]{2}(.[0-9]+)?`
-const layer_id = `[A-Za-z0-9_-]+`
-const dot = `[.]*`
-const line_by_line_re = new RegExp(`${dot}\[${dot}(${layer_id}|${duration})${dot}\]${dot}`, 'gy')
-type LayerID = string
-type Timeline = (LayerID | keyof typeof TIMELINE_ENUMS | Seconds)[]
-function parse_timeline_dsl(timeline_str: string) {
-  return timeline_str
-    .trim()
-    .split('\n')
-    .map(line => line.trim())
-    .map((line, i) => {
-      const match = line.matchAll(line_by_line_re)
-      if (match === null) throw new Error(`Timeline parse failed at line ${i + 1}`)
-      let covered_line_length = 0
-      const clips = [...match].map((m, j) => {
-        if (m[0] === undefined) throw new InputError(`Timeline parse failed at line ${i + 1}, clip ${j + 1}`)
-        if (m[1] === undefined) throw new InputError(`Timeline parse failed at line ${i + 1}, clip ${j + 1}`)
-        covered_line_length += m[0].length
-        return m[1]
-      })
-      if (covered_line_length !== line.length) throw new InputError(`Timeline parse failed at line ${i + 1}`)
-      return clips
-    })
-    .map(clips =>
-      clips.map(clip => {
-        try {
-          return parse_duration(clip)
-        } catch (e) {
-          // if we cant parse it as a duration, assume it is a layer id
-          if (e instanceof InputError) return clip
-          else throw e
-        }
-      })
-    )
+
+export {
+  parse_fraction,
+  parse_duration,
+  parse_ffmpeg_packet,
+  TIMELINE_ENUMS,
 }
-
-// const res = parse_timeline_dsl(`
-// [PAD][00:00:05][LAYER_0]
-// [LAYER_1...............]
-// ..[PAD][00:00:05.40..]..[LAYER_0]  
-// [LAYER_1..............]
-
-// `)
-// console.log(res)
-
-export { parse_fraction, parse_duration, parse_timeline_dsl, TIMELINE_ENUMS }

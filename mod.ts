@@ -1,7 +1,9 @@
 import * as io from 'https://deno.land/std@0.75.0/io/mod.ts'
 import * as path from 'https://deno.land/std@0.75.0/path/mod.ts'
+import * as math from './float_math.ts'
+
 import * as errors from './errors.ts'
-import { parse_duration, parse_fraction, parse_timeline_dsl, TIMELINE_ENUMS } from './text_parsers.ts'
+import { parse_duration, parse_fraction, parse_ffmpeg_packet, TIMELINE_ENUMS } from './text_parsers.ts'
 
 type Fraction = string
 type Pixels = number
@@ -9,77 +11,67 @@ type Percentage = number
 type Offset = Fraction | Pixels
 type Seconds = number
 type Duration = string
-type Size = Pixels | 'inherit' // inherit the size from the first layer
-type TimelineDSL = string
+type ClipID = string
+type TimelineEnums = typeof TIMELINE_ENUMS[keyof typeof TIMELINE_ENUMS]
 
-type Template = {
-  size?: { width: Size; height: Size }
-  layers: {
-    video: string
-    audio_volume: Percentage
-    layout: {
-      x?: Offset | { offset?: Offset; align?: 'left' | 'right' | 'center' }
-      y?: Offset | { offset?: Offset; align?: 'top' | 'bottom' | 'center' }
-      width?: Fraction | Pixels
-      height?: Fraction | Pixels
-    }
-    crop?: {
-      left?: Pixels
-      right?: Pixels
-      top?: Pixels
-      bottom?: Pixels
-    }
-    timeline?: {
-      align?: 'start' | 'end' // defaults to 'start'
-      offset?: string // defaults to 00:00:00 (TODO accept negative durations: -00:00:01)
-      trim?: { start?: 'fit' | string; end?: 'fit' | string }
-      duration?: string
-    }
-    // trim?: { start?: 'fit' | string; end?: 'fit' | string }
-    // duration?: string
-    // timeline: TimelineDSL
-  }[]
+interface Clip {
+  /** defaults to LAYER_<layer_index> */
+  id?: ClipID
+
+  file: string
+
+  audio_volume: Percentage
+
+  layout: {
+    x?: Offset | { offset?: Offset; align?: 'left' | 'right' | 'center' }
+    y?: Offset | { offset?: Offset; align?: 'top' | 'bottom' | 'center' }
+    width?: Fraction | Pixels
+    height?: Fraction | Pixels
+  }
+  crop?: {
+    left?: Pixels
+    right?: Pixels
+    top?: Pixels
+    bottom?: Pixels
+  }
+  trim?: { start?: 'fit' | Duration; end?: 'fit' | Duration }
+  duration?: Duration
 }
+type Size = Pixels | { fraction: Fraction; proportional_to: ClipID }
+interface TemplateInput {
+  /** defaults to width: { fraction: '1/1', proportional_to: `CLIP_0` } */
+  size?: { width?: Size; height?: Size }
+  clips: Clip[]
 
-// type ParsedClip = {
-//   input: string
-//   audio_volume: Percentage
-//   layout: {
-//     x: Pixels | string
-//     y: Pixels | string
-//     width: Pixels | string
-//     height: Pixels | string
-//   }
-//   crop?: {
-//     left?: Pixels
-//     right?: Pixels
-//     top?: Pixels
-//     bottom?: Pixels
-//   }
-//   seek: Seconds
-//   duration: Seconds
-//   start_at: Seconds
-// }
-// type Clip = ParsedClip | Duration | keyof typeof TIMELINE_ENUMS
-// type ParsedTemplate = {
-//   size: { width: Pixels; height: Pixels }
-//   clips: Clip[]
-// }
+  timeline?: { [start_position: string]: (ClipID | TimelineEnums)[][] }
+}
+interface Template extends TemplateInput {
+  size: { width: Size; height: Size }
+  clips: (Clip & { id: ClipID; filepath: string })[]
+  timeline: { [start_position: string]: (ClipID | TimelineEnums)[][] }
+}
 
 const decoder = new TextDecoder()
 
-async function parse_template(template_filepath: string): Promise<Template> {
-  try {
-    const template: Template = JSON.parse(decoder.decode(await Deno.readFile(template_filepath)))
-    if (template.layers.length === 0) {
-      throw new errors.InputError(`template "layers" must have at least one layer present.`)
-    }
-    return template
-  } catch (e) {
-    if (e.name === 'SyntaxError') {
-      throw new errors.InputError(`template ${template_filepath} is not valid JSON or YML`)
-    } else throw e
+function parse_template(template_input: TemplateInput, cwd: string): Template {
+  if (template_input.clips.length === 0) {
+    throw new errors.InputError(`template "clips" must have at least one clip present.`)
   }
+  const clips: Template['clips'] = []
+  for (const i of template_input.clips.keys()) {
+    const clip = template_input.clips[i]
+    const id = clip.id ?? `CLIP_${i}`
+    if (clips.find(c => c.id === id)) throw new errors.InputError(`Clip id ${id} is defined more than once.`)
+    const filepath = path.resolve(cwd, clip.file)
+    clips.push({ ...clip, id, filepath })
+  }
+  const timeline = template_input.timeline ?? { '00:00:00': clips.map(clip => [clip.id]) }
+  const default_size = { fraction: '1/1', proportional_to: clips[0]?.id }
+  const size = {
+    width: template_input.size?.width ?? default_size,
+    height: template_input.size?.height ?? default_size,
+  }
+  return { ...template_input, size, clips, timeline }
 }
 
 type OnReadLine = (line: string) => void
@@ -101,54 +93,301 @@ async function exec(cmd: string[], readline_cb?: OnReadLine) {
   }
 }
 
-function parse_ffmpeg_packet(packet_buffer: string[]) {
-  const object: { [key: string]: string } = {}
-  for (const line of packet_buffer) {
-    const [key, value] = line.split('=')
-    object[key] = value
+interface ClipInfoMap {
+  [clip_id: string]: {
+    width: number
+    height: number
+    has_audio: boolean
+    duration: Seconds
   }
-  return object
+}
+async function probe_clips(template: Template): Promise<ClipInfoMap> {
+  const probe_clips_promises = template.clips.map(async clip => {
+    const result = await exec([
+      'ffprobe',
+      '-v',
+      'error',
+      '-print_format',
+      'json',
+      '-show_streams',
+      '-show_entries',
+      'stream=width,height,codec_type:stream_tags=rotate',
+      // 'format=duration',
+      clip.filepath,
+    ])
+    const info = JSON.parse(result)
+    const video_stream = info.streams.find((s: any) => s.codec_type === 'video')
+    const audio_stream = info.streams.find((s: any) => s.codec_type === 'audio')
+
+    if (!video_stream) throw new errors.ProbeError(`Input "${clip.file}" has no video stream`)
+    const has_audio = audio_stream !== undefined
+    const rotation = video_stream.tags?.rotate ? (parseInt(video_stream.tags?.rotate) * Math.PI) / 180.0 : 0
+    let { width, height } = video_stream
+    ;[height, width] = [
+      Math.abs(width * Math.sin(rotation)) + Math.abs(height * Math.cos(rotation)),
+      Math.abs(width * Math.cos(rotation)) + Math.abs(height * Math.sin(rotation)),
+    ].map(Math.floor)
+
+    // ffprobe's duration is unreliable. The best solutions I have are:
+    // 1. ffmpeg guessing: https://stackoverflow.com/a/33115316/3795137
+    // 2. ffprobe packets: https://stackoverflow.com/a/33346572/3795137 but this is a ton of output, so were using ffmpeg
+    // I picked #2 because #1 is very slow to complete, it has to iterate the whole video, often at regular playback speed
+    let packet_str_buffer: string[] = []
+    const out = await exec(['ffprobe', '-v', 'error', '-show_packets', '-i', clip.filepath], line => {
+      if (line === '[PACKET]') packet_str_buffer = []
+      packet_str_buffer.push(line)
+    })
+    const packet = parse_ffmpeg_packet(packet_str_buffer)
+    const duration = parseFloat(packet.dts_time)
+    return { width, height, has_audio, duration }
+  })
+
+  const probed_clips = await Promise.all(probe_clips_promises)
+  return probed_clips.reduce((acc: ClipInfoMap, clip_info, i) => {
+    acc[template.clips[i].id] = clip_info
+    return acc
+  }, {})
 }
 
-type ProbeInfo = { width: number; height: number; has_audio: boolean; duration: Seconds }
-async function probe_video(filepath: string): Promise<ProbeInfo> {
-  const result = await exec([
-    'ffprobe',
-    '-v',
-    'error',
-    '-print_format',
-    'json',
-    '-show_streams',
-    '-show_entries',
-    'stream=width,height,codec_type:stream_tags=rotate',
-    // 'format=duration',
-    filepath,
-  ])
-  const info = JSON.parse(result)
-  const video_stream = info.streams.find((s: any) => s.codec_type === 'video')
-  const audio_stream = info.streams.find((s: any) => s.codec_type === 'audio')
+function get_clip(clip_info_map: ClipInfoMap, clip_id: ClipID) {
+  const clip = clip_info_map[clip_id]
+  if (!clip) throw new errors.InputError(`Clip ${clip_id} does not exist.`)
+  return clip
+}
 
-  if (!video_stream) throw new errors.ProbeError(`Input "${filepath}" has no video stream`)
-  const has_audio = audio_stream !== undefined
-  const rotation = video_stream.tags?.rotate ? (parseInt(video_stream.tags?.rotate) * Math.PI) / 180.0 : 0
-  let { width, height } = video_stream
-  ;[height, width] = [
-    Math.abs(width * Math.sin(rotation)) + Math.abs(height * Math.cos(rotation)),
-    Math.abs(width * Math.cos(rotation)) + Math.abs(height * Math.sin(rotation)),
-  ].map(Math.floor)
+interface ClipGeometryMap {
+  [clip_id: string]: {
+    x: number | string
+    y: number | string
+    width: number
+    height: number
+    scale: { width: number; height: number }
+    crop?: {
+      x: number
+      y: number
+      width: string
+      height: string
+    }
+  }
+}
+function compute_geometry(template: Template, clip_info_map: ClipInfoMap) {
+  const { size } = template
+  const background_width =
+    typeof size.width === 'number'
+      ? size.width
+      : parse_fraction(size.width.fraction) * get_clip(clip_info_map, size.width.proportional_to).width
+  const background_height =
+    typeof size.height === 'number'
+      ? size.height
+      : parse_fraction(size.height.fraction) * get_clip(clip_info_map, size.height.proportional_to).height
 
-  // ffprobe's duration is unreliable. The best solutions I have are:
-  // 1. ffmpeg guessing: https://stackoverflow.com/a/33115316/3795137
-  // 2. ffprobe packets: https://stackoverflow.com/a/33346572/3795137 but this is a ton of output, so were using ffmpeg
-  // I picked #2 because #1 is very slow to complete, it has to iterate the whole video, often at regular playback speed
-  let packet_str_buffer: string[] = []
-  const out = await exec(['ffprobe', '-v', 'error', '-show_packets', '-i', filepath], line => {
-    if (line === '[PACKET]') packet_str_buffer = []
-    packet_str_buffer.push(line)
-  })
-  const packet = parse_ffmpeg_packet(packet_str_buffer)
-  const duration = parseFloat(packet.dts_time)
-  return { width, height, has_audio, duration }
+  const clip_geometry_map: ClipGeometryMap = {}
+  for (const clip of template.clips) {
+    const info = get_clip(clip_info_map, clip.id)
+    const { layout } = clip
+
+    const input_width =
+      typeof layout?.width === 'string' ? parse_fraction(layout.width) * background_width : layout?.width
+    const input_height =
+      typeof layout?.height === 'string' ? parse_fraction(layout?.height) * background_height : layout?.height
+    let width = input_width ?? (input_height ? input_height * (info.width / info.height) : info.width)
+    let height = input_height ?? (input_width ? input_width / (info.width / info.height) : info.height)
+
+    const scale = { width, height }
+
+    let crop: ClipGeometryMap[string]['crop']
+    if (clip.crop && Object.keys(clip.crop).length) {
+      const { left, right, top, bottom } = clip.crop
+      let x_crop = 0
+      let y_crop = 0
+      let width_crop = 'in_w'
+      let height_crop = 'in_h'
+      if (right) {
+        width_crop = `in_w - ${right}`
+        width -= right
+      }
+      if (bottom) {
+        height_crop = `in_h - ${bottom}`
+        height -= bottom
+      }
+      if (left) {
+        x_crop = left
+        width -= left
+        width_crop = `${width_crop} - ${x_crop}`
+      }
+      if (top) {
+        y_crop = top
+        height -= top
+        height_crop = `${height_crop} - ${y_crop}`
+      }
+      crop = { width: width_crop, height: height_crop, x: x_crop, y: y_crop }
+    }
+    let x: string | number = 0
+    let y: string | number = 0
+    let x_align = 'left'
+    let y_align = 'top'
+    if (typeof layout?.x === 'object') x = layout.x.offset ?? 0
+    else if (typeof layout?.x === 'number') x = layout.x
+    if (typeof layout?.y === 'object') y = layout.y.offset ?? 0
+    else if (typeof layout?.y === 'number') y = layout.y
+    x_align = typeof layout?.x === 'object' ? layout.x.align ?? 'left' : 'left'
+    y_align = typeof layout?.y === 'object' ? layout.y.align ?? 'top' : 'top'
+    if (typeof layout?.x === 'string') x = `(main_w * ${parse_fraction(layout.x)})`
+    if (typeof layout?.y === 'string') y = `(main_w * ${parse_fraction(layout.y)})`
+
+    switch (x_align) {
+      case 'left':
+        break
+      case 'right':
+        x = `main_w - ${width} + ${x}`
+        break
+      case 'center':
+        x = `(main_w / 2) - ${width / 2} + ${x}`
+        break
+    }
+    switch (y_align) {
+      case 'top':
+        break
+      case 'bottom':
+        y = `main_h - ${height} + ${y}`
+        break
+      case 'center':
+        y = `(main_h / 2) - ${height / 2} + ${y}`
+        break
+    }
+    clip_geometry_map[clip.id] = { x, y, width, height, scale, crop }
+  }
+  return { background_width, background_height, clip_geometry_map }
+}
+
+interface TimelineClip {
+  clip_id: ClipID
+  duration: number
+  start_at: number
+  trim_start: number
+}
+function compute_timeline(template: Template, clip_info_map: ClipInfoMap) {
+  const { timeline } = template
+
+  const all_clips_trim_to_fit = Object.values(template.timeline).every(layers =>
+    layers.every(layer =>
+      layer
+        .filter(id => id !== TIMELINE_ENUMS.PAD)
+        .map(id => {
+          const clip = template.clips.find(c => c.id === id)
+          if (!clip) throw new errors.InputError(`Clip ${id} does not exist.`)
+          return clip
+        })
+        .every(clip => clip.trim?.start === 'fit' || clip.trim?.end === 'fit')
+    )
+  )
+
+  function calculate_layer_duration(layer: ClipID[], index: number, skip_trim_fit: boolean) {
+    let layer_duration = 0
+    for (const clip_index of layer.keys()) {
+      // start at the specified index
+      if (clip_index < index) continue
+      const clip_id = layer[clip_index]
+      // PAD does nothing while calculating longest duration
+      if (clip_id === TIMELINE_ENUMS.PAD) continue
+
+      const info = get_clip(clip_info_map, clip_id)
+      const clip = template.clips.find(c => c.id === clip_id)!
+      const { trim } = clip
+
+      let clip_duration = clip.duration ? parse_duration(clip.duration) : info.duration
+
+      if (trim?.start === 'fit') {
+        if (!all_clips_trim_to_fit) continue
+      } else if (trim?.start) {
+        clip_duration -= parse_duration(trim.start)
+      }
+      if (trim?.end === 'fit') {
+        if (!all_clips_trim_to_fit) continue
+      } else if (trim?.end) clip_duration -= parse_duration(trim.end)
+
+      layer_duration += clip_duration
+    }
+    return layer_duration
+  }
+
+  let longest_duration = 0
+  let shortest_duration = Infinity
+  for (const start_position of Object.keys(timeline)) {
+    const start_position_seconds = parse_duration(start_position)
+
+    for (const clips of Object.values(timeline[start_position])) {
+      let layer_duration = start_position_seconds
+
+      layer_duration += calculate_layer_duration(clips, 0, all_clips_trim_to_fit)
+      longest_duration = Math.max(longest_duration, layer_duration)
+      shortest_duration = Math.min(shortest_duration, layer_duration)
+    }
+  }
+  const total_duration = all_clips_trim_to_fit ? shortest_duration : longest_duration
+
+  const layer_ordered_clips: TimelineClip[][] = []
+  for (const start_position of Object.keys(timeline)) {
+    const start_position_seconds = parse_duration(start_position)
+    for (const layer_index of timeline[start_position].keys()) {
+      const clips = timeline[start_position][layer_index]
+
+      let layer_start_position = start_position_seconds
+      for (const clip_index of clips.keys()) {
+        const clip_id = clips[clip_index]
+        if (clip_id === TIMELINE_ENUMS.PAD) {
+          const remaining_duration = calculate_layer_duration(clips, clip_index + 1, true)
+          const seconds_until_complete = total_duration - (layer_start_position + remaining_duration)
+          if (math.gt(seconds_until_complete, 0)) layer_start_position += seconds_until_complete
+        } else {
+          const info = get_clip(clip_info_map, clip_id)
+          const clip = template.clips.find(c => c.id === clip_id)!
+          const { trim } = clip
+          let clip_duration = clip.duration ? parse_duration(clip.duration) : info.duration
+          let trim_start = 0
+          if (trim?.end === 'fit') {
+            const remaining_duration = calculate_layer_duration(clips, clip_index + 1, true)
+            const seconds_until_complete =
+              layer_start_position + clip_duration + remaining_duration - total_duration
+            // sometimes we will just skip the clip entirely if theres no room
+            if (math.gte(seconds_until_complete, clip_duration)) continue
+            if (math.gt(seconds_until_complete, 0)) clip_duration -= seconds_until_complete
+          } else if (trim?.end) clip_duration -= parse_duration(trim.end)
+
+          if (trim?.start === 'fit' && trim?.end === 'fit') {
+          } else if (trim?.start === 'fit') {
+            const remaining_duration = calculate_layer_duration(clips, clip_index + 1, true)
+            const seconds_until_complete =
+              layer_start_position + clip_duration + remaining_duration - total_duration
+            // sometimes we will just skip the clip entirely if theres no room
+            if (math.gte(seconds_until_complete, clip_duration)) continue
+            if (math.gt(seconds_until_complete, 0)) {
+              trim_start = seconds_until_complete
+              clip_duration -= seconds_until_complete
+            }
+          } else if (trim?.start) {
+            trim_start = parse_duration(trim.start)
+            clip_duration -= trim_start
+          }
+
+          layer_ordered_clips[layer_index] = layer_ordered_clips[layer_index] ?? []
+          layer_ordered_clips[layer_index].push({
+            clip_id: clip_id,
+            duration: clip_duration,
+            trim_start,
+            start_at: layer_start_position,
+          })
+          layer_start_position += clip_duration
+        }
+      }
+    }
+  }
+  return {
+    // flatten the layers and timelines into a single stream of overlays
+    // (where the stuff that should appear in the background is first)
+    timeline: layer_ordered_clips.reduce((acc: TimelineClip[], layer) => [...acc, ...layer], []),
+    total_duration,
+  }
 }
 
 type FfmpegProgress = {
@@ -187,232 +426,74 @@ async function ffmpeg(
   }
 }
 
-function compute_longest_duration(template: Template, probed_info: ProbeInfo[]): Seconds {
-  const every_layer_is_fit = template.layers.every(
-    l => l.timeline?.trim?.start === 'fit' || l.timeline?.trim?.end === 'fit'
-  )
-
-  let shortest_duration = Infinity
-  let longest_duration = 0
-  for (const i of template.layers.keys()) {
-    const { timeline } = template.layers[i]
-    const info = probed_info[i]
-    const parsed_offset = timeline?.offset ? parse_duration(timeline.offset) : 0
-    const initial_duration = timeline?.duration ? parse_duration(timeline.duration) : info.duration
-    let duration = initial_duration + parsed_offset
-
-    if (timeline?.trim?.start === 'fit') {
-      // if we are fitting this layer, we dont care how long it is
-      if (!every_layer_is_fit) continue
-    } else if (timeline?.trim?.start) {
-      duration -= parse_duration(timeline.trim.start)
-    }
-
-    if (timeline?.trim?.end === 'fit') {
-      // if we are fitting this layer, we dont care how long it is
-      if (!every_layer_is_fit) continue
-    } else if (timeline?.trim?.end) duration -= parse_duration(timeline.trim.end)
-
-    shortest_duration = Math.min(shortest_duration, duration)
-    longest_duration = Math.max(longest_duration, duration)
-  }
-
-  if (every_layer_is_fit) return shortest_duration
-  else return longest_duration
-}
-
-function compute_timeline(
-  timeline: Template['layers'][0]['timeline'],
-  probed_duration: Seconds,
-  longest_duration: Seconds
-) {
-  const { align, offset, trim, duration } = timeline ?? {}
-
-  // let seconds_from_start = 0
-  let computed_duration: number = duration ? parse_duration(duration) : probed_duration
-  let seconds_from_start = offset ? parse_duration(offset) : 0
-  let trim_start = 0
-
-  if (typeof trim?.end === 'number' && trim.end !== 'fit') {
-    computed_duration -= parse_duration(trim.end)
-  }
-  if (typeof trim?.start === 'string' && trim.start !== 'fit') {
-    trim_start = parse_duration(trim.start)
-    computed_duration -= trim_start
-  }
-
-  if (trim?.end === 'fit') {
-    if (probed_duration > longest_duration) computed_duration = longest_duration
-    if (computed_duration + seconds_from_start > longest_duration) {
-      computed_duration -= computed_duration + seconds_from_start - longest_duration
-    }
-  } else if (trim?.end) computed_duration -= parse_duration(trim.end)
-
-  if (trim?.start === 'fit') {
-    if (trim?.end !== 'fit' && probed_duration > longest_duration) {
-      trim_start = probed_duration - longest_duration
-      computed_duration = longest_duration
-    }
-    computed_duration -= seconds_from_start
-  } else if (trim?.start) {
-    trim_start = parse_duration(trim.start)
-    computed_duration -= trim_start
-  }
-  if (align === 'end' && computed_duration < longest_duration) {
-    // the align 'end' we ignore is if the longest duration _is_ for this layer
-    seconds_from_start += longest_duration - computed_duration
-  }
-
-  return { start: seconds_from_start, trim_start, computed_duration }
-}
-
-type RenderOptions = {
-  render_sample_frame?: Duration
+interface RenderOptions {
   overwrite?: boolean
   ffmpeg_verbosity?: 'quiet' | 'error' | 'warning' | 'info' | 'debug'
   progress_callback?: OnProgress
+  cwd?: string
 }
-async function render_video(
-  template_filepath: string,
+interface RenderOptionsInternal extends RenderOptions {
+  render_sample_frame?: Duration
+}
+async function render(
+  template_input: TemplateInput,
   output_filepath: string,
-  options?: RenderOptions
+  options?: RenderOptionsInternal
 ): Promise<Template> {
-  const template = await parse_template(template_filepath)
+  const template = parse_template(template_input, options?.cwd ?? Deno.cwd())
 
-  const ffmpeg_cmd: (string | number)[] = ['ffmpeg', '-v', options?.ffmpeg_verbosity ?? 'info']
+  const clip_info_map = await probe_clips(template)
+  const { background_width, background_height, clip_geometry_map } = compute_geometry(template, clip_info_map)
+  const { timeline, total_duration } = compute_timeline(template, clip_info_map)
+
+  const complex_filter_inputs = [
+    `color=s=${background_width}x${background_height}:color=black:duration=${total_duration}[base]`,
+  ]
+  const complex_filter_overlays: string[] = []
   const audio_input_ids: string[] = []
+  const ffmpeg_cmd: (string | number)[] = ['ffmpeg', '-v', options?.ffmpeg_verbosity ?? 'info']
+  for (const i of timeline.keys()) {
+    const { clip_id, start_at, trim_start, duration } = timeline[i]
+    const clip = template.clips.find(c => c.id === clip_id)!
+    const info = clip_info_map[clip_id]
+    const geometry = clip_geometry_map[clip_id]
 
-  // prettier-ignore
-  const video_filepaths = template.layers.map(l => path.resolve(path.dirname(template_filepath), l.video))
-  const probed_info = await Promise.all(video_filepaths.map(probe_video))
-  const longest_duration = compute_longest_duration(template, probed_info)
-
-  const background_width =
-    template.size === undefined || template.size.width === 'inherit'
-      ? probed_info[0].width
-      : template.size.width
-  const background_height =
-    template.size === undefined || template.size.height === 'inherit'
-      ? probed_info[0].height
-      : template.size.height
-
-  console.log({ longest_duration })
-  let complex_filter_inputs = `color=s=${background_width}x${background_height}:color=black:duration=${longest_duration}[base];`
-  let complex_filters = '[base]'
-  for (const i of template.layers.keys()) {
-    const info = probed_info[i]
-    const video_filepath = video_filepaths[i]
-    console.log({ info })
-    const layer = template.layers[i]
-    const { layout } = layer
-    const video_id = `v_in_${i}`
-
-    const input_width =
-      typeof layout?.width === 'string' ? parse_fraction(layout.width) * background_width : layout?.width
-    const input_height =
-      typeof layout?.height === 'string' ? parse_fraction(layout?.height) * background_height : layout?.height
-    let width = input_width ?? (input_height ? input_height * (info.width / info.height) : info.width)
-    let height = input_height ?? (input_width ? input_width / (info.width / info.height) : info.height)
-
-    const time = compute_timeline(layer.timeline, info.duration, longest_duration)
-    console.log({ time })
-
-    const setpts = `setpts=PTS+${time.start}/TB`
-    // NOTE it is intentional that we are using the width and height before they are manipulated by crop
-    const vscale = `scale=${width}:${height}`
-    const video_input_filters: string[] = [setpts, vscale]
-
-    if (layer.crop && Object.keys(layer.crop).length) {
-      const { left, right, top, bottom } = layer.crop
-      let x_crop = 0
-      let y_crop = 0
-      let width_crop = 'in_w'
-      let height_crop = 'in_h'
-      if (right) {
-        width_crop = `in_w - ${right}`
-        width -= right
-      }
-      if (bottom) {
-        height_crop = `in_h - ${bottom}`
-        height -= bottom
-      }
-      if (left) {
-        x_crop = left
-        width -= left
-        width_crop = `${width_crop} - ${x_crop}`
-      }
-      if (top) {
-        y_crop = top
-        height -= top
-        height_crop = `${height_crop} - ${y_crop}`
-      }
-      const crop = `crop=w=${width_crop}:h=${height_crop}:x=${x_crop}:y=${y_crop}:keep_aspect=1`
-      video_input_filters.push(crop)
+    const setpts = `setpts=PTS+${start_at}/TB`
+    const vscale = `scale=${geometry.scale.width}:${geometry.scale.height}`
+    const video_input_filters = [setpts, vscale]
+    if (geometry.crop) {
+      const { crop } = geometry
+      video_input_filters.push(`crop=w=${crop.width}:h=${crop.height}:x=${crop.x}:y=${crop.y}:keep_aspect=1`)
     }
-
-    let x: string | number = 0
-    let y: string | number = 0
-    let x_align = 'left'
-    let y_align = 'top'
-    if (typeof layout?.x === 'object') x = layout.x.offset ?? 0
-    else if (typeof layout?.x === 'number') x = layout.x
-    if (typeof layout?.y === 'object') y = layout.y.offset ?? 0
-    else if (typeof layout?.y === 'number') y = layout.y
-    x_align = typeof layout?.x === 'object' ? layout.x.align ?? 'left' : 'left'
-    y_align = typeof layout?.y === 'object' ? layout.y.align ?? 'top' : 'top'
-    if (typeof layout?.x === 'string') x = `(main_w * ${parse_fraction(layout.x)})`
-    if (typeof layout?.y === 'string') y = `(main_w * ${parse_fraction(layout.y)})`
-
-    switch (x_align) {
-      case 'left':
-        break
-      case 'right':
-        x = `main_w - ${width} + ${x}`
-        break
-      case 'center':
-        x = `(main_w / 2) - ${width / 2} + ${x}`
-        break
-    }
-    switch (y_align) {
-      case 'top':
-        break
-      case 'bottom':
-        y = `main_h - ${height} + ${y}`
-        break
-      case 'center':
-        y = `(main_h / 2) - ${height / 2} + ${y}`
-        break
-    }
-
-    complex_filter_inputs += `[${i}:v] ${video_input_filters.join(', ')} [${video_id}];`
-
+    complex_filter_inputs.push(`[${i}:v] ${video_input_filters.join(', ')} [v_in_${i}]`)
     if (!options?.render_sample_frame && info.has_audio) {
-      const atrim = `atrim=0:${time.computed_duration}`
-      const adelay = `adelay=${time.start * 1000}:all=1`
-      const volume = `volume=${layer.audio_volume ?? 1}`
-      // TODO use anullsink for audio_volume === 0 to avoid extra processing
-      complex_filter_inputs += `[${i}:a] asetpts=PTS-STARTPTS, ${volume}, ${atrim}, ${adelay}[a_in_${i}];`
+      const audio_filters = [
+        `asetpts=PTS-STARTPTS`,
+        `atrim=0:${duration}`,
+        `adelay=${start_at * 1000}:all=1`,
+        `volume=${clip.audio_volume ?? 1}`, // TODO use anullsink for audio_volume === 0 to avoid extra processing
+      ]
+      complex_filter_inputs.push(`[${i}:a] ${audio_filters.join(', ')}[a_in_${i}]`)
       audio_input_ids.push(`[a_in_${i}]`)
     }
+    ffmpeg_cmd.push('-ss', trim_start, '-t', duration, '-i', clip.filepath)
 
-    ffmpeg_cmd.push('-ss', time.trim_start, '-t', time.computed_duration, '-i', video_filepath)
-
-    const overlay_enable_timespan = `enable='between(t,${time.start},${time.start + time.computed_duration})'`
-    const overlay_filter = `overlay=x=${x}:y=${y}:${overlay_enable_timespan}`
+    const overlay_enable_timespan = `enable='between(t,${start_at},${start_at + duration})'`
+    const overlay_filter = `overlay=x=${geometry.x}:y=${geometry.y}:${overlay_enable_timespan}`
     if (i === 0) {
-      complex_filters += `[${video_id}] ${overlay_filter}`
+      complex_filter_overlays.push(`[base][v_in_${i}] ${overlay_filter} [v_out_${i}]`)
     } else {
-      complex_filters += `[v_out_${i - 1}];[v_out_${i - 1}][${video_id}] ${overlay_filter}`
+      complex_filter_overlays.push(`[v_out_${i - 1}][v_in_${i}] ${overlay_filter} [v_out_${i}]`)
     }
   }
-  complex_filters += '[video]'
-  ffmpeg_cmd.push('-map', '[video]')
+  const complex_filter = [...complex_filter_inputs, ...complex_filter_overlays]
+  ffmpeg_cmd.push('-map', `[v_out_${timeline.length - 1}]`)
 
   if (options?.render_sample_frame) {
     // we dont care about audio output for sample frame renders
-    if (longest_duration < parse_duration(options.render_sample_frame)) {
+    if (total_duration < parse_duration(options.render_sample_frame)) {
       throw new errors.InputError(
-        `sample-frame position ${options.render_sample_frame} is greater than duration of the output (${longest_duration})`
+        `sample-frame position ${options.render_sample_frame} is greater than duration of the output (${total_duration})`
       )
     }
     ffmpeg_cmd.push('-ss', options.render_sample_frame, '-vframes', '1')
@@ -422,18 +503,38 @@ async function render_video(
     ffmpeg_cmd.push('-map', audio_input_ids[0])
   } else {
     const audio_inputs = audio_input_ids.join('')
-    complex_filters += `;${audio_inputs} amix=inputs=${audio_input_ids.length} [audio]`
+    complex_filter.push(`${audio_inputs} amix=inputs=${audio_input_ids.length} [audio]`)
+    // complex_filter_overlays.push(`${audio_inputs} amix=inputs=${audio_input_ids.length} [audio]`)
     ffmpeg_cmd.push('-map', '[audio]')
   }
-
-  const complex_filter = `${complex_filter_inputs} ${complex_filters}`
-  ffmpeg_cmd.push('-filter_complex', `${complex_filter}`)
+  ffmpeg_cmd.push('-filter_complex', complex_filter.join(';\n'))
   ffmpeg_cmd.push(output_filepath)
   if (options?.overwrite) ffmpeg_cmd.push('-y')
 
-  await ffmpeg(ffmpeg_cmd, longest_duration, options?.progress_callback)
+  await ffmpeg(ffmpeg_cmd, total_duration, options?.progress_callback)
+
   return template
 }
 
-export { render_video }
-export type { RenderOptions, FfmpegProgress, Seconds, Template }
+async function render_video(
+  template_input: TemplateInput,
+  output_filepath: string,
+  options?: RenderOptions
+): Promise<Template> {
+  return await render(template_input, output_filepath, options)
+}
+
+async function render_sample_frame(
+  template_input: TemplateInput,
+  output_filepath: string,
+  sample_frame_position: Duration,
+  options?: RenderOptions
+): Promise<Template> {
+  return await render(template_input, output_filepath, {
+    ...options,
+    render_sample_frame: sample_frame_position,
+  })
+}
+
+export { render_video, render_sample_frame }
+export type { TemplateInput, Template, RenderOptions, FfmpegProgress, Seconds }

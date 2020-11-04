@@ -1,9 +1,12 @@
 import * as path from 'https://deno.land/std@0.75.0/path/mod.ts'
 import * as flags from 'https://deno.land/std@0.75.0/flags/mod.ts'
 import * as errors from './errors.ts'
-import { render_video, RenderOptions, FfmpegProgress } from './mod.ts'
+// import { render_video, RenderOptions, FfmpegProgress } from './mod.ts'
+import { render_video, render_sample_frame } from './mod.ts'
+import type { TemplateInput, RenderOptions, FfmpegProgress } from './mod.ts'
 
 const encoder = new TextEncoder()
+const decoder = new TextDecoder()
 
 function construct_output_filepath(args: flags.Args, template_filepath: string) {
   const { dir, name } = path.parse(template_filepath)
@@ -34,23 +37,37 @@ function progress_callback(execution_start_time: number, ffmpeg_progress: Ffmpeg
   Deno.stdout.write(encoder.encode(message))
 }
 
+async function read_template(template_filepath: string): Promise<TemplateInput> {
+  try {
+    const template: TemplateInput = JSON.parse(decoder.decode(await Deno.readFile(template_filepath)))
+    return template
+  } catch (e) {
+    if (e.name === 'SyntaxError') {
+      throw new errors.InputError(`template ${template_filepath} is not valid JSON or YML`)
+    } else throw e
+  }
+}
+
 async function try_render_video(template_filepath: string, output_filepath: string) {
   try {
     const execution_start_time = performance.now()
+    const template_input = await read_template(template_filepath)
     const options: RenderOptions = {
-      render_sample_frame: args['render-sample-frame'],
       overwrite: Boolean(args['overwrite']),
       ffmpeg_verbosity: 'error',
+      cwd: path.resolve(path.dirname(template_filepath))
     }
     if (args['verbose']) {
       options.ffmpeg_verbosity = 'info'
     } else {
       options.progress_callback = progress => progress_callback(execution_start_time, progress)
     }
-    const template = await render_video(template_filepath, output_filepath, options)
+    const template = args['render-sample-frame']
+      ? await render_video(template_input, output_filepath, options)
+      : await render_sample_frame(template_input, output_filepath, args['render-sample-frame'], options)
     const execution_time_seconds = (performance.now() - execution_start_time) / 1000
     // prettier-ignore
-    console.log(`created ${output_filepath} out of ${template.layers.length} inputs in ${execution_time_seconds.toFixed(1)} seconds.`)
+    console.log(`created ${output_filepath} out of ${template.clips.length} clips in ${execution_time_seconds.toFixed(1)} seconds.`)
   } catch (e) {
     if (e instanceof errors.InputError) {
       console.error(e)
