@@ -1,63 +1,31 @@
 import * as io from 'https://deno.land/std@0.75.0/io/mod.ts'
 import * as path from 'https://deno.land/std@0.75.0/path/mod.ts'
 import * as math from './float_math.ts'
-
 import * as errors from './errors.ts'
-import { parse_duration, parse_fraction, parse_ffmpeg_packet, TIMELINE_ENUMS } from './text_parsers.ts'
-
-type Fraction = string
-type Pixels = number
-type Percentage = number
-type Offset = Fraction | Pixels
-type Seconds = number
-type Duration = string
-type ClipID = string
-type TimelineEnums = typeof TIMELINE_ENUMS[keyof typeof TIMELINE_ENUMS]
-
-interface Clip {
-  /** defaults to LAYER_<layer_index> */
-  id?: ClipID
-
-  file: string
-
-  audio_volume: Percentage
-
-  layout: {
-    x?: Offset | { offset?: Offset; align?: 'left' | 'right' | 'center' }
-    y?: Offset | { offset?: Offset; align?: 'top' | 'bottom' | 'center' }
-    width?: Fraction | Pixels
-    height?: Fraction | Pixels
-  }
-  crop?: {
-    left?: Pixels
-    right?: Pixels
-    top?: Pixels
-    bottom?: Pixels
-  }
-  trim?: { start?: 'fit' | Duration; end?: 'fit' | Duration }
-  duration?: Duration
-}
-type Size = Pixels | { fraction: Fraction; proportional_to: ClipID }
-interface TemplateInput {
-  /** defaults to width: { fraction: '1/1', proportional_to: `CLIP_0` } */
-  size?: { width?: Size; height?: Size }
-  clips: Clip[]
-
-  timeline?: { [start_position: string]: (ClipID | TimelineEnums)[][] }
-}
-interface Template extends TemplateInput {
-  size: { width: Size; height: Size }
-  clips: (Clip & { id: ClipID; filepath: string })[]
-  timeline: { [start_position: string]: (ClipID | TimelineEnums)[][] }
-}
+import { parse_duration, parse_fraction, parse_ffmpeg_packet } from './text_parsers.ts'
+import { TIMELINE_ENUMS } from './structs.ts'
+import type {
+  Fraction,
+  Pixels,
+  Percentage,
+  Offset,
+  Seconds,
+  Timestamp,
+  ClipID,
+  TimelineEnums,
+  Size,
+  Clip,
+  Template,
+  TemplateParsed,
+} from './structs.ts'
 
 const decoder = new TextDecoder()
 
-function parse_template(template_input: TemplateInput, cwd: string): Template {
+function parse_template(template_input: Template, cwd: string): TemplateParsed {
   if (template_input.clips.length === 0) {
     throw new errors.InputError(`template "clips" must have at least one clip present.`)
   }
-  const clips: Template['clips'] = []
+  const clips: TemplateParsed['clips'] = []
   for (const i of template_input.clips.keys()) {
     const clip = template_input.clips[i]
     const id = clip.id ?? `CLIP_${i}`
@@ -66,7 +34,7 @@ function parse_template(template_input: TemplateInput, cwd: string): Template {
     clips.push({ ...clip, id, filepath })
   }
   const timeline = template_input.timeline ?? { '00:00:00': clips.map(clip => [clip.id]) }
-  const default_size = { fraction: '1/1', proportional_to: clips[0]?.id }
+  const default_size = { fraction: '1/1', of: clips[0]?.id }
   const size = {
     width: template_input.size?.width ?? default_size,
     height: template_input.size?.height ?? default_size,
@@ -101,7 +69,7 @@ interface ClipInfoMap {
     duration: Seconds
   }
 }
-async function probe_clips(template: Template): Promise<ClipInfoMap> {
+async function probe_clips(template: TemplateParsed): Promise<ClipInfoMap> {
   const probe_clips_promises = template.clips.map(async clip => {
     const result = await exec([
       'ffprobe',
@@ -170,16 +138,16 @@ interface ClipGeometryMap {
     }
   }
 }
-function compute_geometry(template: Template, clip_info_map: ClipInfoMap) {
+function compute_geometry(template: TemplateParsed, clip_info_map: ClipInfoMap) {
   const { size } = template
   const background_width =
     typeof size.width === 'number'
       ? size.width
-      : parse_fraction(size.width.fraction) * get_clip(clip_info_map, size.width.proportional_to).width
+      : parse_fraction(size.width.fraction) * get_clip(clip_info_map, size.width.of).width
   const background_height =
     typeof size.height === 'number'
       ? size.height
-      : parse_fraction(size.height.fraction) * get_clip(clip_info_map, size.height.proportional_to).height
+      : parse_fraction(size.height.fraction) * get_clip(clip_info_map, size.height.of).height
 
   const clip_geometry_map: ClipGeometryMap = {}
   for (const clip of template.clips) {
@@ -266,7 +234,7 @@ interface TimelineClip {
   start_at: number
   trim_start: number
 }
-function compute_timeline(template: Template, clip_info_map: ClipInfoMap) {
+function compute_timeline(template: TemplateParsed, clip_info_map: ClipInfoMap) {
   const { timeline } = template
 
   const all_clips_trim_to_fit = Object.values(template.timeline).every(layers =>
@@ -391,7 +359,7 @@ function compute_timeline(template: Template, clip_info_map: ClipInfoMap) {
 }
 
 type FfmpegProgress = {
-  out_time: Duration
+  out_time: Timestamp
   progress: 'continue' | 'end'
   speed: string
   percentage: Percentage
@@ -411,7 +379,7 @@ async function ffmpeg(
       const [key, value] = line.split('=')
       ;(progress as any)[key] = value
       if (key === 'progress') {
-        progress.percentage = parse_duration(progress.out_time!) / longest_duration
+        progress.percentage = value === 'end' ? 1 : parse_duration(progress.out_time!) / longest_duration
         progress_callback(progress as FfmpegProgress)
         progress = {}
       }
@@ -433,13 +401,13 @@ interface RenderOptions {
   cwd?: string
 }
 interface RenderOptionsInternal extends RenderOptions {
-  render_sample_frame?: Duration
+  render_sample_frame?: Timestamp
 }
 async function render(
-  template_input: TemplateInput,
+  template_input: Template,
   output_filepath: string,
   options?: RenderOptionsInternal
-): Promise<Template> {
+): Promise<TemplateParsed> {
   const template = parse_template(template_input, options?.cwd ?? Deno.cwd())
 
   const clip_info_map = await probe_clips(template)
@@ -517,19 +485,19 @@ async function render(
 }
 
 async function render_video(
-  template_input: TemplateInput,
+  template_input: Template,
   output_filepath: string,
   options?: RenderOptions
-): Promise<Template> {
+): Promise<TemplateParsed> {
   return await render(template_input, output_filepath, options)
 }
 
 async function render_sample_frame(
-  template_input: TemplateInput,
+  template_input: Template,
   output_filepath: string,
-  sample_frame_position: Duration,
+  sample_frame_position: Timestamp,
   options?: RenderOptions
-): Promise<Template> {
+): Promise<TemplateParsed> {
   return await render(template_input, output_filepath, {
     ...options,
     render_sample_frame: sample_frame_position,
@@ -537,4 +505,17 @@ async function render_sample_frame(
 }
 
 export { render_video, render_sample_frame }
-export type { TemplateInput, Template, RenderOptions, FfmpegProgress, Seconds }
+export type {
+  Template,
+  Clip,
+  Size,
+  Fraction,
+  Pixels,
+  Offset,
+  Timestamp,
+  ClipID,
+  TimelineEnums,
+  RenderOptions,
+  FfmpegProgress,
+  // Seconds,
+}

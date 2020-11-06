@@ -1,4 +1,4 @@
-import type { Seconds } from './mod.ts'
+import type { Seconds } from './structs.ts'
 import { InputError } from './errors.ts'
 
 function parse_fraction(fraction: string): number {

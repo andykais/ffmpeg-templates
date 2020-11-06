@@ -1,9 +1,12 @@
 import * as path from 'https://deno.land/std@0.75.0/path/mod.ts'
 import * as flags from 'https://deno.land/std@0.75.0/flags/mod.ts'
+import * as yaml from 'https://deno.land/std@0.75.0/encoding/yaml.ts'
 import * as errors from './errors.ts'
 // import { render_video, RenderOptions, FfmpegProgress } from './mod.ts'
 import { render_video, render_sample_frame } from './mod.ts'
-import type { TemplateInput, RenderOptions, FfmpegProgress } from './mod.ts'
+import type { Template, RenderOptions, FfmpegProgress } from './mod.ts'
+
+const VERSION = 'v0.1.0'
 
 const encoder = new TextEncoder()
 const decoder = new TextDecoder()
@@ -14,7 +17,6 @@ function construct_output_filepath(args: flags.Args, template_filepath: string) 
   return path.join(dir, `${name}${render_ext}`)
 }
 
-// TODO make sure this is always the same length?
 function human_readable_duration(duration_seconds: number): string {
   if (duration_seconds / 60 >= 100) return `${(duration_seconds / 60 / 60).toFixed(1)}h`
   else if (duration_seconds >= 100) return `${(duration_seconds / 60).toFixed(1)}m`
@@ -30,22 +32,26 @@ function progress_callback(execution_start_time: number, ffmpeg_progress: Ffmpeg
   const prefix = `${human_readable_duration(execution_time_seconds).padStart(4)} [`
   const suffix = `] ${(percentage * 100).toFixed(1)}%`
   const total_bar_width = console_width - prefix.length - suffix.length
-  // avoid progress bar being longer than 100%. We should probably fix the underlying issue of incorrect durations anyways
   const bar = unicode_bar.repeat(Math.min(percentage, 1) * total_bar_width)
-  // const message = `${prefix}${bar.padEnd(total_bar_width, '-')}${suffix}`
   const message = `\r${prefix}${bar.padEnd(total_bar_width, '-')}${suffix}`
   Deno.stdout.write(encoder.encode(message))
 }
 
-async function read_template(template_filepath: string): Promise<TemplateInput> {
+async function read_template(template_filepath: string): Promise<Template> {
+  const file_contents = decoder.decode(await Deno.readFile(template_filepath))
   try {
-    const template: TemplateInput = JSON.parse(decoder.decode(await Deno.readFile(template_filepath)))
+    const template: Template = JSON.parse(file_contents)
     return template
   } catch (e) {
-    if (e.name === 'SyntaxError') {
-      throw new errors.InputError(`template ${template_filepath} is not valid JSON or YML`)
-    } else throw e
+    if (e.name !== 'SyntaxError') throw e
   }
+  try {
+    const template: Template = yaml.parse(file_contents) as any
+    return template
+  } catch (e) {
+    if (e.name !== 'SyntaxError') throw e
+  }
+  throw new errors.InputError(`template ${template_filepath} is not valid JSON or YAML`)
 }
 
 async function try_render_video(template_filepath: string, output_filepath: string) {
@@ -55,7 +61,7 @@ async function try_render_video(template_filepath: string, output_filepath: stri
     const options: RenderOptions = {
       overwrite: Boolean(args['overwrite']),
       ffmpeg_verbosity: 'error',
-      cwd: path.resolve(path.dirname(template_filepath))
+      cwd: path.resolve(path.dirname(template_filepath)),
     }
     if (args['verbose']) {
       options.ffmpeg_verbosity = 'info'
@@ -63,8 +69,8 @@ async function try_render_video(template_filepath: string, output_filepath: stri
       options.progress_callback = progress => progress_callback(execution_start_time, progress)
     }
     const template = args['render-sample-frame']
-      ? await render_video(template_input, output_filepath, options)
-      : await render_sample_frame(template_input, output_filepath, args['render-sample-frame'], options)
+      ? await render_sample_frame(template_input, output_filepath, args['render-sample-frame'], options)
+      : await render_video(template_input, output_filepath, options)
     const execution_time_seconds = (performance.now() - execution_start_time) / 1000
     // prettier-ignore
     console.log(`created ${output_filepath} out of ${template.clips.length} clips in ${execution_time_seconds.toFixed(1)} seconds.`)
@@ -78,15 +84,23 @@ async function try_render_video(template_filepath: string, output_filepath: stri
 }
 
 const args = flags.parse(Deno.args)
-if ((args._.length < 1 && args._.length > 2) || args['help']) {
-  console.error(`splitscreen-templates v0.1.0
+if (args._.length < 1 || args._.length > 2 || args['help']) {
+  console.error(`ffmpeg-templates ${VERSION}
 
-Usage: splitscreen-templates <template> [output_filepath] [options]
+Usage: ffmpeg-templates <template_filepath> [<output_filepath>] [options]
+
+ARGS:
+  <template_filepath>                       Path to a YAML or JSON template file which defines the structure of
+                                            the outputted video
+
+  <output_filepath>                         The file that will be outputted by ffmpeg. When not specified, a
+                                            file will be created adjacent to the template ending in .mp4 or .jpg
+                                            depending on whether --render-sample-frame is present or not.
 
 OPTIONS:
   --render-sample-frame <timestamp>         Instead of outputting the whole video, output a single frame as a jpg.
-                                            Use this flag to set up your layouts and iterate quickly. Note that
-                                            you must change <output_filepath> to be an image filename (e.g. frame.jpg).
+                                            Use this flag to set up your layouts and iterate quickly. Note that you
+                                            must change <output_filepath> to be an image filename (e.g. sample.jpg).
 
   --overwrite                               Overwrite an existing output file.
 
