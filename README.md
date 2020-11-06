@@ -50,21 +50,49 @@ ffmpeg-templates template.yml output.jpg --render-sample-frame 00:00:03 --watch
 ```
 
 ## Template Syntax
-- [size]()
-- [clips]()
-- [timeline]()
+A video project is defined using a template file like this example one below. Think of this like the video
+editor GUI. Full documentation exists [here](https://doc.deno.land/https/raw.githubusercontent.com/andykais/ffmpeg-templates/main/structs.ts#Template)
+```yaml
+clips:
+  # specify clips in an array, the only field necessary is 'file'
+  - file: './some-neato-video.mp4'
+  - file: './another-clip.mp4'
+    # use layout to place the clip somewhere
+    layout:
+      # lots of fields can accept fractions of the total size of the output
+      width: '1/2'
+      x:
+        # regular integers are also accepted most places (in this case they are pixels)
+        offset: 12
+        # snap this clip to the lefthand side
+        align: 'right'
+    # sometimes you may want to crop a clip, this is also optional
+    crop:
+      left: 50
+  - file: './something-really-long.mp4'
+    # you can specify an id for the timeline below
+    id: 'background-video'
 
+# by default, all clips are started at the same time, but you can use the timeline to change up that order.
+# Lets start one video in the background, and then play two other clips on top of it, one after the other.
+timeline:
+  00:00:00:
+    - ['background-video']
+    - [CLIP_0, CLIP_1]
+```
 
-## Roadmap
-- [X] fraction support
-- [X] audio volume control
-- [X] cropping
-- [O] duration control
-  - [X] 'insert after <index>'
-  - [o] ascii timeline chart?
-    - [X] support inserting videos at specific timestamps. (E.g. overlaying clips on a music video)
-    - [ ] possibly support arbitrary durations between clips? (this might be covered by the prior)
-- [X] size fractions
-- [ ] borders
-- [X] yaml template support
+## Motivation
+So why does this exist? There are countless video editors out there, and this little command line program cant
+possibly match their feature set, so why use this?
 
+In the end, it comes down to your opinions on GUI programs. I believe that there is a lot less interesting
+things that can be done with a traditional video editor. This isn't to say this little program can do more,
+but it does open the door for reusability, and automation in ways that a GUI never could. For instance, if I
+wanted to truly make a _template_ where one video is swapped out for another, its a single line change in the
+template file. Doing the same thing inside a GUI program is not nearly as trivial. It would mean opening a
+project file, massaging the new clip to the same shape, size and length as an old clip, and placing it again.
+
+`ffmpeg-templates`
+is really just nicer syntax on top of what the ffmpeg program already offers, but it offers an easy to pick up
+syntax and schema. Everything that this program can do, is defined in a single [schema file](./structs.ts). No
+complicated tutorials, no hidden settings in a application preferences. Its just a bare bones video editor.
