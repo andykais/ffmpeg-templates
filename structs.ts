@@ -2,11 +2,24 @@ const TIMELINE_ENUMS = {
   PAD: 'PAD',
 } as const
 
+/**
+ * A fraction formatted like so:
+ * "1/2" or "5/3"
+ */
 type Fraction = string
+/** Pixels of the rendered video */
 type Pixels = number
 type Offset = Fraction | Pixels
+/**
+ * A hour, minute, second timestamp formatted like so:
+ * 00:00:05 or 01:23:02.75
+ */
 type Timestamp = string
 type ClipID = string
+/**
+ * Specal keys that can be used on the timeline. Currently the only available enum is 'PAD', which will start
+ * a clip at the last possible moment so that it finishes with the last played clip.
+ */
 type TimelineEnums = typeof TIMELINE_ENUMS[keyof typeof TIMELINE_ENUMS]
 
 interface Clip {
@@ -46,8 +59,14 @@ type Size = Pixels | { fraction: Fraction; of: ClipID }
 interface Template {
   /** defaults to width: { fraction: '1/1', of: `CLIP_0` } */
   size?: { width?: Size; height?: Size }
+  /**
+   * A list of clips that are available to the timline */
   clips: Clip[]
-
+  /**
+   * Specify when clips are played and which should be layered on top of others using this field.
+   * The default timeline starts all the clips at the same time. E.g.
+   * {"00:00:00": [["CLIP_0", "CLIP_1", ...]]}
+   */
   timeline?: { [start_position: string]: (ClipID | TimelineEnums)[][] }
 }
 
