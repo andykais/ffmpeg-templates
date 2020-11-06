@@ -4,9 +4,7 @@ const TIMELINE_ENUMS = {
 
 type Fraction = string
 type Pixels = number
-type Percentage = number
 type Offset = Fraction | Pixels
-type Seconds = number
 type Timestamp = string
 type ClipID = string
 type TimelineEnums = typeof TIMELINE_ENUMS[keyof typeof TIMELINE_ENUMS]
@@ -53,13 +51,6 @@ interface Template {
   timeline?: { [start_position: string]: (ClipID | TimelineEnums)[][] }
 }
 
-// Parsed Template
-interface TemplateParsed extends Template {
-  size: { width: Size; height: Size }
-  clips: (Clip & { id: ClipID; filepath: string })[]
-  timeline: { [start_position: string]: (ClipID | TimelineEnums)[][] }
-}
-
 export { TIMELINE_ENUMS }
 export type {
   Fraction,
@@ -71,8 +62,4 @@ export type {
   Size,
   Clip,
   Template,
-  // internal types
-  TemplateParsed,
-  Percentage,
-  Seconds,
 }

@@ -1,5 +1,6 @@
-import type { Seconds } from './structs.ts'
 import { InputError } from './errors.ts'
+
+type Seconds = number
 
 function parse_fraction(fraction: string): number {
   const result = fraction.split('/')

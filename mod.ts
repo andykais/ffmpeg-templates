@@ -7,17 +7,23 @@ import { TIMELINE_ENUMS } from './structs.ts'
 import type {
   Fraction,
   Pixels,
-  Percentage,
   Offset,
-  Seconds,
   Timestamp,
   ClipID,
   TimelineEnums,
   Size,
   Clip,
   Template,
-  TemplateParsed,
 } from './structs.ts'
+
+type Seconds = number
+// Parsed Template
+interface TemplateParsed extends Template {
+  size: { width: Size; height: Size }
+  clips: (Clip & { id: ClipID; filepath: string })[]
+  timeline: { [start_position: string]: (ClipID | TimelineEnums)[][] }
+}
+type Percentage = number
 
 const decoder = new TextDecoder()
 
