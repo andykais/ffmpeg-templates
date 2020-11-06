@@ -332,6 +332,14 @@ function compute_timeline(template: TemplateParsed, clip_info_map: ClipInfoMap) 
           const { trim } = clip
           let clip_duration = info.duration
           let trim_start = 0
+          if (trim?.end && trim?.end !== 'fit') {
+            clip_duration -= parse_duration(trim.end)
+          }
+          if (trim?.start && trim?.start !== 'fit') {
+            trim_start = parse_duration(trim.start)
+            clip_duration -= trim_start
+          }
+
           if (trim?.end === 'fit') {
             const remaining_duration = calculate_layer_duration(clips, clip_index + 1, true)
             const seconds_until_complete =
@@ -339,9 +347,10 @@ function compute_timeline(template: TemplateParsed, clip_info_map: ClipInfoMap) 
             // sometimes we will just skip the clip entirely if theres no room
             if (math.gte(seconds_until_complete, clip_duration)) continue
             if (math.gt(seconds_until_complete, 0)) clip_duration -= seconds_until_complete
-          } else if (trim?.end) clip_duration -= parse_duration(trim.end)
+          }
 
           if (trim?.start === 'fit' && trim?.end === 'fit') {
+            // do nothing, because we already trimmed the end to fit
           } else if (trim?.start === 'fit') {
             const remaining_duration = calculate_layer_duration(clips, clip_index + 1, true)
             const seconds_until_complete =
@@ -352,9 +361,6 @@ function compute_timeline(template: TemplateParsed, clip_info_map: ClipInfoMap) 
               trim_start = seconds_until_complete
               clip_duration -= seconds_until_complete
             }
-          } else if (trim?.start) {
-            trim_start = parse_duration(trim.start)
-            clip_duration -= trim_start
           }
           if (clip.duration) {
             const manual_duration = parse_duration(clip.duration)
