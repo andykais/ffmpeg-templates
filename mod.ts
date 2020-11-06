@@ -263,17 +263,30 @@ function compute_timeline(template: TemplateParsed, clip_info_map: ClipInfoMap) 
       const clip = template.clips.find(c => c.id === clip_id)!
       const { trim } = clip
 
-      let clip_duration = clip.duration ? parse_duration(clip.duration) : info.duration
+      let clip_duration = info.duration
 
       if (trim?.start === 'fit') {
-        if (!all_clips_trim_to_fit) continue
       } else if (trim?.start) {
         clip_duration -= parse_duration(trim.start)
       }
       if (trim?.end === 'fit') {
-        if (!all_clips_trim_to_fit) continue
       } else if (trim?.end) clip_duration -= parse_duration(trim.end)
 
+      if (clip_duration < 0) {
+        throw new errors.InputError(
+          `Clip ${clip_id} was trimmed ${clip_duration} seconds more than its total duration`
+        )
+      }
+      if (clip.duration) {
+        const manual_duration = parse_duration(clip.duration)
+        if (manual_duration > clip_duration)
+          throw new errors.InputError(
+            `Clip ${clip_id}'s duration (including trimmings) cannot be shorter than the specified duration.`
+          )
+        else clip_duration = manual_duration
+      }
+      // we skip the fit trimmed clips _unless_ theyre all fit trimmed
+      if ([trim?.start, trim?.end].includes('fit') && !all_clips_trim_to_fit) continue
       layer_duration += clip_duration
     }
     return layer_duration
@@ -311,7 +324,7 @@ function compute_timeline(template: TemplateParsed, clip_info_map: ClipInfoMap) 
           const info = get_clip(clip_info_map, clip_id)
           const clip = template.clips.find(c => c.id === clip_id)!
           const { trim } = clip
-          let clip_duration = clip.duration ? parse_duration(clip.duration) : info.duration
+          let clip_duration = info.duration
           let trim_start = 0
           if (trim?.end === 'fit') {
             const remaining_duration = calculate_layer_duration(clips, clip_index + 1, true)
@@ -336,6 +349,10 @@ function compute_timeline(template: TemplateParsed, clip_info_map: ClipInfoMap) 
           } else if (trim?.start) {
             trim_start = parse_duration(trim.start)
             clip_duration -= trim_start
+          }
+          if (clip.duration) {
+            const manual_duration = parse_duration(clip.duration)
+            clip_duration = manual_duration
           }
 
           layer_ordered_clips[layer_index] = layer_ordered_clips[layer_index] ?? []
@@ -477,6 +494,7 @@ async function render(
   }
   ffmpeg_cmd.push('-filter_complex', complex_filter.join(';\n'))
   ffmpeg_cmd.push(output_filepath)
+  // console.log(ffmpeg_cmd.join('\n'))
   if (options?.overwrite) ffmpeg_cmd.push('-y')
 
   await ffmpeg(ffmpeg_cmd, total_duration, options?.progress_callback)

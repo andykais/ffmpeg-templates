@@ -16,9 +16,13 @@ interface Clip {
   id?: ClipID
   /** File path to the clip. If it is a relative path, it will be relative to the location of the template file */
   file: string
-  /** Audio volume of the clip, this number is relative to the other clip's audio_volume values */
+  /** Audio volume of the clip, this number is relative to the other clip's audio_volume values. Defaults to 1. */
   audio_volume: number
-  /** Layout defines the geometry of a clip in the final render. E.g. its size and location */
+  /**
+   * Layout defines the geometry of a clip in the final render. E.g. its size and location
+   * X and Y offsets are relative to their alignment, they can be positive or negative.
+   * The default alignments for X and Y are 'left' and 'top' respectively
+   */
   layout?: {
     x?: Offset | { offset?: Offset; align?: 'left' | 'right' | 'center' }
     y?: Offset | { offset?: Offset; align?: 'top' | 'bottom' | 'center' }
@@ -60,15 +64,15 @@ export { TIMELINE_ENUMS }
 export type {
   Fraction,
   Pixels,
-  Percentage,
   Offset,
-  Seconds,
   Timestamp,
   ClipID,
   TimelineEnums,
   Size,
   Clip,
   Template,
-  // parsed template exports
+  // internal types
   TemplateParsed,
+  Percentage,
+  Seconds,
 }
