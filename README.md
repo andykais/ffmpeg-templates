@@ -7,7 +7,7 @@
 
 ## Installation
 ```bash
-deno install --allow-read --allow-run --unstable -f ffmpeg-templates.ts
+deno install --allow-read --allow-run --unstable -f https://raw.githubusercontent.com/andykais/ffmpeg-templates/main/ffmpeg-templates.ts
 ```
 
 ## Usage
