@@ -21,6 +21,14 @@ function parse_duration(duration: string, { user_input = true } = {}): Seconds {
   return hours * 60 * 60 + minutes * 60 + seconds
 }
 
+function parse_aspect_ratio(aspect_ratio: string) {
+  const parts = aspect_ratio.split(':').map(part => parseInt(part))
+  if (parts.length !== 2 || parts.some(Number.isNaN))
+    throw new Error(`aspect ratio ${aspect_ratio} parsed incorrectly.`)
+  const [width, height] = parts
+  return width / height
+}
+
 function parse_ffmpeg_packet(packet_buffer: string[]) {
   const object: { [key: string]: string } = {}
   for (const line of packet_buffer) {
@@ -34,9 +42,4 @@ const TIMELINE_ENUMS = {
   PAD: 'PAD',
 } as const
 
-export {
-  parse_fraction,
-  parse_duration,
-  parse_ffmpeg_packet,
-  TIMELINE_ENUMS,
-}
+export { parse_fraction, parse_duration, parse_aspect_ratio, parse_ffmpeg_packet, TIMELINE_ENUMS }

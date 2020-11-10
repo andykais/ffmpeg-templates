@@ -2,7 +2,7 @@ import * as io from 'https://deno.land/std@0.75.0/io/mod.ts'
 import * as path from 'https://deno.land/std@0.75.0/path/mod.ts'
 import * as math from './float_math.ts'
 import * as errors from './errors.ts'
-import { parse_duration, parse_fraction, parse_ffmpeg_packet } from './text_parsers.ts'
+import { parse_duration, parse_fraction, parse_aspect_ratio, parse_ffmpeg_packet } from './text_parsers.ts'
 import { TIMELINE_ENUMS } from './structs.ts'
 import type {
   Fraction,
@@ -71,10 +71,13 @@ interface ClipInfoMap {
   [clip_id: string]: {
     width: number
     height: number
+    aspect_ratio: number
     has_audio: boolean
     duration: Seconds
   }
 }
+
+// TODO add a cache to avoid reloading large video files when in --watch mode
 async function probe_clips(template: TemplateParsed): Promise<ClipInfoMap> {
   const probe_clips_promises = template.clips.map(async clip => {
     const result = await exec([
@@ -85,7 +88,7 @@ async function probe_clips(template: TemplateParsed): Promise<ClipInfoMap> {
       'json',
       '-show_streams',
       '-show_entries',
-      'stream=width,height,codec_type:stream_tags=rotate',
+      'stream=width,height,display_aspect_ratio,codec_type:stream_tags=rotate',
       // 'format=duration',
       clip.filepath,
     ])
@@ -93,6 +96,7 @@ async function probe_clips(template: TemplateParsed): Promise<ClipInfoMap> {
     const video_stream = info.streams.find((s: any) => s.codec_type === 'video')
     const audio_stream = info.streams.find((s: any) => s.codec_type === 'audio')
 
+    // TODO support audio only inputs
     if (!video_stream) throw new errors.ProbeError(`Input "${clip.file}" has no video stream`)
     const has_audio = audio_stream !== undefined
     const rotation = video_stream.tags?.rotate ? (parseInt(video_stream.tags?.rotate) * Math.PI) / 180.0 : 0
@@ -101,6 +105,11 @@ async function probe_clips(template: TemplateParsed): Promise<ClipInfoMap> {
       Math.abs(width * Math.sin(rotation)) + Math.abs(height * Math.cos(rotation)),
       Math.abs(width * Math.cos(rotation)) + Math.abs(height * Math.sin(rotation)),
     ].map(Math.floor)
+
+    let aspect_ratio = width / height
+    if (video_stream.display_aspect_ratio) {
+      aspect_ratio = parse_aspect_ratio(video_stream.display_aspect_ratio)
+    }
 
     // ffprobe's duration is unreliable. The best solutions I have are:
     // 1. ffmpeg guessing: https://stackoverflow.com/a/33115316/3795137
@@ -113,7 +122,7 @@ async function probe_clips(template: TemplateParsed): Promise<ClipInfoMap> {
     })
     const packet = parse_ffmpeg_packet(packet_str_buffer)
     const duration = parseFloat(packet.dts_time)
-    return { width, height, has_audio, duration }
+    return { width, height, aspect_ratio, has_audio, duration }
   })
 
   const probed_clips = await Promise.all(probe_clips_promises)
@@ -164,8 +173,9 @@ function compute_geometry(template: TemplateParsed, clip_info_map: ClipInfoMap) 
       typeof layout?.width === 'string' ? parse_fraction(layout.width) * background_width : layout?.width
     const input_height =
       typeof layout?.height === 'string' ? parse_fraction(layout?.height) * background_height : layout?.height
-    let width = input_width ?? (input_height ? input_height * (info.width / info.height) : info.width)
-    let height = input_height ?? (input_width ? input_width / (info.width / info.height) : info.height)
+
+    let width = input_width ?? (input_height ? input_height * info.aspect_ratio : info.width)
+    let height = input_height ?? (input_width ? input_width / info.aspect_ratio : info.height)
 
     const scale = { width, height }
 
