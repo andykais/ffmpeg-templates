@@ -81,6 +81,19 @@ timeline:
     - [CLIP_0, CLIP_1]
 ```
 
+## Javascript Interface
+```ts
+import { render_video, render_sample_frame } from 'https://raw.githubusercontent.com/andykais/ffmpeg-templates/main/mod.ts'
+
+
+const template = {
+  clips: [{ file: './input.mp4' }]
+}
+const output_filepath = 'output.mp4'
+const options = { cwd: '~/Projects' }
+await render_video(template, output_filepath, options)
+```
+
 ## Motivation
 So why does this exist? There are countless video editors out there, and this little command line program cant
 possibly match their feature set, so why use this?
