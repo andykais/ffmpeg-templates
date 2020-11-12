@@ -77,8 +77,6 @@ interface ClipInfoMap {
   }
 }
 
-// TODO add a cache to avoid reloading large video files when in --watch mode
-// TODO instead of rendering a single sample frame, render a thumbnail output
 async function probe_clips(template: TemplateParsed): Promise<ClipInfoMap> {
   const probe_clips_promises = template.clips.map(async clip => {
     const result = await exec([
@@ -97,7 +95,6 @@ async function probe_clips(template: TemplateParsed): Promise<ClipInfoMap> {
     const video_stream = info.streams.find((s: any) => s.codec_type === 'video')
     const audio_stream = info.streams.find((s: any) => s.codec_type === 'audio')
 
-    // TODO support audio only inputs
     if (!video_stream) throw new errors.ProbeError(`Input "${clip.file}" has no video stream`)
     const has_audio = audio_stream !== undefined
     const rotation = video_stream.tags?.rotate ? (parseInt(video_stream.tags?.rotate) * Math.PI) / 180.0 : 0

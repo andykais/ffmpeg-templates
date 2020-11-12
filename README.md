@@ -109,3 +109,10 @@ project file, massaging the new clip to the same shape, size and length as an ol
 is really just nicer syntax on top of what the ffmpeg program already offers, but it offers an easy to pick up
 syntax and schema. Everything that this program can do, is defined in a single [schema file](./structs.ts). No
 complicated tutorials, no hidden settings in a application preferences. Its just a bare bones video editor.
+
+## Roadmap
+- [ ] Cache probed clip information in watch mode
+- [ ] Cache trimmed clips in watch mode
+- [ ] Support audio only inputs
+- [ ] Add `--render-sample-thumbnails [num_thumbnails]` flag as alternative to `--render-sample-frame`
+- [ ] Make `--render-sample-frame` interactive (e.g., -> moves forward one frame, `<-` backward. `Shift` + `->` Skips ahead 1 second)

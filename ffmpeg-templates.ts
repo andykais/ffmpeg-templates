@@ -2,7 +2,6 @@ import * as path from 'https://deno.land/std@0.75.0/path/mod.ts'
 import * as flags from 'https://deno.land/std@0.75.0/flags/mod.ts'
 import * as yaml from 'https://deno.land/std@0.75.0/encoding/yaml.ts'
 import * as errors from './errors.ts'
-// import { render_video, RenderOptions, FfmpegProgress } from './mod.ts'
 import { render_video, render_sample_frame } from './mod.ts'
 import type { Template, RenderOptions, FfmpegProgress } from './mod.ts'
 
