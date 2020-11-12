@@ -54,23 +54,19 @@ async function read_template(template_filepath: string): Promise<Template> {
   throw new errors.InputError(`template ${template_filepath} is not valid JSON or YAML`)
 }
 
-async function try_render_video(template_filepath: string, output_filepath: string) {
+async function try_render_video(template_filepath: string, output_filepath: string, options: RenderOptions) {
   try {
+    const copied_options = {...options}
     const execution_start_time = performance.now()
-    const template_input = await read_template(template_filepath)
-    const options: RenderOptions = {
-      overwrite: Boolean(args['overwrite']),
-      ffmpeg_verbosity: 'error',
-      cwd: path.resolve(path.dirname(template_filepath)),
-    }
     if (args['verbose']) {
-      options.ffmpeg_verbosity = 'info'
+      copied_options.ffmpeg_verbosity = 'info'
     } else {
-      options.progress_callback = progress => progress_callback(execution_start_time, progress)
+      copied_options.progress_callback = progress => progress_callback(execution_start_time, progress)
     }
+    const template_input = await read_template(template_filepath)
     const template = args['render-sample-frame']
-      ? await render_sample_frame(template_input, output_filepath, args['render-sample-frame'], options)
-      : await render_video(template_input, output_filepath, options)
+      ? await render_sample_frame(template_input, output_filepath, args['render-sample-frame'], copied_options)
+      : await render_video(template_input, output_filepath, copied_options)
     const execution_time_seconds = (performance.now() - execution_start_time) / 1000
     // prettier-ignore
     console.log(`created ${output_filepath} out of ${template.clips.length} clips in ${execution_time_seconds.toFixed(1)} seconds.`)
@@ -116,6 +112,11 @@ OPTIONS:
 const positional_args = args._.map(a => a.toString())
 const template_filepath = positional_args[0]
 const output_filepath = positional_args[1] ?? construct_output_filepath(args, template_filepath)
+const options: RenderOptions = {
+  overwrite: Boolean(args['overwrite']),
+  ffmpeg_verbosity: 'error',
+  cwd: path.resolve(path.dirname(template_filepath)),
+}
 
 const output_filepath_is_image = ['.jpg', '.jpeg', '.png'].some(ext => output_filepath.endsWith(ext))
 if (args['render-sample-frame'] && !output_filepath_is_image) {
@@ -125,16 +126,17 @@ if (!args['render-sample-frame'] && output_filepath_is_image) {
   throw new Error('Invalid commands. <output_filepath> must be an video filename.')
 }
 
-await try_render_video(template_filepath, output_filepath)
+await try_render_video(template_filepath, output_filepath, options)
 
 if (args.watch) {
+  const watch_options = { ...options, overwrite: true }
   console.log(`watching ${template_filepath} for changes`)
   let lock = false
   for await (const event of Deno.watchFs(template_filepath)) {
     if (event.kind === 'modify' && !lock) {
       console.log(`template ${template_filepath} was changed. Starting render.`)
       lock = true
-      try_render_video(template_filepath, output_filepath).then(() => {
+      try_render_video(template_filepath, output_filepath, watch_options).then(() => {
         lock = false
         console.log(`watching ${template_filepath} for changes`)
       })

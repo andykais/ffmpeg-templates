@@ -78,6 +78,7 @@ interface ClipInfoMap {
 }
 
 // TODO add a cache to avoid reloading large video files when in --watch mode
+// TODO instead of rendering a single sample frame, render a thumbnail output
 async function probe_clips(template: TemplateParsed): Promise<ClipInfoMap> {
   const probe_clips_promises = template.clips.map(async clip => {
     const result = await exec([
@@ -465,7 +466,7 @@ async function render(
     const info = clip_info_map[clip_id]
     const geometry = clip_geometry_map[clip_id]
 
-    const setpts = `setpts=PTS+${start_at}/TB`
+    const setpts = start_at === 0 ? `setpts=PTS-STARTPTS` : `setpts=PTS+${start_at}/TB`
     const vscale = `scale=${geometry.scale.width}:${geometry.scale.height}`
     const video_input_filters = [setpts, vscale]
     if (geometry.crop) {
