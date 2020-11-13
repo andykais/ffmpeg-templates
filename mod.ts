@@ -37,6 +37,11 @@ function parse_template(template_input: Template, cwd: string): TemplateParsed {
     const id = clip.id ?? `CLIP_${i}`
     if (clips.find(c => c.id === id)) throw new errors.InputError(`Clip id ${id} is defined more than once.`)
     const filepath = path.resolve(cwd, clip.file)
+    if (clip.trim?.stop && clip.trim?.end) {
+      throw new errors.InputError('Clip cannot provide both trim.stop and trim.end')
+    } else if (clip.trim?.stop && clip.duration) {
+      throw new errors.InputError('Clip cannot provide both trim.stop and duration')
+    }
     clips.push({ ...clip, id, filepath })
   }
   const timeline = template_input.timeline ?? { '00:00:00': clips.map(clip => [clip.id]) }
@@ -77,8 +82,14 @@ interface ClipInfoMap {
   }
 }
 
+// The cache key is the filename only
+// That means if the file is overwritten, the cache will not pick up that change
+// So for now, if you edit a file, you restart the watcher
+// This is fair enough since its how most video editors function (and how often are people manipulating source files?)
+const clip_info_map_cache: ClipInfoMap = {}
 async function probe_clips(template: TemplateParsed): Promise<ClipInfoMap> {
   const probe_clips_promises = template.clips.map(async clip => {
+    if (clip_info_map_cache[clip.filepath]) return clip_info_map_cache[clip.filepath]
     const result = await exec([
       'ffprobe',
       '-v',
@@ -125,6 +136,7 @@ async function probe_clips(template: TemplateParsed): Promise<ClipInfoMap> {
 
   const probed_clips = await Promise.all(probe_clips_promises)
   return probed_clips.reduce((acc: ClipInfoMap, clip_info, i) => {
+    clip_info_map_cache[template.clips[i].filepath] = clip_info
     acc[template.clips[i].id] = clip_info
     return acc
   }, {})
@@ -286,6 +298,8 @@ function compute_timeline(template: TemplateParsed, clip_info_map: ClipInfoMap) 
       if (trim?.end === 'fit') {
       } else if (trim?.end) clip_duration -= parse_duration(trim.end)
 
+      if (trim?.stop) clip_duration -= info.duration - parse_duration(trim.stop)
+
       if (clip_duration < 0) {
         throw new errors.InputError(
           `Clip ${clip_id} was trimmed ${clip_duration} seconds more than its total duration`
@@ -346,6 +360,9 @@ function compute_timeline(template: TemplateParsed, clip_info_map: ClipInfoMap) 
           if (trim?.start && trim?.start !== 'fit') {
             trim_start = parse_duration(trim.start)
             clip_duration -= trim_start
+          }
+          if (trim?.stop) {
+            clip_duration -= info.duration - parse_duration(trim.stop)
           }
 
           if (trim?.end === 'fit') {

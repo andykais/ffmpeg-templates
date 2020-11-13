@@ -15,6 +15,9 @@ type Offset = Fraction | Pixels
  * 00:00:05 or 01:23:02.75
  */
 type Timestamp = string
+/**
+ * Id of a clip. Ids are either manually specified or are inserted with the convention "CLIP_<index>"
+ */
 type ClipID = string
 /**
  * Specal keys that can be used on the timeline. Currently the only available enum is 'PAD', which will start
@@ -51,10 +54,11 @@ interface Clip {
    * Trim how long a clip lasts, trimming from either the beginning of a clip, or the end.
    * The special value 'fit' will automatically trim a clip the length of the final render
    */
-  trim?: { start?: 'fit' | Timestamp; end?: 'fit' | Timestamp }
+  trim?: { start?: 'fit' | Timestamp; end?: 'fit' | Timestamp; stop?: Timestamp }
   /** Specify the length of a clip exactly */
   duration?: Timestamp
 }
+
 type Size = Pixels | { fraction: Fraction; of: ClipID }
 interface Template {
   /** defaults to width: { fraction: '1/1', of: `CLIP_0` } */

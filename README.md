@@ -111,8 +111,10 @@ syntax and schema. Everything that this program can do, is defined in a single [
 complicated tutorials, no hidden settings in a application preferences. Its just a bare bones video editor.
 
 ## Roadmap
-- [ ] Cache probed clip information in watch mode
+- [X] Cache probed clip information in watch mode
 - [ ] Cache trimmed clips in watch mode
 - [ ] Support audio only inputs
 - [ ] Add `--render-sample-thumbnails [num_thumbnails]` flag as alternative to `--render-sample-frame`
 - [ ] Make `--render-sample-frame` interactive (e.g., -> moves forward one frame, `<-` backward. `Shift` + `->` Skips ahead 1 second)
+- [X] Add trim.stop or a similar word to signify trimming to a 'stop' timestamp (trim.end trims in reverse). A negative duration on trim.end would work as well.
+- [ ] Add `clip[].speed` filter (`setpts={speed}*PTS`)
