@@ -118,3 +118,6 @@ complicated tutorials, no hidden settings in a application preferences. Its just
 - [ ] Make `--render-sample-frame` interactive (e.g., -> moves forward one frame, `<-` backward. `Shift` + `->` Skips ahead 1 second)
 - [X] Add trim.stop or a similar word to signify trimming to a 'stop' timestamp (trim.end trims in reverse). A negative duration on trim.end would work as well.
 - [ ] Add `clip[].speed` filter (`setpts={speed}*PTS`)
+- [ ] Alternatively to implementing more terminal-ui things, we could create a real web page which has the
+      preview window and a timeline. All still config driven. The preview window does however let you change
+      what timestamp the preview is of

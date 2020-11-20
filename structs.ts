@@ -57,6 +57,8 @@ interface Clip {
   trim?: { start?: 'fit' | Timestamp; end?: 'fit' | Timestamp; stop?: Timestamp }
   /** Specify the length of a clip exactly */
   duration?: Timestamp
+  /** Increase or decrease the playback speed */
+  speed: Fraction
 }
 
 type Size = Pixels | { fraction: Fraction; of: ClipID }

@@ -117,7 +117,7 @@ async function probe_clips(template: TemplateParsed): Promise<ClipInfoMap> {
 
     let aspect_ratio = width / height
     if (video_stream.display_aspect_ratio) {
-      aspect_ratio = parse_aspect_ratio(video_stream.display_aspect_ratio)
+      aspect_ratio = parse_aspect_ratio(video_stream.display_aspect_ratio, rotation)
     }
 
     // ffprobe's duration is unreliable. The best solutions I have are:
@@ -258,6 +258,7 @@ interface TimelineClip {
   clip_id: ClipID
   duration: number
   start_at: number
+  speed: number
   trim_start: number
 }
 function compute_timeline(template: TemplateParsed, clip_info_map: ClipInfoMap) {
@@ -299,6 +300,7 @@ function compute_timeline(template: TemplateParsed, clip_info_map: ClipInfoMap) 
       } else if (trim?.end) clip_duration -= parse_duration(trim.end)
 
       if (trim?.stop) clip_duration -= info.duration - parse_duration(trim.stop)
+      if (clip.speed) clip_duration *= 1 / parse_fraction(clip.speed)
 
       if (clip_duration < 0) {
         throw new errors.InputError(
@@ -353,6 +355,8 @@ function compute_timeline(template: TemplateParsed, clip_info_map: ClipInfoMap) 
           const clip = template.clips.find(c => c.id === clip_id)!
           const { trim } = clip
           let clip_duration = info.duration
+          const speed = clip.speed ? parse_fraction(clip.speed) : 1
+          clip_duration *= (1 / speed)
           let trim_start = 0
           if (trim?.end && trim?.end !== 'fit') {
             clip_duration -= parse_duration(trim.end)
@@ -397,6 +401,7 @@ function compute_timeline(template: TemplateParsed, clip_info_map: ClipInfoMap) 
             clip_id: clip_id,
             duration: clip_duration,
             trim_start,
+            speed,
             start_at: layer_start_position,
           })
           layer_start_position += clip_duration
@@ -475,12 +480,14 @@ async function render(
   const audio_input_ids: string[] = []
   const ffmpeg_cmd: (string | number)[] = ['ffmpeg', '-v', options?.ffmpeg_verbosity ?? 'info']
   for (const i of timeline.keys()) {
-    const { clip_id, start_at, trim_start, duration } = timeline[i]
+    const { clip_id, start_at, trim_start, duration, speed } = timeline[i]
     const clip = template.clips.find(c => c.id === clip_id)!
     const info = clip_info_map[clip_id]
     const geometry = clip_geometry_map[clip_id]
 
-    const setpts = start_at === 0 ? `setpts=PTS-STARTPTS` : `setpts=PTS+${start_at}/TB`
+    const pts_speed = clip.speed ? `${1 / parse_fraction(clip.speed)}*` : ''
+    const setpts =
+      start_at === 0 ? `setpts=${pts_speed}PTS-STARTPTS` : `setpts=${pts_speed}PTS+${start_at}/TB`
     const vscale = `scale=${geometry.scale.width}:${geometry.scale.height}`
     const video_input_filters = [setpts, vscale]
     if (geometry.crop) {
@@ -491,6 +498,9 @@ async function render(
     if (!options?.render_sample_frame && info.has_audio) {
       const audio_filters = [
         `asetpts=PTS-STARTPTS`,
+        // NOTE atempo cannot exceed the range of 0.5 to 2.0. To get around this, we need to string multiple atempo calls together.
+        // Example provided here: https://trac.ffmpeg.org/wiki/How%20to%20speed%20up%20/%20slow%20down%20a%20video
+        `atempo=${speed}`,
         `atrim=0:${duration}`,
         `adelay=${start_at * 1000}:all=1`,
         `volume=${clip.audio_volume ?? 1}`, // TODO use anullsink for audio_volume === 0 to avoid extra processing
@@ -498,10 +508,9 @@ async function render(
       complex_filter_inputs.push(`[${i}:a] ${audio_filters.join(', ')}[a_in_${i}]`)
       audio_input_ids.push(`[a_in_${i}]`)
     }
-    ffmpeg_cmd.push('-ss', trim_start, '-t', duration, '-i', clip.filepath)
+    ffmpeg_cmd.push('-ss', trim_start, '-t', duration * speed, '-i', clip.filepath)
 
-    const overlay_enable_timespan = `enable='between(t,${start_at},${start_at + duration})'`
-    const overlay_filter = `overlay=x=${geometry.x}:y=${geometry.y}:${overlay_enable_timespan}`
+    const overlay_filter = `overlay=x=${geometry.x}:y=${geometry.y}:eof_action=pass`
     if (i === 0) {
       complex_filter_overlays.push(`[base][v_in_${i}] ${overlay_filter} [v_out_${i}]`)
     } else {
@@ -526,7 +535,6 @@ async function render(
   } else {
     const audio_inputs = audio_input_ids.join('')
     complex_filter.push(`${audio_inputs} amix=inputs=${audio_input_ids.length} [audio]`)
-    // complex_filter_overlays.push(`${audio_inputs} amix=inputs=${audio_input_ids.length} [audio]`)
     ffmpeg_cmd.push('-map', '[audio]')
   }
   ffmpeg_cmd.push('-filter_complex', complex_filter.join(';\n'))
