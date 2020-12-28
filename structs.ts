@@ -3,6 +3,12 @@ const TIMELINE_ENUMS = {
 } as const
 
 /**
+ * A percentage is formatted like so:
+ * "50%"
+ */
+type Percentage = string
+
+/**
  * A fraction formatted like so:
  * "1/2" or "5/3"
  */

@@ -356,17 +356,17 @@ function compute_timeline(template: TemplateParsed, clip_info_map: ClipInfoMap) 
           const { trim } = clip
           let clip_duration = info.duration
           const speed = clip.speed ? parse_fraction(clip.speed) : 1
-          clip_duration *= (1 / speed)
+          clip_duration *= 1 / speed
           let trim_start = 0
           if (trim?.end && trim?.end !== 'fit') {
             clip_duration -= parse_duration(trim.end)
           }
+          if (trim?.stop) {
+            clip_duration = parse_duration(trim.stop)
+          }
           if (trim?.start && trim?.start !== 'fit') {
             trim_start = parse_duration(trim.start)
             clip_duration -= trim_start
-          }
-          if (trim?.stop) {
-            clip_duration -= info.duration - parse_duration(trim.stop)
           }
 
           if (trim?.end === 'fit') {
@@ -393,7 +393,7 @@ function compute_timeline(template: TemplateParsed, clip_info_map: ClipInfoMap) 
           }
           if (clip.duration) {
             const manual_duration = parse_duration(clip.duration)
-            clip_duration = manual_duration
+            clip_duration = Math.min(manual_duration * speed, clip_duration)
           }
 
           layer_ordered_clips[layer_index] = layer_ordered_clips[layer_index] ?? []
@@ -415,6 +415,15 @@ function compute_timeline(template: TemplateParsed, clip_info_map: ClipInfoMap) 
     timeline: layer_ordered_clips.reduce((acc: TimelineClip[], layer) => [...acc, ...layer], []),
     total_duration,
   }
+}
+
+// NOTE atempo cannot exceed the range of 0.5 to 100.0. To get around this, we need to string multiple atempo calls together.
+// Example provided here: https://trac.ffmpeg.org/wiki/How%20to%20speed%20up%20/%20slow%20down%20a%20video
+function compute_tempo(val: number) {
+  const numMultipliers =
+    val > 1 ? Math.ceil(Math.log(val) / Math.log(2)) : Math.ceil(Math.log(val) / Math.log(0.5))
+  const multVal = Math.pow(Math.E, Math.log(val) / numMultipliers)
+  return Array(numMultipliers).fill(`atempo=${multVal}`).join(',')
 }
 
 type FfmpegProgress = {
@@ -496,19 +505,19 @@ async function render(
     }
     complex_filter_inputs.push(`[${i}:v] ${video_input_filters.join(', ')} [v_in_${i}]`)
     if (!options?.render_sample_frame && info.has_audio) {
-      const audio_filters = [
+      const audio_filters: string[] = [
         `asetpts=PTS-STARTPTS`,
-        // NOTE atempo cannot exceed the range of 0.5 to 2.0. To get around this, we need to string multiple atempo calls together.
-        // Example provided here: https://trac.ffmpeg.org/wiki/How%20to%20speed%20up%20/%20slow%20down%20a%20video
-        `atempo=${speed}`,
-        `atrim=0:${duration}`,
+        // `atrim=0:${duration * speed}`,
         `adelay=${start_at * 1000}:all=1`,
         `volume=${clip.audio_volume ?? 1}`, // TODO use anullsink for audio_volume === 0 to avoid extra processing
       ]
+      const atempo = compute_tempo(speed)
+      // a.k.a. speed == 1
+      if (atempo !== '') audio_filters.push(atempo)
       complex_filter_inputs.push(`[${i}:a] ${audio_filters.join(', ')}[a_in_${i}]`)
       audio_input_ids.push(`[a_in_${i}]`)
     }
-    ffmpeg_cmd.push('-ss', trim_start, '-t', duration * speed, '-i', clip.filepath)
+    ffmpeg_cmd.push('-ss', trim_start, '-t', duration, '-i', clip.filepath)
 
     const overlay_filter = `overlay=x=${geometry.x}:y=${geometry.y}:eof_action=pass`
     if (i === 0) {
@@ -520,6 +529,7 @@ async function render(
   const complex_filter = [...complex_filter_inputs, ...complex_filter_overlays]
   ffmpeg_cmd.push('-map', `[v_out_${timeline.length - 1}]`)
 
+  const map_audio_arg: string[] = []
   if (options?.render_sample_frame) {
     // we dont care about audio output for sample frame renders
     if (total_duration < parse_duration(options.render_sample_frame)) {
@@ -528,19 +538,29 @@ async function render(
       )
     }
     ffmpeg_cmd.push('-ss', options.render_sample_frame, '-vframes', '1')
-  } else if (audio_input_ids.length === 0) {
-    // do not include audio
-  } else if (audio_input_ids.length === 1) {
-    ffmpeg_cmd.push('-map', audio_input_ids[0])
   } else {
-    const audio_inputs = audio_input_ids.join('')
-    complex_filter.push(`${audio_inputs} amix=inputs=${audio_input_ids.length} [audio]`)
-    ffmpeg_cmd.push('-map', '[audio]')
+    // ffmpeg_cmd.push('-t', total_duration)
+    if (audio_input_ids.length === 0) {
+      // do not include audio
+    } else if (audio_input_ids.length === 1) {
+      map_audio_arg.push('-map', audio_input_ids[0])
+    } else {
+      const audio_inputs = audio_input_ids.join('')
+      complex_filter.push(`${audio_inputs} amix=inputs=${audio_input_ids.length} [audio]`)
+      map_audio_arg.push('-map', '[audio]')
+    }
+    ffmpeg_cmd.push('-vcodec', 'libx265')
+    ffmpeg_cmd.push('-x265-params', 'log-level=error')
   }
   ffmpeg_cmd.push('-filter_complex', complex_filter.join(';\n'))
+  ffmpeg_cmd.push(...map_audio_arg)
+  ffmpeg_cmd.push('-threads', '1')
+  // ffmpeg_cmd.push('-segment_time', '00:00:05', '-f', 'segment', 'output%03d.mp4')
   ffmpeg_cmd.push(output_filepath)
-  // console.log(ffmpeg_cmd.join('\n'))
   if (options?.overwrite) ffmpeg_cmd.push('-y')
+  // console.log(ffmpeg_cmd.join('\n'))
+  // replace w/ this when you want to copy the command
+  console.log(ffmpeg_cmd.map(c => `'${c}'`).join(' '))
 
   await ffmpeg(ffmpeg_cmd, total_duration, options?.progress_callback)
 
