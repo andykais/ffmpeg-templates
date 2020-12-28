@@ -9,22 +9,22 @@ const TIMELINE_ENUMS = {
 type Percentage = string
 
 /**
- * A fraction formatted like so:
- * "1/2" or "5/3"
+ * A pixel is formatted like so:
+ * "10px"
  */
-type Fraction = string
-/** Pixels of the rendered video */
-type Pixels = number
-type Offset = Fraction | Pixels
+type Pixels = string
+
 /**
  * A hour, minute, second timestamp formatted like so:
  * 00:00:05 or 01:23:02.75
  */
 type Timestamp = string
+
 /**
  * Id of a clip. Ids are either manually specified or are inserted with the convention "CLIP_<index>"
  */
 type ClipID = string
+
 /**
  * Specal keys that can be used on the timeline. Currently the only available enum is 'PAD', which will start
  * a clip at the last possible moment so that it finishes with the last played clip.
@@ -44,10 +44,10 @@ interface Clip {
    * The default alignments for X and Y are 'left' and 'top' respectively
    */
   layout?: {
-    x?: Offset | { offset?: Offset; align?: 'left' | 'right' | 'center' }
-    y?: Offset | { offset?: Offset; align?: 'top' | 'bottom' | 'center' }
-    width?: Fraction | Pixels
-    height?: Fraction | Pixels
+    x?: Percentage | Pixels | { offset?: Pixels; align?: 'left' | 'right' | 'center' }
+    y?: Percentage | Pixels | { offset?: Pixels; align?: 'top' | 'bottom' | 'center' }
+    width?: Percentage | Pixels
+    height?: Percentage | Pixels
   }
   /** Crop will trim edges of a clip accordingly. layout alignment will respect the crop */
   crop?: {
@@ -64,15 +64,18 @@ interface Clip {
   /** Specify the length of a clip exactly */
   duration?: Timestamp
   /** Increase or decrease the playback speed */
-  speed: Fraction
+  speed: Percentage
 }
 
-type Size = Pixels | { fraction: Fraction; of: ClipID }
 interface Template {
-  /** defaults to width: { fraction: '1/1', of: `CLIP_0` } */
-  size?: { width?: Size; height?: Size }
   /**
-   * A list of clips that are available to the timline */
+   * defaults to { width: '100%', height: '100%', relative_to: 'CLIP_0' }
+   */
+  size?: { width?: Pixels | Percentage; height?: Pixels | Percentage; relative_to: ClipID }
+  /**
+   * A list of clips that are available to the timline
+   *
+   */
   clips: Clip[]
   /**
    * Specify when clips are played and which should be layered on top of others using this field.
@@ -83,14 +86,4 @@ interface Template {
 }
 
 export { TIMELINE_ENUMS }
-export type {
-  Fraction,
-  Pixels,
-  Offset,
-  Timestamp,
-  ClipID,
-  TimelineEnums,
-  Size,
-  Clip,
-  Template,
-}
+export type { Percentage, Pixels, Timestamp, ClipID, TimelineEnums, Clip, Template }

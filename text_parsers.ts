@@ -2,14 +2,56 @@ import { InputError } from './errors.ts'
 
 type Seconds = number
 
-function parse_fraction(fraction: string): number {
-  const result = fraction.split('/')
-  if (result.length !== 2) throw new InputError(`Invalid fraction "${fraction} specified."`)
-  const [numerator, denominator] = result.map(v => parseInt(v))
-  if (numerator === NaN || denominator === NaN)
-    throw new InputError(`Invalid fraction "${fraction} specified."`)
-  return numerator / denominator
+function parse_percentage(percentage: string): number {
+  if (percentage.endsWith('%')) {
+    const percent = parseInt(percentage.substr(0, percentage.length - 1))
+    if (!Number.isNaN(percent)) {
+      return percent / 100
+    }
+  }
+  throw new InputError(`Invalid percentage "${percentage}"`)
 }
+
+function parse_pixels(pixels: string): number {
+  if (pixels.endsWith('px')) {
+    const pixels_number = parseInt(pixels.substr(0, pixels.length - 2))
+    if (!Number.isNaN(pixels_number)) {
+      return pixels_number
+    }
+  }
+  throw new InputError(`Invalid pixels value "${pixels}"`)
+}
+
+function parse_unit<T = number, U = number, V = number>(
+  value: string | undefined,
+  post_processors?: { percentage?: (p: number) => T; pixels?: (p: number) => U; undefined?: () => V }
+) {
+  if (value === undefined || value === '') {
+    if (post_processors?.undefined) return post_processors.undefined()
+    else throw new InputError('Value must be defined')
+  }
+  try {
+    return (post_processors?.percentage ?? (p => p))(parse_percentage(value))
+  } catch (e) {
+    if (e instanceof InputError == false) throw e
+  }
+
+  try {
+    return (post_processors?.pixels ?? (p => p))(parse_pixels(value))
+  } catch (e) {
+    if (e instanceof InputError == false) throw e
+  }
+  throw new InputError(`Value "${value}" is neither a percentage or pixels`)
+}
+
+// function parse_fraction(fraction: string): number {
+//   const result = fraction.split('/')
+//   if (result.length !== 2) throw new InputError(`Invalid fraction "${fraction} specified."`)
+//   const [numerator, denominator] = result.map(v => parseInt(v))
+//   if (numerator === NaN || denominator === NaN)
+//     throw new InputError(`Invalid fraction "${fraction} specified."`)
+//   return numerator / denominator
+// }
 
 function parse_duration(duration: string, { user_input = true } = {}): Seconds {
   const duration_split = duration.split(':')
@@ -48,4 +90,12 @@ const TIMELINE_ENUMS = {
   PAD: 'PAD',
 } as const
 
-export { parse_fraction, parse_duration, parse_aspect_ratio, parse_ffmpeg_packet, TIMELINE_ENUMS }
+export {
+  parse_unit,
+  parse_percentage,
+  parse_pixels,
+  parse_duration,
+  parse_aspect_ratio,
+  parse_ffmpeg_packet,
+  TIMELINE_ENUMS,
+}

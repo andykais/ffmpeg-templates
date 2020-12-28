@@ -121,4 +121,5 @@ complicated tutorials, no hidden settings in a application preferences. Its just
 - [ ] Alternatively to implementing more terminal-ui things, we could create a real web page which has the
       preview window and a timeline. All still config driven. The preview window does however let you change
       what timestamp the preview is of
+- [X] Replace fractions with percentages. All units are either `10%` or `10px`
 - [ ] Add `--preview` flag. Opens image previews and uses a field in the template for previews

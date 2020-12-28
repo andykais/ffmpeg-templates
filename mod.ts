@@ -2,28 +2,24 @@ import * as io from 'https://deno.land/std@0.75.0/io/mod.ts'
 import * as path from 'https://deno.land/std@0.75.0/path/mod.ts'
 import * as math from './float_math.ts'
 import * as errors from './errors.ts'
-import { parse_duration, parse_fraction, parse_aspect_ratio, parse_ffmpeg_packet } from './text_parsers.ts'
+import {
+  parse_unit,
+  parse_percentage,
+  parse_pixels,
+  parse_duration,
+  parse_aspect_ratio,
+  parse_ffmpeg_packet,
+} from './text_parsers.ts'
 import { TIMELINE_ENUMS } from './structs.ts'
-import type {
-  Fraction,
-  Pixels,
-  Offset,
-  Timestamp,
-  ClipID,
-  TimelineEnums,
-  Size,
-  Clip,
-  Template,
-} from './structs.ts'
+import type { Pixels, Percentage, Timestamp, ClipID, TimelineEnums, Clip, Template } from './structs.ts'
 
 type Seconds = number
 // Parsed Template
 interface TemplateParsed extends Template {
-  size: { width: Size; height: Size }
+  size: NonNullable<Required<Template['size']>>
   clips: (Clip & { id: ClipID; filepath: string })[]
   timeline: { [start_position: string]: (ClipID | TimelineEnums)[][] }
 }
-type Percentage = number
 
 const decoder = new TextDecoder()
 
@@ -45,10 +41,10 @@ function parse_template(template_input: Template, cwd: string): TemplateParsed {
     clips.push({ ...clip, id, filepath })
   }
   const timeline = template_input.timeline ?? { '00:00:00': clips.map(clip => [clip.id]) }
-  const default_size = { fraction: '1/1', of: clips[0]?.id }
+  const default_size: TemplateParsed['size'] = { width: '100%', height: '100%', relative_to: clips[0]?.id }
   const size = {
-    width: template_input.size?.width ?? default_size,
-    height: template_input.size?.height ?? default_size,
+    ...default_size,
+    ...template_input.size,
   }
   return { ...template_input, size, clips, timeline }
 }
@@ -165,24 +161,27 @@ interface ClipGeometryMap {
 }
 function compute_geometry(template: TemplateParsed, clip_info_map: ClipInfoMap) {
   const { size } = template
-  const background_width =
-    typeof size.width === 'number'
-      ? size.width
-      : parse_fraction(size.width.fraction) * get_clip(clip_info_map, size.width.of).width
-  const background_height =
-    typeof size.height === 'number'
-      ? size.height
-      : parse_fraction(size.height.fraction) * get_clip(clip_info_map, size.height.of).height
+
+  const background_width = parse_unit(size.width, {
+    percentage: p => p * get_clip(clip_info_map, size.relative_to).width,
+  })
+  const background_height = parse_unit(size.height, {
+    percentage: p => p * get_clip(clip_info_map, size.relative_to).height,
+  })
 
   const clip_geometry_map: ClipGeometryMap = {}
   for (const clip of template.clips) {
     const info = get_clip(clip_info_map, clip.id)
     const { layout } = clip
 
-    const input_width =
-      typeof layout?.width === 'string' ? parse_fraction(layout.width) * background_width : layout?.width
-    const input_height =
-      typeof layout?.height === 'string' ? parse_fraction(layout?.height) * background_height : layout?.height
+    const input_width = parse_unit(layout?.width, {
+      percentage: p => p * background_width,
+      undefined: () => null,
+    })
+    const input_height = parse_unit(layout?.height, {
+      percentage: p => p * background_height,
+      undefined: () => null,
+    })
 
     let width = input_width ?? (input_height ? input_height * info.aspect_ratio : info.width)
     let height = input_height ?? (input_width ? input_width / info.aspect_ratio : info.height)
@@ -196,22 +195,27 @@ function compute_geometry(template: TemplateParsed, clip_info_map: ClipInfoMap) 
       let y_crop = 0
       let width_crop = 'in_w'
       let height_crop = 'in_h'
+
       if (right) {
-        width_crop = `in_w - ${right}`
-        width -= right
+        const r = parse_pixels(right)
+        width_crop = `in_w - ${r}`
+        width -= r
       }
       if (bottom) {
-        height_crop = `in_h - ${bottom}`
-        height -= bottom
+        const b = parse_pixels(bottom)
+        height_crop = `in_h - ${b}`
+        height -= b
       }
       if (left) {
-        x_crop = left
-        width -= left
+        const l = parse_pixels(left)
+        x_crop = l
+        width -= l
         width_crop = `${width_crop} - ${x_crop}`
       }
       if (top) {
-        y_crop = top
-        height -= top
+        const t = parse_pixels(top)
+        y_crop = t
+        height -= t
         height_crop = `${height_crop} - ${y_crop}`
       }
       crop = { width: width_crop, height: height_crop, x: x_crop, y: y_crop }
@@ -220,14 +224,20 @@ function compute_geometry(template: TemplateParsed, clip_info_map: ClipInfoMap) 
     let y: string | number = 0
     let x_align = 'left'
     let y_align = 'top'
-    if (typeof layout?.x === 'object') x = layout.x.offset ?? 0
-    else if (typeof layout?.x === 'number') x = layout.x
-    if (typeof layout?.y === 'object') y = layout.y.offset ?? 0
-    else if (typeof layout?.y === 'number') y = layout.y
+    // if (typeof layout?.x?.offset) x = parse_pixels(layout.x.offset)
+
+    const parse_x = (v: string | undefined) =>
+      parse_unit(v, { pixels: x => x, percentage: x => `(main_w * ${x})`, undefined: () => 0 })
+    const parse_y = (v: string | undefined) =>
+      parse_unit(v, { pixels: y => y, percentage: y => `(main_h * ${y})`, undefined: () => 0 })
+
+    if (typeof layout?.x === 'object') x = parse_x(layout.x.offset)
+    else if (typeof layout?.x === 'string') x = parse_x(layout.x)
     x_align = typeof layout?.x === 'object' ? layout.x.align ?? 'left' : 'left'
-    y_align = typeof layout?.y === 'object' ? layout.y.align ?? 'top' : 'top'
-    if (typeof layout?.x === 'string') x = `(main_w * ${parse_fraction(layout.x)})`
-    if (typeof layout?.y === 'string') y = `(main_w * ${parse_fraction(layout.y)})`
+
+    if (typeof layout?.y === 'object') y = parse_y(layout.y.offset)
+    else if (typeof layout?.y === 'string') y = parse_y(layout.y)
+    y_align = typeof layout?.y === 'object' ? layout.y.align ?? 'left' : 'left'
 
     switch (x_align) {
       case 'left':
@@ -300,7 +310,7 @@ function compute_timeline(template: TemplateParsed, clip_info_map: ClipInfoMap) 
       } else if (trim?.end) clip_duration -= parse_duration(trim.end)
 
       if (trim?.stop) clip_duration -= info.duration - parse_duration(trim.stop)
-      if (clip.speed) clip_duration *= 1 / parse_fraction(clip.speed)
+      if (clip.speed) clip_duration *= 1 / parse_percentage(clip.speed)
 
       if (clip_duration < 0) {
         throw new errors.InputError(
@@ -355,7 +365,7 @@ function compute_timeline(template: TemplateParsed, clip_info_map: ClipInfoMap) 
           const clip = template.clips.find(c => c.id === clip_id)!
           const { trim } = clip
           let clip_duration = info.duration
-          const speed = clip.speed ? parse_fraction(clip.speed) : 1
+          const speed = clip.speed ? parse_percentage(clip.speed) : 1
           clip_duration *= 1 / speed
           let trim_start = 0
           if (trim?.end && trim?.end !== 'fit') {
@@ -430,7 +440,7 @@ type FfmpegProgress = {
   out_time: Timestamp
   progress: 'continue' | 'end'
   speed: string
-  percentage: Percentage
+  percentage: number
 }
 type OnProgress = (progress: FfmpegProgress) => void
 async function ffmpeg(
@@ -494,7 +504,7 @@ async function render(
     const info = clip_info_map[clip_id]
     const geometry = clip_geometry_map[clip_id]
 
-    const pts_speed = clip.speed ? `${1 / parse_fraction(clip.speed)}*` : ''
+    const pts_speed = clip.speed ? `${1 / parse_percentage(clip.speed)}*` : ''
     const setpts =
       start_at === 0 ? `setpts=${pts_speed}PTS-STARTPTS` : `setpts=${pts_speed}PTS+${start_at}/TB`
     const vscale = `scale=${geometry.scale.width}:${geometry.scale.height}`
@@ -591,10 +601,8 @@ export { render_video, render_sample_frame }
 export type {
   Template,
   Clip,
-  Size,
-  Fraction,
   Pixels,
-  Offset,
+  Percentage,
   Timestamp,
   ClipID,
   TimelineEnums,
