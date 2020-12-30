@@ -122,4 +122,8 @@ complicated tutorials, no hidden settings in a application preferences. Its just
       preview window and a timeline. All still config driven. The preview window does however let you change
       what timestamp the preview is of
 - [X] Replace fractions with percentages. All units are either `10%` or `10px`
-- [ ] Add `--preview` flag. Opens image previews and uses a field in the template for previews
+- [X] Add `--preview` flag. Opens image previews and uses a field in the template for previews
+    - use feh: `feh --image-bg '#1e1c1c' --scale-down --title <window_title> <rendered_frame>`
+    - use eog
+    - use imagemagick's display: `display -update 1.0 <rendered_frame>`
+- [x] Intelligently inspect previews. Only include clips that are relevant to the desired frame.

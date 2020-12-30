@@ -1,4 +1,5 @@
 import * as path from 'https://deno.land/std@0.75.0/path/mod.ts'
+import * as fs from 'https://deno.land/std@0.75.0/fs/mod.ts'
 import * as flags from 'https://deno.land/std@0.75.0/flags/mod.ts'
 import * as yaml from 'https://deno.land/std@0.75.0/encoding/yaml.ts'
 import * as errors from './errors.ts'
@@ -10,9 +11,16 @@ const VERSION = 'v0.1.0'
 const encoder = new TextEncoder()
 const decoder = new TextDecoder()
 
+function open(filename: string) {
+  // TODO handle windows & mac platforms
+  // (or wait for the `open` program to be ported to deno https://github.com/sindresorhus/open/issues)
+  const proc = Deno.run({ cmd: ['xdg-open', filename] })
+  return proc
+}
+
 function construct_output_filepath(args: flags.Args, template_filepath: string) {
   const { dir, name } = path.parse(template_filepath)
-  const render_ext = args['render-sample-frame'] ? '.jpg' : '.mp4'
+  const render_ext = args['preview'] ? '.jpg' : '.mp4'
   return path.join(dir, `${name}${render_ext}`)
 }
 
@@ -55,20 +63,27 @@ async function read_template(template_filepath: string): Promise<Template> {
 
 async function try_render_video(template_filepath: string, output_filepath: string, options: RenderOptions) {
   try {
-    const copied_options = {...options}
+    const copied_options = { ...options }
     const execution_start_time = performance.now()
     if (args['verbose']) {
       copied_options.ffmpeg_verbosity = 'info'
     } else {
       copied_options.progress_callback = progress => progress_callback(execution_start_time, progress)
     }
+    if (!options.overwrite && (await fs.exists(output_filepath))) {
+      throw new Error(`Output file ${output_filepath} exists. Use the --overwrite flag to overwrite it.`)
+    }
     const template_input = await read_template(template_filepath)
-    const template = args['render-sample-frame']
-      ? await render_sample_frame(template_input, output_filepath, args['render-sample-frame'], copied_options)
+    const num_clips_rendered = args['preview']
+      ? await render_sample_frame(template_input, output_filepath, copied_options)
       : await render_video(template_input, output_filepath, copied_options)
     const execution_time_seconds = (performance.now() - execution_start_time) / 1000
+
+    if (args['open']) {
+      open(output_filepath)
+    }
     // prettier-ignore
-    console.log(`created ${output_filepath} out of ${template.clips.length} clips in ${execution_time_seconds.toFixed(1)} seconds.`)
+    console.log(`created ${output_filepath} out of ${num_clips_rendered} clips in ${execution_time_seconds.toFixed(1)} seconds.`)
   } catch (e) {
     if (e instanceof errors.InputError) {
       console.error(e)
@@ -89,18 +104,18 @@ ARGS:
                                             the outputted video
 
   <output_filepath>                         The file that will be outputted by ffmpeg. When not specified, a
-                                            file will be created adjacent to the template ending in .mp4 or .jpg
-                                            depending on whether --render-sample-frame is present or not.
+                                            file will be created adjacent to the template ending in .mp4.
 
 OPTIONS:
-  --render-sample-frame <timestamp>         Instead of outputting the whole video, output a single frame as a jpg.
-                                            Use this flag to set up your layouts and iterate quickly. Note that you
-                                            must change <output_filepath> to be an image filename (e.g. sample.jpg).
+  --preview                                 Instead of outputting the whole video, output a single frame as a jpg.
+                                            Use this flag to set up your layouts and iterate quickly.
+
+  --open                                    Open the outputted file after it is rendered.
 
   --overwrite                               Overwrite an existing output file.
 
   --watch                                   Run continously when the template file changes. This is most useful
-                                            in tandem with --render-sample-frame.
+                                            in tandem with --preview.
 
   --verbose                                 Show ffmpeg logging instead of outputting a progress bar.
 
@@ -118,10 +133,10 @@ const options: RenderOptions = {
 }
 
 const output_filepath_is_image = ['.jpg', '.jpeg', '.png'].some(ext => output_filepath.endsWith(ext))
-if (args['render-sample-frame'] && !output_filepath_is_image) {
+if (args['preview'] && !output_filepath_is_image) {
   throw new Error('Invalid commands. <output_filepath> must be a video filename when rendering video output.')
 }
-if (!args['render-sample-frame'] && output_filepath_is_image) {
+if (!args['preview'] && output_filepath_is_image) {
   throw new Error('Invalid commands. <output_filepath> must be an video filename.')
 }
 

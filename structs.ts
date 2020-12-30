@@ -19,6 +19,14 @@ type Pixels = string
  * 00:00:05 or 01:23:02.75
  */
 type Timestamp = string
+// TODO replace the above with this definition. It is more precise, but currently yields the following error
+// error: RangeError: Maximum call stack size exceeded
+// type Timestamp = `${number}:${number}:${number}`
+
+/**
+ * A timestamp that is relative to the end of a time period
+ */
+type ReverseTimestamp = `-${Timestamp}`
 
 /**
  * Id of a clip. Ids are either manually specified or are inserted with the convention "CLIP_<index>"
@@ -83,6 +91,14 @@ interface Template {
    * {"00:00:00": [["CLIP_0", "CLIP_1", ...]]}
    */
   timeline?: { [start_position: string]: (ClipID | TimelineEnums)[][] }
+
+  /**
+   * Preview at a position
+   * Used with the --preview flag
+   */
+  preview: Timestamp
+  // TODO add this after the max call stack bug is fixed
+  // preview: Timestamp | ReverseTimestamp
 }
 
 export { TIMELINE_ENUMS }

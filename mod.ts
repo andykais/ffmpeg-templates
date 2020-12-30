@@ -19,6 +19,7 @@ interface TemplateParsed extends Template {
   size: NonNullable<Required<Template['size']>>
   clips: (Clip & { id: ClipID; filepath: string })[]
   timeline: { [start_position: string]: (ClipID | TimelineEnums)[][] }
+  preview: NonNullable<Template['preview']>
 }
 
 const decoder = new TextDecoder()
@@ -46,7 +47,8 @@ function parse_template(template_input: Template, cwd: string): TemplateParsed {
     ...default_size,
     ...template_input.size,
   }
-  return { ...template_input, size, clips, timeline }
+  const preview = template_input.preview || '00:00:00'
+  return { ...template_input, size, clips, timeline, preview }
 }
 
 type OnReadLine = (line: string) => void
@@ -479,14 +481,16 @@ interface RenderOptions {
   cwd?: string
 }
 interface RenderOptionsInternal extends RenderOptions {
-  render_sample_frame?: Timestamp
+  render_sample_frame?: boolean
 }
 async function render(
   template_input: Template,
   output_filepath: string,
   options?: RenderOptionsInternal
-): Promise<TemplateParsed> {
+): Promise<number> {
   const template = parse_template(template_input, options?.cwd ?? Deno.cwd())
+
+  const sample_frame = options?.render_sample_frame ? parse_duration(template.preview) : undefined
 
   const clip_info_map = await probe_clips(template)
   const { background_width, background_height, clip_geometry_map } = compute_geometry(template, clip_info_map)
@@ -498,8 +502,16 @@ async function render(
   const complex_filter_overlays: string[] = []
   const audio_input_ids: string[] = []
   const ffmpeg_cmd: (string | number)[] = ['ffmpeg', '-v', options?.ffmpeg_verbosity ?? 'info']
+
+  let last_clip = undefined
+  let input_index = 0
   for (const i of timeline.keys()) {
     const { clip_id, start_at, trim_start, duration, speed } = timeline[i]
+
+    // we dont care about clips that do not involve the sample frame
+    if (options?.render_sample_frame && !(start_at <= sample_frame! && start_at + duration >= sample_frame!))
+      continue
+
     const clip = template.clips.find(c => c.id === clip_id)!
     const info = clip_info_map[clip_id]
     const geometry = clip_geometry_map[clip_id]
@@ -513,7 +525,7 @@ async function render(
       const { crop } = geometry
       video_input_filters.push(`crop=w=${crop.width}:h=${crop.height}:x=${crop.x}:y=${crop.y}:keep_aspect=1`)
     }
-    complex_filter_inputs.push(`[${i}:v] ${video_input_filters.join(', ')} [v_in_${i}]`)
+    complex_filter_inputs.push(`[${input_index}:v] ${video_input_filters.join(', ')} [v_in_${input_index}]`)
     if (!options?.render_sample_frame && info.has_audio) {
       const audio_filters: string[] = [
         `asetpts=PTS-STARTPTS`,
@@ -524,30 +536,34 @@ async function render(
       const atempo = compute_tempo(speed)
       // a.k.a. speed == 1
       if (atempo !== '') audio_filters.push(atempo)
-      complex_filter_inputs.push(`[${i}:a] ${audio_filters.join(', ')}[a_in_${i}]`)
-      audio_input_ids.push(`[a_in_${i}]`)
+      complex_filter_inputs.push(`[${input_index}:a] ${audio_filters.join(', ')}[a_in_${input_index}]`)
+      audio_input_ids.push(`[a_in_${input_index}]`)
     }
     ffmpeg_cmd.push('-ss', trim_start, '-t', duration, '-i', clip.filepath)
 
     const overlay_filter = `overlay=x=${geometry.x}:y=${geometry.y}:eof_action=pass`
-    if (i === 0) {
-      complex_filter_overlays.push(`[base][v_in_${i}] ${overlay_filter} [v_out_${i}]`)
+    const current_clip = `[v_out_${input_index}]`
+    if (last_clip) {
+      complex_filter_overlays.push(`${last_clip}[v_in_${input_index}] ${overlay_filter} ${current_clip}`)
     } else {
-      complex_filter_overlays.push(`[v_out_${i - 1}][v_in_${i}] ${overlay_filter} [v_out_${i}]`)
+      complex_filter_overlays.push(`[base][v_in_${input_index}] ${overlay_filter} ${current_clip}`)
     }
+    last_clip = current_clip
+    input_index++
   }
   const complex_filter = [...complex_filter_inputs, ...complex_filter_overlays]
-  ffmpeg_cmd.push('-map', `[v_out_${timeline.length - 1}]`)
+  // we may have an output that is just a black screen
+  if (last_clip) ffmpeg_cmd.push('-map', last_clip)
 
   const map_audio_arg: string[] = []
   if (options?.render_sample_frame) {
     // we dont care about audio output for sample frame renders
-    if (total_duration < parse_duration(options.render_sample_frame)) {
+    if (total_duration < sample_frame!) {
       throw new errors.InputError(
-        `sample-frame position ${options.render_sample_frame} is greater than duration of the output (${total_duration})`
+        `sample-frame position ${template.preview} is greater than duration of the output (${total_duration})`
       )
     }
-    ffmpeg_cmd.push('-ss', options.render_sample_frame, '-vframes', '1')
+    ffmpeg_cmd.push('-ss', template.preview, '-vframes', '1')
   } else {
     // ffmpeg_cmd.push('-t', total_duration)
     if (audio_input_ids.length === 0) {
@@ -570,31 +586,23 @@ async function render(
   if (options?.overwrite) ffmpeg_cmd.push('-y')
   // console.log(ffmpeg_cmd.join('\n'))
   // replace w/ this when you want to copy the command
-  console.log(ffmpeg_cmd.map(c => `'${c}'`).join(' '))
+  // console.log(ffmpeg_cmd.map(c => `'${c}'`).join(' '))
 
   await ffmpeg(ffmpeg_cmd, total_duration, options?.progress_callback)
 
-  return template
+  return input_index
 }
 
-async function render_video(
-  template_input: Template,
-  output_filepath: string,
-  options?: RenderOptions
-): Promise<TemplateParsed> {
+async function render_video(template_input: Template, output_filepath: string, options?: RenderOptions) {
   return await render(template_input, output_filepath, options)
 }
 
 async function render_sample_frame(
   template_input: Template,
   output_filepath: string,
-  sample_frame_position: Timestamp,
   options?: RenderOptions
-): Promise<TemplateParsed> {
-  return await render(template_input, output_filepath, {
-    ...options,
-    render_sample_frame: sample_frame_position,
-  })
+) {
+  return await render(template_input, output_filepath, { ...options, render_sample_frame: true })
 }
 
 export { render_video, render_sample_frame }
