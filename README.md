@@ -127,3 +127,6 @@ complicated tutorials, no hidden settings in a application preferences. Its just
     - use eog
     - use imagemagick's display: `display -update 1.0 <rendered_frame>`
 - [x] Intelligently inspect previews. Only include clips that are relevant to the desired frame.
+- [x] support duration expressions like `"00:02:12 - 00:00:03.4"`
+- [X] support image inputs
+- [ ] support font inputs

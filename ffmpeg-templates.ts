@@ -80,6 +80,7 @@ async function try_render_video(template_filepath: string, output_filepath: stri
     const execution_time_seconds = (performance.now() - execution_start_time) / 1000
 
     if (args['open']) {
+      // TODO this doesnt work for video renders because deno exits. We need to run a detached process
       open(output_filepath)
     }
     // prettier-ignore

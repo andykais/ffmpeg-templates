@@ -14,7 +14,7 @@ function parse_percentage(percentage: string): number {
 
 function parse_pixels(pixels: string): number {
   if (pixels.endsWith('px')) {
-    const pixels_number = parseInt(pixels.substr(0, pixels.length - 2))
+    const pixels_number = parseFloat(pixels.substr(0, pixels.length - 2))
     if (!Number.isNaN(pixels_number)) {
       return pixels_number
     }
@@ -44,18 +44,43 @@ function parse_unit<T = number, U = number, V = number>(
   throw new InputError(`Value "${value}" is neither a percentage or pixels`)
 }
 
-function parse_duration(duration: string, { user_input = true } = {}): Seconds {
+// TODO add math expressions. These should be valid:
+// "00:00:00,0000"
+// "00:00:00.0000"
+// "00:00:00.0000 - 00:00:00"
+// "00:00:03.0000 - 00:00:01.1 - 00:00:00.5"
+function parse_duration(duration_expr: string): Seconds {
   try {
+    const [duration, operator, expr] = duration_expr.trim().split(' ')
     const duration_split = duration.split(':')
-    if (duration_split.length !== 3) {
-      if (user_input) throw new InputError(`Invalid duration "${duration}". Cannot parse`)
-      else throw new InputError(`Invalid duration "${duration}". Cannot parse`)
+    if (duration_split.length !== 3) throw new InputError(`Invalid duration "${duration_expr}". Cannot parse`)
+
+    // support vlc millisecond notation as well (00:00:00,000)
+    const [hours, minutes, seconds] = duration_split.map(v => parseFloat(v.split(/,|\./).join('.')))
+    const duration_in_seconds = hours * 60 * 60 + minutes * 60 + seconds
+    if (operator) {
+      if (operator && expr) {
+        switch (operator) {
+          case '+':
+            return duration_in_seconds + parse_duration(expr)
+          case '-':
+            return duration_in_seconds - parse_duration(expr)
+          case '/':
+            return duration_in_seconds / parse_duration(expr)
+          case '*':
+            return duration_in_seconds * parse_duration(expr)
+          default:
+            throw new InputError(`Invalid duration "${duration_expr}". Expected "+,-,/,*" where "${operator}" was`)
+        }
+      } else {
+        throw new InputError(`Invalid duration "${duration_expr}". Expected <duration> <operator> <duration_expr>`)
+      }
+    } else {
+      return duration_in_seconds
     }
-    const [hours, minutes, seconds] = duration_split.map(v => parseFloat(v))
-    return hours * 60 * 60 + minutes * 60 + seconds
   } catch (e) {
     if (e.name === 'TypeError') {
-      throw new InputError(`Invalid duration "${duration}". Cannot parse`)
+      throw new InputError(`Invalid duration "${duration_expr}". Cannot parse`)
     } else throw e
   }
 }
