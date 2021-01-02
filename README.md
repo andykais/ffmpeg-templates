@@ -130,3 +130,4 @@ complicated tutorials, no hidden settings in a application preferences. Its just
 - [x] support duration expressions like `"00:02:12 - 00:00:03.4"`
 - [X] support image inputs
 - [ ] support font inputs
+- [X] add timeline variables

@@ -1,4 +1,5 @@
 import { InputError } from './errors.ts'
+import type { TemplateParsed } from './mod.ts'
 
 type Seconds = number
 
@@ -49,31 +50,63 @@ function parse_unit<T = number, U = number, V = number>(
 // "00:00:00.0000"
 // "00:00:00.0000 - 00:00:00"
 // "00:00:03.0000 - 00:00:01.1 - 00:00:00.5"
-function parse_duration(duration_expr: string): Seconds {
+// "00:00:03.0000 + {CLIP_0.trim.start}"
+const duration_var_regex = /\{[a-zA-Z0-9._-]+\}/
+function parse_duration(duration_expr: string, template: TemplateParsed): Seconds {
   try {
-    const [duration, operator, expr] = duration_expr.trim().split(' ')
-    const duration_split = duration.split(':')
-    if (duration_split.length !== 3) throw new InputError(`Invalid duration "${duration_expr}". Cannot parse`)
+    const [duration, operator, expr] = duration_expr
+      .trim()
+      .split(' ')
+      .map(s => s.trim())
+    let duration_in_seconds = 0
+    if (duration_var_regex.test(duration)) {
+      const duration_var = duration.substring(1, duration.length - 1)
+      const [clip_id, ...field] = duration_var.split('.')
+      const clip = template.clips.find(c => c.id === clip_id)
+      if (clip) {
+        const duration_field_hopefully = field.reduce((obj: any, key) => obj[key], clip)
+        // TODO include probed durations eventually
+        if (duration_field_hopefully) {
+          duration_in_seconds = parse_duration(duration_field_hopefully, template)
+        } else {
+          throw new InputError(
+            `Invalid duration "${duration}". Specified clip field for clip "${clip_id}" is undefined`
+          )
+        }
+      } else throw new InputError(`Invalid duration "${duration}". Cannot find clip "${clip_id}"`)
+    } else {
+      const duration_split = duration.split(':')
+      if (duration_split.length !== 3) throw new InputError(`Invalid duration "${duration}". Cannot parse`)
+      // support vlc millisecond notation as well (00:00:00,000)
+      const [hours, minutes, seconds] = duration_split.map(v => parseFloat(v.split(/,|\./).join('.')))
+      duration_in_seconds = hours * 60 * 60 + minutes * 60 + seconds
+    }
+    // const duration_split = duration.split(':')
+    // if (duration_split.length !== 3) throw new InputError(`Invalid duration "${duration_expr}". Cannot parse`)
 
-    // support vlc millisecond notation as well (00:00:00,000)
-    const [hours, minutes, seconds] = duration_split.map(v => parseFloat(v.split(/,|\./).join('.')))
-    const duration_in_seconds = hours * 60 * 60 + minutes * 60 + seconds
+    // // support vlc millisecond notation as well (00:00:00,000)
+    // const [hours, minutes, seconds] = duration_split.map(v => parseFloat(v.split(/,|\./).join('.')))
+    // const duration_in_seconds = hours * 60 * 60 + minutes * 60 + seconds
     if (operator) {
       if (operator && expr) {
         switch (operator) {
           case '+':
-            return duration_in_seconds + parse_duration(expr)
+            return duration_in_seconds + parse_duration(expr, template)
           case '-':
-            return duration_in_seconds - parse_duration(expr)
+            return duration_in_seconds - parse_duration(expr, template)
           case '/':
-            return duration_in_seconds / parse_duration(expr)
+            return duration_in_seconds / parse_duration(expr, template)
           case '*':
-            return duration_in_seconds * parse_duration(expr)
+            return duration_in_seconds * parse_duration(expr, template)
           default:
-            throw new InputError(`Invalid duration "${duration_expr}". Expected "+,-,/,*" where "${operator}" was`)
+            throw new InputError(
+              `Invalid duration "${duration_expr}". Expected "+,-,/,*" where "${operator}" was`
+            )
         }
       } else {
-        throw new InputError(`Invalid duration "${duration_expr}". Expected <duration> <operator> <duration_expr>`)
+        throw new InputError(
+          `Invalid duration "${duration_expr}". Expected <duration> <operator> <duration_expr>`
+        )
       }
     } else {
       return duration_in_seconds

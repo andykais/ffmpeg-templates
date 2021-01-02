@@ -122,7 +122,7 @@ async function probe_clips(template: TemplateParsed): Promise<ClipInfoMap> {
 
     if (['mjpeg', 'jpeg', 'jpg', 'png'].includes(video_stream.codec_name)) {
       if (!clip.duration) throw new InputError(`Cannot specify image clip ${clip.file} without a duration`)
-      const duration = parse_duration(clip.duration)
+      const duration = parse_duration(clip.duration, template)
       if (clip.trim) {
         throw new InputError(`Cannot use 'trim' with an image clip`)
       }
@@ -319,12 +319,12 @@ function compute_timeline(template: TemplateParsed, clip_info_map: ClipInfoMap) 
 
       if (trim?.start === 'fit') {
       } else if (trim?.start) {
-        clip_duration -= parse_duration(trim.start)
+        clip_duration -= parse_duration(trim.start, template)
       }
       if (trim?.end === 'fit') {
-      } else if (trim?.end) clip_duration -= parse_duration(trim.end)
+      } else if (trim?.end) clip_duration -= parse_duration(trim.end, template)
 
-      if (trim?.stop) clip_duration -= info.duration - parse_duration(trim.stop)
+      if (trim?.stop) clip_duration -= info.duration - parse_duration(trim.stop, template)
       if (clip.speed) clip_duration *= 1 / parse_percentage(clip.speed)
 
       if (clip_duration < 0) {
@@ -333,7 +333,7 @@ function compute_timeline(template: TemplateParsed, clip_info_map: ClipInfoMap) 
         )
       }
       if (clip.duration) {
-        const manual_duration = parse_duration(clip.duration)
+        const manual_duration = parse_duration(clip.duration, template)
         if (manual_duration > clip_duration)
           throw new InputError(
             `Clip ${clip_id}'s duration (including trimmings) cannot be shorter than the specified duration.`
@@ -350,7 +350,7 @@ function compute_timeline(template: TemplateParsed, clip_info_map: ClipInfoMap) 
   let longest_duration = 0
   let shortest_duration = Infinity
   for (const start_position of Object.keys(timeline)) {
-    const start_position_seconds = parse_duration(start_position)
+    const start_position_seconds = parse_duration(start_position, template)
 
     for (const clips of Object.values(timeline[start_position])) {
       let layer_duration = start_position_seconds
@@ -364,7 +364,7 @@ function compute_timeline(template: TemplateParsed, clip_info_map: ClipInfoMap) 
 
   const layer_ordered_clips: TimelineClip[][] = []
   for (const start_position of Object.keys(timeline)) {
-    const start_position_seconds = parse_duration(start_position)
+    const start_position_seconds = parse_duration(start_position, template)
     for (const layer_index of timeline[start_position].keys()) {
       const clips = timeline[start_position][layer_index]
 
@@ -384,13 +384,13 @@ function compute_timeline(template: TemplateParsed, clip_info_map: ClipInfoMap) 
           clip_duration *= 1 / speed
           let trim_start = 0
           if (trim?.end && trim?.end !== 'fit') {
-            clip_duration -= parse_duration(trim.end)
+            clip_duration -= parse_duration(trim.end, template)
           }
           if (trim?.stop) {
-            clip_duration = parse_duration(trim.stop)
+            clip_duration = parse_duration(trim.stop, template)
           }
           if (trim?.start && trim?.start !== 'fit') {
-            trim_start = parse_duration(trim.start)
+            trim_start = parse_duration(trim.start, template)
             clip_duration -= trim_start
           }
 
@@ -417,7 +417,7 @@ function compute_timeline(template: TemplateParsed, clip_info_map: ClipInfoMap) 
             }
           }
           if (clip.duration) {
-            const manual_duration = parse_duration(clip.duration)
+            const manual_duration = parse_duration(clip.duration, template)
             clip_duration = Math.min(manual_duration * speed, clip_duration)
           }
 
@@ -459,6 +459,7 @@ type FfmpegProgress = {
 }
 type OnProgress = (progress: FfmpegProgress) => void
 async function ffmpeg(
+  template: TemplateParsed,
   ffmpeg_cmd: (string | number)[],
   longest_duration: number,
   progress_callback?: OnProgress
@@ -472,7 +473,7 @@ async function ffmpeg(
       const [key, value] = line.split('=')
       ;(progress as any)[key] = value
       if (key === 'progress') {
-        progress.percentage = value === 'end' ? 1 : parse_duration(progress.out_time!) / longest_duration
+        progress.percentage = value === 'end' ? 1 : parse_duration(progress.out_time!, template) / longest_duration
         progress_callback(progress as FfmpegProgress)
         progress = {}
       }
@@ -503,7 +504,7 @@ async function render(
 ): Promise<number> {
   const template = parse_template(template_input, options?.cwd ?? Deno.cwd())
 
-  const sample_frame = options?.render_sample_frame ? parse_duration(template.preview) : undefined
+  const sample_frame = options?.render_sample_frame ? parse_duration(template.preview, template) : undefined
 
   const clip_info_map = await probe_clips(template)
   const { background_width, background_height, clip_geometry_map } = compute_geometry(template, clip_info_map)
@@ -582,7 +583,7 @@ async function render(
         `sample-frame position ${template.preview} is greater than duration of the output (${total_duration})`
       )
     }
-    ffmpeg_cmd.push('-ss', template.preview, '-vframes', '1')
+    ffmpeg_cmd.push('-ss', sample_frame!, '-vframes', '1')
   } else {
     // ffmpeg_cmd.push('-t', total_duration)
     if (audio_input_ids.length === 0) {
@@ -604,9 +605,9 @@ async function render(
   if (options?.overwrite) ffmpeg_cmd.push('-y')
   // console.log(ffmpeg_cmd.join('\n'))
   // replace w/ this when you want to copy the command
-  // console.log(ffmpeg_cmd.map(c => `'${c}'`).join(' '))
+  console.log(ffmpeg_cmd.map(c => `'${c}'`).join(' '))
 
-  await ffmpeg(ffmpeg_cmd, total_duration, options?.progress_callback)
+  await ffmpeg(template, ffmpeg_cmd, total_duration, options?.progress_callback)
 
   return input_index
 }
@@ -626,6 +627,7 @@ async function render_sample_frame(
 export { render_video, render_sample_frame }
 export type {
   Template,
+  TemplateParsed, // internal type
   Clip,
   Pixels,
   Percentage,
