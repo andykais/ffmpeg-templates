@@ -116,7 +116,6 @@ async function probe_clips(template: TemplateParsed): Promise<ClipInfoMap> {
       Math.abs(width * Math.sin(rotation)) + Math.abs(height * Math.cos(rotation)),
       Math.abs(width * Math.cos(rotation)) + Math.abs(height * Math.sin(rotation)),
     ].map(Math.floor)
-    console.log({ rotation, height, width })
 
     let aspect_ratio = width / height
     if (video_stream.display_aspect_ratio) {
@@ -632,7 +631,7 @@ async function render(
   if (options?.overwrite) ffmpeg_cmd.push('-y')
   // console.log(ffmpeg_cmd.join('\n'))
   // replace w/ this when you want to copy the command
-  console.log(ffmpeg_cmd.map(c => `'${c}'`).join(' '))
+  // console.log(ffmpeg_cmd.map(c => `'${c}'`).join(' '))
 
   await ffmpeg(template, ffmpeg_cmd, total_duration, options?.progress_callback)
 

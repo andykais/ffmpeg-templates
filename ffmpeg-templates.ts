@@ -11,9 +11,34 @@ const VERSION = 'v0.1.0'
 const encoder = new TextEncoder()
 const decoder = new TextDecoder()
 
+// TODO DRY this up when fonts are added to clips
+async function create_loading_placeholder_preview(output_path: string) {
+  const proc = Deno.run({
+    cmd: [
+      'magick',
+      '-size',
+      '500x500',
+      'xc:',
+      '-gravity',
+      'Center',
+      '-pointsize',
+      '24',
+      '-annotate',
+      '0',
+      'Loading Preview...',
+      output_path,
+    ],
+  })
+  const result = await proc.status()
+  if (result.code !== 0) {
+    // console.error(await proc.output())
+    throw new Error('Magick exception')
+  }
+  return proc
+}
 function open(filename: string) {
   // TODO handle windows & mac platforms
-  // (or wait for the `open` program to be ported to deno https://github.com/sindresorhus/open/issues)
+  // (or wait for the `open` program to be ported to deno https://github.com/sindresorhus/open/issues/212)
   const proc = Deno.run({ cmd: ['xdg-open', filename] })
   return proc
 }
@@ -79,9 +104,9 @@ async function try_render_video(template_filepath: string, output_filepath: stri
       : await render_video(template_input, output_filepath, copied_options)
     const execution_time_seconds = (performance.now() - execution_start_time) / 1000
 
-    if (args['open']) {
-      // TODO this doesnt work for video renders because deno exits. We need to run a detached process
-      open(output_filepath)
+    if (!args['preview'] && args['open']) {
+      // TODO we cannot open a video renders because deno exits. We need to run a detached process
+      // the deno feature is not shipped yet: https://github.com/denoland/deno/issues/5501
     }
     // prettier-ignore
     console.log(`created ${output_filepath} out of ${num_clips_rendered} clips in ${execution_time_seconds.toFixed(1)} seconds.`)
@@ -141,6 +166,10 @@ if (!args['preview'] && output_filepath_is_image) {
   throw new Error('Invalid commands. <output_filepath> must be an video filename.')
 }
 
+if (args['preview'] && args['open']) {
+  await create_loading_placeholder_preview(output_filepath)
+  open(output_filepath)
+}
 await try_render_video(template_filepath, output_filepath, options)
 
 if (args.watch) {
