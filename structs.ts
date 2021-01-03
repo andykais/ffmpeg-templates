@@ -15,6 +15,11 @@ type Percentage = string
 type Pixels = string
 
 /**
+ * Angle degrees
+ */
+type Degrees = number
+
+/**
  * A hour, minute, second timestamp formatted like so:
  * 00:00:05 or 01:23:02.75
  */
@@ -64,6 +69,8 @@ interface Clip {
     top?: Pixels
     bottom?: Pixels
   }
+
+  rotate?: Degrees
   /**
    * Trim how long a clip lasts, trimming from either the beginning of a clip, or the end.
    * The special value 'fit' will automatically trim a clip the length of the final render

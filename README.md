@@ -131,3 +131,8 @@ complicated tutorials, no hidden settings in a application preferences. Its just
 - [X] support image inputs
 - [ ] support font inputs
 - [X] add timeline variables
+- [X] add rotation clip option
+- [ ] durations should support '00:00:00' and '00:00' and '00' and '0'
+- [ ] zoompan
+  - during previews, arrows should represent where the zoom is going from and going to
+- [ ] create placeholder loading image (from imagemagick) that immediately shows up on preview

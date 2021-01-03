@@ -108,12 +108,15 @@ async function probe_clips(template: TemplateParsed): Promise<ClipInfoMap> {
 
     if (!video_stream) throw new ProbeError(`Input "${clip.file}" has no video stream`)
     const has_audio = audio_stream !== undefined
-    const rotation = video_stream.tags?.rotate ? (parseInt(video_stream.tags?.rotate) * Math.PI) / 180.0 : 0
+    let rotation = video_stream.tags?.rotate ? (parseInt(video_stream.tags?.rotate) * Math.PI) / 180.0 : 0
     let { width, height } = video_stream
+    // this is slightly out of order, but its important because geometry should use the expected width & height
+    if (clip.rotate) rotation += (clip.rotate * Math.PI) / 180.0
     ;[height, width] = [
       Math.abs(width * Math.sin(rotation)) + Math.abs(height * Math.cos(rotation)),
       Math.abs(width * Math.cos(rotation)) + Math.abs(height * Math.sin(rotation)),
     ].map(Math.floor)
+    console.log({ rotation, height, width })
 
     let aspect_ratio = width / height
     if (video_stream.display_aspect_ratio) {
@@ -164,6 +167,7 @@ interface ClipGeometryMap {
     width: number
     height: number
     scale: { width: number; height: number }
+    rotate?: { degrees: number; width: number; height: number }
     crop?: {
       x: number
       y: number
@@ -199,7 +203,25 @@ function compute_geometry(template: TemplateParsed, clip_info_map: ClipInfoMap) 
     let width = input_width ?? (input_height ? input_height * info.aspect_ratio : info.width)
     let height = input_height ?? (input_width ? input_width / info.aspect_ratio : info.height)
 
-    const scale = { width, height }
+    let scale = { width, height }
+    let rotate: ClipGeometryMap['clip-id']['rotate'] = undefined
+    if (clip.rotate) {
+      // we want scaling to happen before rotation because (on average) we scale down, and if we can scale
+      // sooner, then we have less pixels to rotate/crop/etc
+      const unrotate_for_scale = (-clip.rotate * Math.PI) / 180.0
+      const [scale_height, scale_width] = [
+        Math.abs(width * Math.sin(unrotate_for_scale)) + Math.abs(height * Math.cos(unrotate_for_scale)),
+        Math.abs(width * Math.cos(unrotate_for_scale)) + Math.abs(height * Math.sin(unrotate_for_scale)),
+      ].map(Math.floor)
+      scale.width = scale_width
+      scale.height = scale_height
+
+      rotate = {
+        degrees: clip.rotate,
+        width: width,
+        height: height,
+      }
+    }
 
     let crop: ClipGeometryMap[string]['crop']
     if (clip.crop && Object.keys(clip.crop).length) {
@@ -274,7 +296,7 @@ function compute_geometry(template: TemplateParsed, clip_info_map: ClipInfoMap) 
         y = `(main_h / 2) - ${height / 2} + ${y}`
         break
     }
-    clip_geometry_map[clip.id] = { x, y, width, height, scale, crop }
+    clip_geometry_map[clip.id] = { x, y, width, height, scale, rotate, crop }
   }
   return { background_width, background_height, clip_geometry_map }
 }
@@ -473,7 +495,8 @@ async function ffmpeg(
       const [key, value] = line.split('=')
       ;(progress as any)[key] = value
       if (key === 'progress') {
-        progress.percentage = value === 'end' ? 1 : parse_duration(progress.out_time!, template) / longest_duration
+        progress.percentage =
+          value === 'end' ? 1 : parse_duration(progress.out_time!, template) / longest_duration
         progress_callback(progress as FfmpegProgress)
         progress = {}
       }
@@ -535,6 +558,10 @@ async function render(
       start_at === 0 ? `setpts=${pts_speed}PTS-STARTPTS` : `setpts=${pts_speed}PTS+${start_at}/TB`
     const vscale = `scale=${geometry.scale.width}:${geometry.scale.height}`
     const video_input_filters = [setpts, vscale]
+    if (geometry.rotate) {
+      const { degrees, width, height } = geometry.rotate
+      video_input_filters.push(`rotate=${degrees}*PI/180:out_w=${width}:out_h=${height}`)
+    }
     if (geometry.crop) {
       const { crop } = geometry
       video_input_filters.push(`crop=w=${crop.width}:h=${crop.height}:x=${crop.x}:y=${crop.y}:keep_aspect=1`)
