@@ -496,6 +496,8 @@ async function ffmpeg(
       if (key === 'progress') {
         progress.percentage =
           value === 'end' ? 1 : parse_duration(progress.out_time!, template) / longest_duration
+        // sometimes ffmpeg has a negative out_time. I do not know what this means yet
+        if (progress.percentage < 0) progress.percentage = 0
         progress_callback(progress as FfmpegProgress)
         progress = {}
       }
