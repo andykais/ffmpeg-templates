@@ -92,6 +92,7 @@ async function try_render_video(template_filepath: string, output_filepath: stri
     const execution_start_time = performance.now()
     if (args['verbose']) {
       copied_options.ffmpeg_verbosity = 'info'
+    } else if (args['quiet']) {
     } else {
       copied_options.progress_callback = progress => progress_callback(execution_start_time, progress)
     }
@@ -99,7 +100,7 @@ async function try_render_video(template_filepath: string, output_filepath: stri
       throw new Error(`Output file ${output_filepath} exists. Use the --overwrite flag to overwrite it.`)
     }
     const template_input = await read_template(template_filepath)
-    const num_clips_rendered = args['preview']
+    const rendered_clips_count = args['preview']
       ? await render_sample_frame(template_input, output_filepath, copied_options)
       : await render_video(template_input, output_filepath, copied_options)
     const execution_time_seconds = (performance.now() - execution_start_time) / 1000
@@ -109,7 +110,7 @@ async function try_render_video(template_filepath: string, output_filepath: stri
       // the deno feature is not shipped yet: https://github.com/denoland/deno/issues/5501
     }
     // prettier-ignore
-    console.log(`created ${output_filepath} out of ${num_clips_rendered} clips in ${execution_time_seconds.toFixed(1)} seconds.`)
+    console.log(`created ${output_filepath} out of ${rendered_clips_count} clips in ${execution_time_seconds.toFixed(1)} seconds.`)
   } catch (e) {
     if (e instanceof errors.InputError) {
       console.error(e)
@@ -145,6 +146,8 @@ OPTIONS:
 
   --verbose                                 Show ffmpeg logging instead of outputting a progress bar.
 
+  --quiet                                   Do not log anything
+
   --help                                    Print this message.`)
   Deno.exit(args['help'] ? 0 : 1)
 }
@@ -178,12 +181,15 @@ if (args.watch) {
   let lock = false
   for await (const event of Deno.watchFs(template_filepath)) {
     if (event.kind === 'modify' && !lock) {
-      console.log(`template ${template_filepath} was changed. Starting render.`)
       lock = true
-      try_render_video(template_filepath, output_filepath, watch_options).then(() => {
-        lock = false
-        console.log(`watching ${template_filepath} for changes`)
-      })
+      setTimeout(() => {
+        console.log(`template ${template_filepath} was changed. Starting render.`)
+        try_render_video(template_filepath, output_filepath, watch_options).then(() => {
+          lock = false
+          console.log(`watching ${template_filepath} for changes`)
+        })
+        // assume that all file modifications are completed in 50ms
+      }, 50)
     }
   }
 }

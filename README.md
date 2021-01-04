@@ -136,3 +136,18 @@ complicated tutorials, no hidden settings in a application preferences. Its just
 - [ ] zoompan
   - during previews, arrows should represent where the zoom is going from and going to
 - [ ] create placeholder loading image (from imagemagick) that immediately shows up on preview
+- [ ] add warning about unused clips in timeline
+- [ ] report this one as a bug?
+```
+  2s [----------------------------------------------] 0.0%error: Uncaught (in promise) Busy: Resource is unavailable because it is in use by a promise
+    at processResponse (deno:core/core.js:223:11)
+    at Object.jsonOpSync (deno:core/core.js:246:12)
+    at Object.consoleSize (deno:runtime/js/40_tty.js:7:17)
+    at progress_callback (ffmpeg-templates.ts:60:30)
+    at copied_options.progress_callback (ffmpeg-templates.ts:96:54)
+    at ffmpeg (mod.ts:508:9)
+    at async render (mod.ts:645:3)
+    at async render_sample_frame (mod.ts:659:10)
+    at async try_render_video (ffmpeg-templates.ts:103:9)
+```
+- [ ] make `YAMLError`s recoverable
