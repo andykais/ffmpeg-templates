@@ -525,7 +525,7 @@ async function render(
   template_input: Template,
   output_filepath: string,
   options?: RenderOptionsInternal
-): Promise<number> {
+): Promise<{ template: TemplateParsed; rendered_clips_count: number }> {
   const template = parse_template(template_input, options?.cwd ?? Deno.cwd())
 
   const sample_frame = options?.render_sample_frame ? parse_duration(template.preview, template) : undefined
@@ -637,7 +637,7 @@ async function render(
 
   await ffmpeg(template, ffmpeg_cmd, total_duration, options?.progress_callback)
 
-  return input_index
+  return { template, rendered_clips_count: input_index }
 }
 
 async function render_video(template_input: Template, output_filepath: string, options?: RenderOptions) {

@@ -5,7 +5,7 @@ type Seconds = number
 
 function parse_percentage(percentage: string): number {
   if (percentage.endsWith('%')) {
-    const percent = parseInt(percentage.substr(0, percentage.length - 1))
+    const percent = parseFloat(percentage.substr(0, percentage.length - 1))
     if (!Number.isNaN(percent)) {
       return percent / 100
     }

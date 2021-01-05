@@ -100,7 +100,7 @@ async function try_render_video(template_filepath: string, output_filepath: stri
       throw new Error(`Output file ${output_filepath} exists. Use the --overwrite flag to overwrite it.`)
     }
     const template_input = await read_template(template_filepath)
-    const rendered_clips_count = args['preview']
+    const { template, rendered_clips_count } = args['preview']
       ? await render_sample_frame(template_input, output_filepath, copied_options)
       : await render_video(template_input, output_filepath, copied_options)
     const execution_time_seconds = (performance.now() - execution_start_time) / 1000
@@ -109,8 +109,13 @@ async function try_render_video(template_filepath: string, output_filepath: stri
       // TODO we cannot open a video renders because deno exits. We need to run a detached process
       // the deno feature is not shipped yet: https://github.com/denoland/deno/issues/5501
     }
-    // prettier-ignore
-    console.log(`created ${output_filepath} out of ${rendered_clips_count} clips in ${execution_time_seconds.toFixed(1)} seconds.`)
+    if (args['preview']) {
+      // prettier-ignore
+      console.log(`created ${output_filepath} at ${template.preview} out of ${rendered_clips_count} clips in ${execution_time_seconds.toFixed(1)} seconds.`)
+    } else {
+      // prettier-ignore
+      console.log(`created ${output_filepath} out of ${rendered_clips_count} clips in ${execution_time_seconds.toFixed(1)} seconds.`)
+    }
   } catch (e) {
     if (e instanceof errors.InputError) {
       console.error(e)

@@ -151,3 +151,5 @@ complicated tutorials, no hidden settings in a application preferences. Its just
     at async try_render_video (ffmpeg-templates.ts:103:9)
 ```
 - [ ] make `YAMLError`s recoverable
+- [ ] make background color a parameter
+- [ ] add border param
