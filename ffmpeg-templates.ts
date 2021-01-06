@@ -86,7 +86,12 @@ async function read_template(template_filepath: string): Promise<Template> {
   throw new errors.InputError(`template ${template_filepath} is not valid JSON or YAML`)
 }
 
-async function try_render_video(template_filepath: string, output_filepath: string, options: RenderOptions) {
+async function try_render_video(
+  template_filepath: string,
+  output_filepath: string,
+  overwrite: boolean,
+  options: RenderOptions
+) {
   try {
     const copied_options = { ...options }
     const execution_start_time = performance.now()
@@ -96,7 +101,7 @@ async function try_render_video(template_filepath: string, output_filepath: stri
     } else {
       copied_options.progress_callback = progress => progress_callback(execution_start_time, progress)
     }
-    if (!options.overwrite && (await fs.exists(output_filepath))) {
+    if (!overwrite && (await fs.exists(output_filepath))) {
       throw new Error(`Output file ${output_filepath} exists. Use the --overwrite flag to overwrite it.`)
     }
     const template_input = await read_template(template_filepath)
@@ -161,7 +166,6 @@ const positional_args = args._.map(a => a.toString())
 const template_filepath = positional_args[0]
 const output_filepath = positional_args[1] ?? construct_output_filepath(args, template_filepath)
 const options: RenderOptions = {
-  overwrite: Boolean(args['overwrite']),
   ffmpeg_verbosity: 'error',
   cwd: path.resolve(path.dirname(template_filepath)),
 }
@@ -178,10 +182,9 @@ if (args['preview'] && args['open']) {
   await create_loading_placeholder_preview(output_filepath)
   open(output_filepath)
 }
-await try_render_video(template_filepath, output_filepath, options)
+await try_render_video(template_filepath, output_filepath, Boolean(args['overwrite']), options)
 
 if (args.watch) {
-  const watch_options = { ...options, overwrite: true }
   console.log(`watching ${template_filepath} for changes`)
   let lock = false
   for await (const event of Deno.watchFs(template_filepath)) {
@@ -189,7 +192,7 @@ if (args.watch) {
       lock = true
       setTimeout(() => {
         console.log(`template ${template_filepath} was changed. Starting render.`)
-        try_render_video(template_filepath, output_filepath, watch_options).then(() => {
+        try_render_video(template_filepath, output_filepath, true, options).then(() => {
           lock = false
           console.log(`watching ${template_filepath} for changes`)
         })

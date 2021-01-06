@@ -11,18 +11,49 @@ import {
   parse_ffmpeg_packet,
 } from './text_parsers.ts'
 import { TIMELINE_ENUMS } from './structs.ts'
-import type { Pixels, Percentage, Timestamp, ClipID, TimelineEnums, Clip, Template } from './structs.ts'
+import type {
+  Pixels,
+  Percentage,
+  Timestamp,
+  ClipID,
+  TimelineEnums,
+  Clip,
+  MediaClip,
+  FontClip,
+  Template,
+} from './structs.ts'
 
 type Seconds = number
+
 // Parsed Template
+interface MediaClipParsed extends MediaClip {
+  id: ClipID
+  filepath: string
+}
+interface FontClipParsed extends FontClip {
+  id: ClipID
+  color: string
+  font_size: number
+}
+type ClipParsed = MediaClipParsed | FontClipParsed
 interface TemplateParsed extends Template {
   size: NonNullable<Required<Template['size']>>
-  clips: (Clip & { id: ClipID; filepath: string })[]
+  clips: ClipParsed[]
+  // clips: (Clip & { id: ClipID; filepath: string })[]
   timeline: { [start_position: string]: (ClipID | TimelineEnums)[][] }
   preview: NonNullable<Template['preview']>
 }
 
 const decoder = new TextDecoder()
+
+function is_media_clip(clip: Clip): clip is MediaClip
+function is_media_clip(clip: ClipParsed): clip is MediaClipParsed
+function is_media_clip(clip: Clip | ClipParsed): clip is MediaClipParsed | MediaClip {
+  return 'file' in clip
+}
+function is_font_clip(clip: ClipParsed): clip is FontClipParsed {
+  return !is_media_clip(clip)
+}
 
 function parse_template(template_input: Template, cwd: string): TemplateParsed {
   if (template_input.clips.length === 0) {
@@ -33,20 +64,41 @@ function parse_template(template_input: Template, cwd: string): TemplateParsed {
     const clip = template_input.clips[i]
     const id = clip.id ?? `CLIP_${i}`
     if (clips.find(c => c.id === id)) throw new InputError(`Clip id ${id} is defined more than once.`)
-    const filepath = path.resolve(cwd, clip.file)
     if (clip.trim?.stop && clip.trim?.end) {
       throw new InputError('Clip cannot provide both trim.stop and trim.end')
     } else if (clip.trim?.stop && clip.duration) {
       throw new InputError('Clip cannot provide both trim.stop and duration')
     }
-    clips.push({ ...clip, id, filepath })
+
+    if (is_media_clip(clip)) {
+      const filepath = path.resolve(cwd, clip.file)
+      clips.push({ id, filepath, ...clip })
+    } else {
+      // its a font
+      clips.push({ id, color: '#000000', font_size: 12, trim: { end: 'fit' }, ...clip })
+    }
   }
   const timeline = template_input.timeline ?? { '00:00:00': clips.map(clip => [clip.id]) }
-  const default_size: TemplateParsed['size'] = { width: '100%', height: '100%', relative_to: clips[0]?.id }
-  const size = {
-    ...default_size,
-    ...template_input.size,
+
+  const first_media_clip = clips.find(is_media_clip)
+  const is_pixel_unit = { percentage: () => true, pixels: () => false, undefined: () => true }
+  const has_non_pixel_unit =
+    parse_unit(template_input.size?.width, is_pixel_unit) &&
+    parse_unit(template_input.size?.height, is_pixel_unit)
+  const relative_to_clip = clips.find(c => c.id === template_input.size?.relative_to)
+  if (relative_to_clip && !is_media_clip(relative_to_clip)) {
+    throw new InputError(`Cannot specify a font clip as a relative size source`)
+  } else if (has_non_pixel_unit && !first_media_clip) {
+    throw new InputError(`If all clips are font clips, a size must be specified using pixel units.`)
   }
+
+  const default_size = {
+    width: '100%',
+    height: '100%',
+    relative_to: first_media_clip?.id ?? '__NEVER_USED_PLACEHOLDER__',
+  }
+  const size = { ...default_size, ...template_input.size }
+
   const preview = template_input.preview || '00:00:00'
   return { ...template_input, size, clips, timeline, preview }
 }
@@ -72,6 +124,8 @@ async function exec(cmd: string[], readline_cb?: OnReadLine) {
 
 interface ClipInfoMap {
   [clip_id: string]: {
+    id: string
+    filepath: string
     width: number
     height: number
     aspect_ratio: number
@@ -87,68 +141,73 @@ interface ClipInfoMap {
 // This is fair enough since its how most video editors function (and how often are people manipulating source files?)
 const clip_info_map_cache: ClipInfoMap = {}
 async function probe_clips(template: TemplateParsed): Promise<ClipInfoMap> {
-  const probe_clips_promises = template.clips.map(async clip => {
-    if (clip_info_map_cache[clip.filepath]) return clip_info_map_cache[clip.filepath]
-    console.log(`Probing file ${clip.file}`)
-    const result = await exec([
-      'ffprobe',
-      '-v',
-      'error',
-      '-print_format',
-      'json',
-      '-show_streams',
-      '-show_entries',
-      'stream=width,height,display_aspect_ratio,codec_type,codec_name:stream_tags=rotate',
-      // 'format=duration',
-      clip.filepath,
-    ])
-    const info = JSON.parse(result)
-    const video_stream = info.streams.find((s: any) => s.codec_type === 'video')
-    const audio_stream = info.streams.find((s: any) => s.codec_type === 'audio')
+  const probe_clips_promises = template.clips
+    // only probe media clips
+    .filter(is_media_clip)
+    .map(async (clip: MediaClipParsed) => {
+      const { id, filepath } = clip
+      if (clip_info_map_cache[filepath]) return clip_info_map_cache[filepath]
+      console.log(`Probing file ${clip.file}`)
+      const result = await exec([
+        'ffprobe',
+        '-v',
+        'error',
+        '-print_format',
+        'json',
+        '-show_streams',
+        '-show_entries',
+        'stream=width,height,display_aspect_ratio,codec_type,codec_name:stream_tags=rotate',
+        // 'format=duration',
+        filepath,
+      ])
+      const info = JSON.parse(result)
+      const video_stream = info.streams.find((s: any) => s.codec_type === 'video')
+      const audio_stream = info.streams.find((s: any) => s.codec_type === 'audio')
 
-    if (!video_stream) throw new ProbeError(`Input "${clip.file}" has no video stream`)
-    const has_audio = audio_stream !== undefined
-    let rotation = video_stream.tags?.rotate ? (parseInt(video_stream.tags?.rotate) * Math.PI) / 180.0 : 0
-    let { width, height } = video_stream
-    // this is slightly out of order, but its important because geometry should use the expected width & height
-    if (clip.rotate) rotation += (clip.rotate * Math.PI) / 180.0
-    ;[height, width] = [
-      Math.abs(width * Math.sin(rotation)) + Math.abs(height * Math.cos(rotation)),
-      Math.abs(width * Math.cos(rotation)) + Math.abs(height * Math.sin(rotation)),
-    ].map(Math.floor)
+      if (!video_stream) throw new ProbeError(`Input "${clip.file}" has no video stream`)
+      const has_audio = audio_stream !== undefined
+      let rotation = video_stream.tags?.rotate ? (parseInt(video_stream.tags?.rotate) * Math.PI) / 180.0 : 0
+      let { width, height } = video_stream
+      // this is slightly out of order, but its important because geometry should use the expected width & height
+      if (clip.rotate) rotation += (clip.rotate * Math.PI) / 180.0
+      ;[height, width] = [
+        Math.abs(width * Math.sin(rotation)) + Math.abs(height * Math.cos(rotation)),
+        Math.abs(width * Math.cos(rotation)) + Math.abs(height * Math.sin(rotation)),
+      ].map(Math.floor)
 
-    let aspect_ratio = width / height
-    if (video_stream.display_aspect_ratio) {
-      aspect_ratio = parse_aspect_ratio(video_stream.display_aspect_ratio, rotation)
-    }
-
-    if (['mjpeg', 'jpeg', 'jpg', 'png'].includes(video_stream.codec_name)) {
-      if (!clip.duration) throw new InputError(`Cannot specify image clip ${clip.file} without a duration`)
-      const duration = parse_duration(clip.duration, template)
-      if (clip.trim) {
-        throw new InputError(`Cannot use 'trim' with an image clip`)
+      let aspect_ratio = width / height
+      if (video_stream.display_aspect_ratio) {
+        aspect_ratio = parse_aspect_ratio(video_stream.display_aspect_ratio, rotation)
       }
-      return { type: 'image' as const, width, height, aspect_ratio, has_audio, duration }
-    } else {
-      // ffprobe's duration is unreliable. The best solutions I have are:
-      // 1. ffmpeg guessing: https://stackoverflow.com/a/33115316/3795137
-      // 2. ffprobe packets: https://stackoverflow.com/a/33346572/3795137 but this is a ton of output, so were using ffmpeg
-      // I picked #2 because #1 is very slow to complete, it has to iterate the whole video, often at regular playback speed
-      let packet_str_buffer: string[] = []
-      const out = await exec(['ffprobe', '-v', 'error', '-show_packets', '-i', clip.filepath], line => {
-        if (line === '[PACKET]') packet_str_buffer = []
-        packet_str_buffer.push(line)
-      })
-      const packet = parse_ffmpeg_packet(packet_str_buffer)
-      const duration = parseFloat(packet.dts_time)
-      return { type: 'video' as const, width, height, aspect_ratio, has_audio, duration }
-    }
-  })
+
+      if (['mjpeg', 'jpeg', 'jpg', 'png'].includes(video_stream.codec_name)) {
+        if (!clip.duration) throw new InputError(`Cannot specify image clip ${clip.file} without a duration`)
+        const duration = parse_duration(clip.duration, template)
+        if (clip.trim) {
+          throw new InputError(`Cannot use 'trim' with an image clip`)
+        }
+        return { type: 'image' as const, filepath, id, width, height, aspect_ratio, has_audio, duration }
+      } else {
+        // ffprobe's duration is unreliable. The best solutions I have are:
+        // 1. ffmpeg guessing: https://stackoverflow.com/a/33115316/3795137
+        // 2. ffprobe packets: https://stackoverflow.com/a/33346572/3795137 but this is a ton of output, so were using ffmpeg
+        // I picked #2 because #1 is very slow to complete, it has to iterate the whole video, often at regular playback speed
+        let packet_str_buffer: string[] = []
+        const out = await exec(['ffprobe', '-v', 'error', '-show_packets', '-i', filepath], line => {
+          if (line === '[PACKET]') packet_str_buffer = []
+          packet_str_buffer.push(line)
+        })
+        const packet = parse_ffmpeg_packet(packet_str_buffer)
+        const duration = parseFloat(packet.dts_time)
+        return { type: 'video' as const, filepath, id, width, height, aspect_ratio, has_audio, duration }
+      }
+    })
 
   const probed_clips = await Promise.all(probe_clips_promises)
   return probed_clips.reduce((acc: ClipInfoMap, clip_info, i) => {
-    clip_info_map_cache[template.clips[i].filepath] = clip_info
-    acc[template.clips[i].id] = clip_info
+    const { id, filepath } = clip_info
+    clip_info_map_cache[clip_info.filepath] = clip_info
+    acc[clip_info.id] = clip_info
     return acc
   }, {})
 }
@@ -184,10 +243,16 @@ function compute_geometry(template: TemplateParsed, clip_info_map: ClipInfoMap) 
   const background_height = parse_unit(size.height, {
     percentage: p => Math.floor(p * get_clip(clip_info_map, size.relative_to).height),
   })
+  // font clips need some 'fake' backup data
+  const surrogate_font_info = {
+    width: background_width,
+    height: background_height,
+    aspect_ratio: background_width / background_height,
+  }
 
   const clip_geometry_map: ClipGeometryMap = {}
   for (const clip of template.clips) {
-    const info = get_clip(clip_info_map, clip.id)
+    const info = is_media_clip(clip) ? get_clip(clip_info_map, clip.id) : surrogate_font_info
     const { layout } = clip
 
     const input_width = parse_unit(layout?.width, {
@@ -323,6 +388,10 @@ function compute_timeline(template: TemplateParsed, clip_info_map: ClipInfoMap) 
     )
   )
 
+  // fonts need a backup info duration. This means that if only fonts are specified without duration
+  // they will create an output of zero length
+  const surrogate_font_info = { duration: 0 }
+
   function calculate_layer_duration(layer: ClipID[], index: number, skip_trim_fit: boolean) {
     let layer_duration = 0
     for (const clip_index of layer.keys()) {
@@ -332,8 +401,9 @@ function compute_timeline(template: TemplateParsed, clip_info_map: ClipInfoMap) 
       // PAD does nothing while calculating longest duration
       if (clip_id === TIMELINE_ENUMS.PAD) continue
 
-      const info = get_clip(clip_info_map, clip_id)
       const clip = template.clips.find(c => c.id === clip_id)!
+      const info = is_media_clip(clip) ? get_clip(clip_info_map, clip_id) : surrogate_font_info
+
       const { trim } = clip
 
       let clip_duration = info.duration
@@ -355,7 +425,7 @@ function compute_timeline(template: TemplateParsed, clip_info_map: ClipInfoMap) 
       }
       if (clip.duration) {
         const manual_duration = parse_duration(clip.duration, template)
-        if (manual_duration > clip_duration)
+        if (is_media_clip(clip) && manual_duration > clip_duration)
           throw new InputError(
             `Clip ${clip_id}'s duration (including trimmings) cannot be shorter than the specified duration.`
           )
@@ -382,6 +452,11 @@ function compute_timeline(template: TemplateParsed, clip_info_map: ClipInfoMap) 
     }
   }
   const total_duration = all_clips_trim_to_fit ? shortest_duration : longest_duration
+  if (total_duration === 0) {
+    throw new InputError(
+      'Output duration cannot be zero. If all clips are font clips, at least one must specify a duration.'
+    )
+  }
 
   const layer_ordered_clips: TimelineClip[][] = []
   for (const start_position of Object.keys(timeline)) {
@@ -397,8 +472,8 @@ function compute_timeline(template: TemplateParsed, clip_info_map: ClipInfoMap) 
           const seconds_until_complete = total_duration - (layer_start_position + remaining_duration)
           if (math.gt(seconds_until_complete, 0)) layer_start_position += seconds_until_complete
         } else {
-          const info = get_clip(clip_info_map, clip_id)
           const clip = template.clips.find(c => c.id === clip_id)!
+          const info = is_media_clip(clip) ? get_clip(clip_info_map, clip_id) : surrogate_font_info
           const { trim } = clip
           let clip_duration = info.duration
           const speed = clip.speed ? parse_percentage(clip.speed) : 1
@@ -472,6 +547,76 @@ function compute_tempo(val: number) {
   return Array(numMultipliers).fill(`atempo=${multVal}`).join(',')
 }
 
+// generate font assets and replace font clips with media clips
+async function replace_font_clips_with_image_clips(
+  template: TemplateParsed,
+  clip_info_map: ClipInfoMap,
+  clip_geometry_map: ClipGeometryMap,
+  cwd: string
+): Promise<MediaClipParsed[]> {
+  const font_clips: FontClipParsed[] = template.clips.filter(is_font_clip)
+  const font_assets_path = path.join('/tmp', cwd, `font_assets/`)
+  if (font_clips.length) await Deno.mkdir(font_assets_path, { recursive: true })
+
+  const font_generation_promises: Promise<MediaClipParsed>[] = font_clips.map(
+    async (clip: FontClipParsed) => {
+      const geometry = clip_geometry_map[clip.id]
+      const filepath = path.join(font_assets_path, `${clip.id}.png`)
+      const font_args = []
+      if (clip.font) font_args.push('-font', clip.font)
+      const magick_command = [
+        'magick',
+        '-size',
+        `${geometry.width}x${geometry.height}`,
+        'xc:none',
+        '-pointsize',
+        `${clip.font_size}`,
+        '-gravity',
+        'Center',
+        '-fill',
+        clip.color,
+        ...font_args,
+        '-annotate',
+        '0',
+        clip.text,
+      ]
+      magick_command.push(filepath)
+      const proc = Deno.run({ cmd: magick_command })
+      const result = await proc.status()
+      if (!result.success) {
+        throw new CommandError(`Command "${magick_command.join(' ')}" failed.\n\n`)
+      }
+      const { text, font_size, color, ...base_clip_params } = clip
+      return { ...base_clip_params, filepath, file: filepath, audio_volume: 0 }
+    }
+  )
+
+  const font_media_clips = await Promise.all(font_generation_promises)
+  for (const clip of font_media_clips) {
+    // add some dummy data for the final steps (NaN fields are unused)
+    clip_info_map[clip.id] = {
+      id: clip.id,
+      filepath: clip.filepath,
+      has_audio: false,
+      type: 'image' as const,
+      width: NaN,
+      height: NaN,
+      aspect_ratio: NaN,
+      duration: NaN,
+    }
+  }
+  const clips: MediaClipParsed[] = template.clips.map(clip => {
+    if (is_media_clip(clip)) return clip
+    else {
+      const res = font_media_clips.find(c => clip.id === c.id)!
+      if (res) return res
+      else throw new Error('fatal error. Expected font clip but none found')
+    }
+  })
+
+  return clips
+}
+
 type FfmpegProgress = {
   out_time: Timestamp
   progress: 'continue' | 'end'
@@ -513,7 +658,6 @@ async function ffmpeg(
 }
 
 interface RenderOptions {
-  overwrite?: boolean
   ffmpeg_verbosity?: 'quiet' | 'error' | 'warning' | 'info' | 'debug'
   progress_callback?: OnProgress
   cwd?: string
@@ -526,12 +670,19 @@ async function render(
   output_filepath: string,
   options?: RenderOptionsInternal
 ): Promise<{ template: TemplateParsed; rendered_clips_count: number }> {
-  const template = parse_template(template_input, options?.cwd ?? Deno.cwd())
+  const cwd = options?.cwd ?? Deno.cwd()
+  const template = parse_template(template_input, cwd)
 
   const sample_frame = options?.render_sample_frame ? parse_duration(template.preview, template) : undefined
 
   const clip_info_map = await probe_clips(template)
   const { background_width, background_height, clip_geometry_map } = compute_geometry(template, clip_info_map)
+  const clips: MediaClipParsed[] = await replace_font_clips_with_image_clips(
+    template,
+    clip_info_map,
+    clip_geometry_map,
+    cwd
+  )
   const { timeline, total_duration } = compute_timeline(template, clip_info_map)
 
   const complex_filter_inputs = [
@@ -550,7 +701,7 @@ async function render(
     if (options?.render_sample_frame && !(start_at <= sample_frame! && start_at + duration >= sample_frame!))
       continue
 
-    const clip = template.clips.find(c => c.id === clip_id)!
+    const clip = clips.find(c => c.id === clip_id)!
     const info = clip_info_map[clip_id]
     const geometry = clip_geometry_map[clip_id]
 
@@ -630,7 +781,9 @@ async function render(
   ffmpeg_cmd.push(...map_audio_arg)
   // ffmpeg_cmd.push('-segment_time', '00:00:05', '-f', 'segment', 'output%03d.mp4')
   ffmpeg_cmd.push(output_filepath)
-  if (options?.overwrite) ffmpeg_cmd.push('-y')
+  // overwriting output files is handled in ffmpeg-templates.ts
+  // We can just assume by this point the user is sure they want to write to this file
+  ffmpeg_cmd.push('-y')
   // console.log(ffmpeg_cmd.join('\n'))
   // replace w/ this when you want to copy the command
   // console.log(ffmpeg_cmd.map(c => `'${c}'`).join(' '))
@@ -664,5 +817,4 @@ export type {
   TimelineEnums,
   RenderOptions,
   FfmpegProgress,
-  // Seconds,
 }

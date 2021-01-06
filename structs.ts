@@ -44,13 +44,9 @@ type ClipID = string
  */
 type TimelineEnums = typeof TIMELINE_ENUMS[keyof typeof TIMELINE_ENUMS]
 
-interface Clip {
+interface ClipBase {
   /** Defaults to CLIP_<index> */
   id?: ClipID
-  /** File path to the clip. If it is a relative path, it will be relative to the location of the template file */
-  file: string
-  /** Audio volume of the clip, this number is relative to the other clip's audio_volume values. Defaults to 1. */
-  audio_volume: number
   /**
    * Layout defines the geometry of a clip in the final render. E.g. its size and location
    * X and Y offsets are relative to their alignment, they can be positive or negative.
@@ -82,6 +78,29 @@ interface Clip {
   speed: Percentage
 }
 
+interface MediaClip extends ClipBase {
+  /** File path to the clip. If it is a relative path, it will be relative to the location of the template file */
+  file: string
+  /** Audio volume of the clip, this number is relative to the other clip's audio_volume values. Defaults to 1. */
+  audio_volume: number
+}
+
+interface FontClip extends ClipBase {
+  /** Text to be displayed */
+  text: string
+
+  /** Hex color code for font (default is #00000) */
+  color?: string
+
+  /** Font size (default is 12) */
+  font_size?: number
+
+  /** File path to a ttf file for the font */
+  font: string
+}
+
+type Clip = MediaClip | FontClip
+
 interface Template {
   /**
    * defaults to { width: '100%', height: '100%', relative_to: 'CLIP_0' }
@@ -109,4 +128,4 @@ interface Template {
 }
 
 export { TIMELINE_ENUMS }
-export type { Percentage, Pixels, Timestamp, ClipID, TimelineEnums, Clip, Template }
+export type { Percentage, Pixels, Timestamp, ClipID, TimelineEnums, MediaClip, FontClip, Clip, Template }
