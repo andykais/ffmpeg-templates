@@ -106,23 +106,29 @@ interface FontClip extends ClipBase {
   /** Text to be displayed */
   text: string
 
-  /** Hex color code for font (default is #00000) */
-  font_color?: HexColor
+  /** Text specific properties */
+  font?: {
+    /** Hex color code for font (default is #00000) */
+    color?: HexColor
 
-  /** Hex color code for font outline (default is #000000) */
-  font_outline_color?: HexColor
+    /** Hex color code for font outline (default is #000000) */
+    outline_color?: HexColor
 
-  /** Text outline size (default is zero) */
-  font_outline_size?: number
+    /** Text outline size (default is zero) */
+    outline_size?: number
 
-  /** Font size (default is 12) */
-  font_size?: number
+    /** Font size (default is 12) */
+    size?: number
 
-  /** File path to a ttf file for the font */
-  font: string
+    /** File path to a ttf or otf file for the font */
+    family?: string
 
-  /** Font background color (default is none) */
-  font_background?: HexColor
+    /** Font background color (default is none) */
+    background_color?: HexColor
+
+    /** Line spacing, how far apart lines should be spaced. (default is none) */
+    line_spacing?: number
+  }
 }
 
 type Clip = MediaClip | FontClip

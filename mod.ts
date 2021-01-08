@@ -31,11 +31,15 @@ interface MediaClipParsed extends MediaClip {
   id: ClipID
   filepath: string
 }
+type Font = NonNullable<FontClip['font']>
+interface FontParsed extends Font {
+  color: string
+  outline_color: string
+  size: number
+}
 interface FontClipParsed extends FontClip {
   id: ClipID
-  font_color: string
-  font_outline_color: string
-  font_size: number
+  font: FontParsed
 }
 type ClipParsed = MediaClipParsed | FontClipParsed
 interface TemplateParsed extends Template {
@@ -79,10 +83,13 @@ function parse_template(template_input: Template, cwd: string): TemplateParsed {
       // its a font
       clips.push({
         id,
-        font_color: 'white',
-        font_size: 12,
-        font_outline_color: 'black',
         ...clip,
+        font: {
+          color: 'white',
+          size: 12,
+          outline_color: 'black',
+          ...clip.font,
+        },
       })
     }
   }
@@ -444,7 +451,7 @@ function compute_timeline(template: TemplateParsed, clip_info_map: ClipInfoMap) 
 
       if (trim?.start === 'fit') {
       } else if (trim?.start) {
-        clip_duration -= parse_duration(trim.start, template)
+        if (!trim.stop_at_output) clip_duration -= parse_duration(trim.start, template)
       }
       if (trim?.end === 'fit') {
       } else if (trim?.end) clip_duration -= parse_duration(trim.end, template)
@@ -533,7 +540,7 @@ function compute_timeline(template: TemplateParsed, clip_info_map: ClipInfoMap) 
           }
           if (trim?.start && trim?.start !== 'fit') {
             trim_start = parse_duration(trim.start, template)
-            clip_duration -= trim_start
+            if (!trim.stop_at_output) clip_duration -= trim_start
           }
 
           if (trim?.end === 'fit') {
@@ -649,28 +656,31 @@ async function replace_font_clips_with_image_clips(
         '-background',
         'none',
         '-pointsize',
-        clip.font_size.toString(),
+        clip.font.size.toString(),
         // TODO make tiktok text with this
         // '-undercolor','red',
         '-gravity',
         'Center',
       ]
-      if (clip.font) magick_command.push('-font', clip.font)
-      if (clip.font_background) magick_command.push('-undercolor', clip.font_background)
-      if (clip.font_outline_size) {
+      if (clip.font.line_spacing) magick_command.push('-interline-spacing', clip.font.line_spacing.toString())
+      if (clip.font.family) magick_command.push('-font', clip.font.family)
+      if (clip.font.background_color) magick_command.push('-undercolor', clip.font.background_color)
+      if (clip.font.outline_size) {
         magick_command.push(...size_args)
-        magick_command.push('-strokewidth', clip.font_outline_size.toString())
-        magick_command.push('-stroke', clip.font_outline_color)
+        magick_command.push('-strokewidth', clip.font.outline_size.toString())
+        magick_command.push('-stroke', clip.font.outline_color)
         magick_command.push(`${text_type}:${clip.text}`)
       }
       magick_command.push(...size_args)
-      magick_command.push('-fill', clip.font_color)
+      magick_command.push('-fill', clip.font.color)
       magick_command.push('-stroke', 'none')
       magick_command.push(`${text_type}:${clip.text}`)
-      if (clip.font_outline_size) {
+      if (clip.font.outline_size) {
         magick_command.push('-compose', 'over', '-composite')
       }
-      magick_command.push('-trim', '+repage')
+      // TODO is this unnecessary? It effs with the width and point sizes (since we scale to the specified size)
+      // if we do need to re-enable this, we will need a font-specific width param
+      // magick_command.push('-trim', '+repage')
       magick_command.push(filepath)
 
       const proc = Deno.run({ cmd: magick_command })
@@ -680,7 +690,7 @@ async function replace_font_clips_with_image_clips(
       } else if (!(await fs.exists(filepath))) {
         throw new CommandError(`Command "${magick_command.join(' ')}" failed. No image was produced.\n\n`)
       }
-      const { text, font_size, font_color, ...base_clip_params } = clip
+      const { text, font, ...base_clip_params } = clip
       return { ...base_clip_params, filepath, file: filename, audio_volume: 0 }
     }
   )
@@ -883,7 +893,7 @@ async function render(
   // overwriting output files is handled in ffmpeg-templates.ts
   // We can just assume by this point the user is sure they want to write to this file
   ffmpeg_cmd.push('-y')
-  // console.log(ffmpeg_cmd.join('\n'))
+  console.log(ffmpeg_cmd.join('\n'))
   // replace w/ this when you want to copy the command
   // console.log(ffmpeg_cmd.map(c => `'${c}'`).join(' '))
 

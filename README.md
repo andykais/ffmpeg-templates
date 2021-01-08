@@ -158,7 +158,11 @@ complicated tutorials, no hidden settings in a application preferences. Its just
     - [X] cross fade
     - [ ] screen wipe?
 - [ ] crop width/height percentage instead of left vs right?
-- [ ] input error on crop <= 0
+- [ ] input error on `crop <= 0`
 - cache some of the font asset creation work
 - add `-pix_fmt yuv420p` to get better compatability
 - trim.stop_total where stop is performed against _total_ time.
+- when showing preview, hint with the next keyframe (not really helpful actually)
+- cancel previous render when file is changed
+- improve preview time by seeking inputs right to the desired frame. Unsure if there are implications, but it
+    should work!
