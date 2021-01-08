@@ -108,10 +108,10 @@ interface FontClip extends ClipBase {
 
   /** Text specific properties */
   font?: {
-    /** Hex color code for font (default is #00000) */
+    /** Hex color code for text (default is #00000) */
     color?: HexColor
 
-    /** Hex color code for font outline (default is #000000) */
+    /** Hex color code for text outline (default is #000000) */
     outline_color?: HexColor
 
     /** Text outline size (default is zero) */
@@ -123,11 +123,14 @@ interface FontClip extends ClipBase {
     /** File path to a ttf or otf file for the font */
     family?: string
 
-    /** Font background color (default is none) */
-    background_color?: HexColor
-
     /** Line spacing, how far apart lines should be spaced. (default is none) */
     line_spacing?: number
+
+    /** Round the background shape (defaults to zero, no rounding) */
+    background_radius?: number
+
+    /** Text background color (default is none) */
+    background_color?: HexColor
   }
 }
 

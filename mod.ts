@@ -36,6 +36,7 @@ interface FontParsed extends Font {
   color: string
   outline_color: string
   size: number
+  background_radius: number
 }
 interface FontClipParsed extends FontClip {
   id: ClipID
@@ -88,6 +89,7 @@ function parse_template(template_input: Template, cwd: string): TemplateParsed {
           color: 'white',
           size: 12,
           outline_color: 'black',
+          background_radius: 4.3,
           ...clip.font,
         },
       })
@@ -610,6 +612,8 @@ function compute_tempo(val: number) {
   return Array(numMultipliers).fill(`atempo=${multVal}`).join(',')
 }
 
+
+// const font_asset_cache_map: {[json_key: string]: } = {}
 // generate font assets and replace font clips with media clips
 async function replace_font_clips_with_image_clips(
   template: TemplateParsed,
@@ -657,8 +661,6 @@ async function replace_font_clips_with_image_clips(
         'none',
         '-pointsize',
         clip.font.size.toString(),
-        // TODO make tiktok text with this
-        // '-undercolor','red',
         '-gravity',
         'Center',
       ]
@@ -678,10 +680,28 @@ async function replace_font_clips_with_image_clips(
       if (clip.font.outline_size) {
         magick_command.push('-compose', 'over', '-composite')
       }
+      if (clip.font.background_color) {
+        magick_command.push(
+          '-bordercolor',
+          'none',
+          '-border',
+          '12',
+          '(',
+          '+clone',
+          '-morphology',
+          'dilate',
+          `disk:${clip.font.background_radius}`,
+          ')',
+          '+swap',
+          '-composite'
+        )
+        // +swap -composite
+      }
       // TODO is this unnecessary? It effs with the width and point sizes (since we scale to the specified size)
       // if we do need to re-enable this, we will need a font-specific width param
       // magick_command.push('-trim', '+repage')
       magick_command.push(filepath)
+      // console.log(magick_command.join(' '))
 
       const proc = Deno.run({ cmd: magick_command })
       const result = await proc.status()
@@ -893,7 +913,7 @@ async function render(
   // overwriting output files is handled in ffmpeg-templates.ts
   // We can just assume by this point the user is sure they want to write to this file
   ffmpeg_cmd.push('-y')
-  console.log(ffmpeg_cmd.join('\n'))
+  // console.log(ffmpeg_cmd.join('\n'))
   // replace w/ this when you want to copy the command
   // console.log(ffmpeg_cmd.map(c => `'${c}'`).join(' '))
 
