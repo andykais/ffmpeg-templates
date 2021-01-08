@@ -403,11 +403,18 @@ function compute_timeline(template: TemplateParsed, clip_info_map: ClipInfoMap) 
     )
   )
 
-  function calculate_layer_duration(layer: ClipID[], index: number, skip_trim_fit: boolean) {
+  function calculate_layer_duration(
+    layer_start_position: number,
+    layer: ClipID[],
+    index: number,
+    skip_trim_fit: boolean
+  ) {
     let layer_duration = 0
     for (const clip_index of layer.keys()) {
       // start at the specified index
       if (clip_index < index) continue
+      if (clip_index > 0) layer_duration += 0.001
+
       const clip_id = layer[clip_index]
       // PAD does nothing while calculating longest duration
       if (clip_id === TIMELINE_ENUMS.PAD) continue
@@ -418,13 +425,22 @@ function compute_timeline(template: TemplateParsed, clip_info_map: ClipInfoMap) 
       const info = get_clip(clip_info_map, clip_id)
       let clip_duration = info.duration
 
+      const { trim } = clip
+
+      if (trim?.stop_at_output) {
+        const clip_start_position = layer_start_position + layer_duration
+        clip_duration = parse_duration(trim.stop_at_output, template) - clip_start_position
+      }
+
       if (Number.isNaN(clip_duration)) {
         if (clip.duration) clip_duration = parse_duration(clip.duration, template)
         // Images and Fonts have no file duration, so if a manual duration isnt specified, they do nothing
         else continue
       }
 
-      const { trim } = clip
+      if (Object.keys(trim || {}).filter(k => ['end', 'stop', 'stop_at_output'].includes(k)).length > 1) {
+        throw new InputError(`'end', 'stop', and 'stop_at_output' are mutually exclusive.`)
+      }
 
       if (trim?.start === 'fit') {
       } else if (trim?.start) {
@@ -464,7 +480,7 @@ function compute_timeline(template: TemplateParsed, clip_info_map: ClipInfoMap) 
     for (const clips of Object.values(timeline[start_position])) {
       let layer_duration = start_position_seconds
 
-      layer_duration += calculate_layer_duration(clips, 0, all_clips_trim_to_fit)
+      layer_duration += calculate_layer_duration(start_position_seconds, clips, 0, all_clips_trim_to_fit)
       longest_duration = Math.max(longest_duration, layer_duration)
       shortest_duration = Math.min(shortest_duration, layer_duration)
     }
@@ -484,9 +500,15 @@ function compute_timeline(template: TemplateParsed, clip_info_map: ClipInfoMap) 
 
       let layer_start_position = start_position_seconds
       for (const clip_index of clips.keys()) {
+        if (clip_index > 0) layer_start_position += 0.001
         const clip_id = clips[clip_index]
         if (clip_id === TIMELINE_ENUMS.PAD) {
-          const remaining_duration = calculate_layer_duration(clips, clip_index + 1, true)
+          const remaining_duration = calculate_layer_duration(
+            layer_start_position,
+            clips,
+            clip_index + 1,
+            true
+          )
           const seconds_until_complete = total_duration - (layer_start_position + remaining_duration)
           if (math.gt(seconds_until_complete, 0)) layer_start_position += seconds_until_complete
         } else {
@@ -498,6 +520,11 @@ function compute_timeline(template: TemplateParsed, clip_info_map: ClipInfoMap) 
           const speed = clip.speed ? parse_percentage(clip.speed) : 1
           clip_duration *= 1 / speed
           let trim_start = 0
+
+          if (trim?.stop_at_output) {
+            const clip_start_position = layer_start_position
+            clip_duration = parse_duration(trim.stop_at_output, template) - clip_start_position
+          }
           if (trim?.end && trim?.end !== 'fit') {
             clip_duration -= parse_duration(trim.end, template)
           }
@@ -510,7 +537,12 @@ function compute_timeline(template: TemplateParsed, clip_info_map: ClipInfoMap) 
           }
 
           if (trim?.end === 'fit') {
-            const remaining_duration = calculate_layer_duration(clips, clip_index + 1, true)
+            const remaining_duration = calculate_layer_duration(
+              layer_start_position,
+              clips,
+              clip_index + 1,
+              true
+            )
             const seconds_until_complete =
               layer_start_position + clip_duration + remaining_duration - total_duration
             // sometimes we will just skip the clip entirely if theres no room
@@ -521,7 +553,12 @@ function compute_timeline(template: TemplateParsed, clip_info_map: ClipInfoMap) 
           if (trim?.start === 'fit' && trim?.end === 'fit') {
             // do nothing, because we already trimmed the end to fit
           } else if (trim?.start === 'fit') {
-            const remaining_duration = calculate_layer_duration(clips, clip_index + 1, true)
+            const remaining_duration = calculate_layer_duration(
+              layer_start_position,
+              clips,
+              clip_index + 1,
+              true
+            )
             const seconds_until_complete =
               layer_start_position + clip_duration + remaining_duration - total_duration
             // sometimes we will just skip the clip entirely if theres no room
@@ -619,6 +656,7 @@ async function replace_font_clips_with_image_clips(
         'Center',
       ]
       if (clip.font) magick_command.push('-font', clip.font)
+      if (clip.font_background) magick_command.push('-undercolor', clip.font_background)
       if (clip.font_outline_size) {
         magick_command.push(...size_args)
         magick_command.push('-strokewidth', clip.font_outline_size.toString())
@@ -629,7 +667,9 @@ async function replace_font_clips_with_image_clips(
       magick_command.push('-fill', clip.font_color)
       magick_command.push('-stroke', 'none')
       magick_command.push(`${text_type}:${clip.text}`)
-      magick_command.push('-compose', 'over', '-composite')
+      if (clip.font_outline_size) {
+        magick_command.push('-compose', 'over', '-composite')
+      }
       magick_command.push('-trim', '+repage')
       magick_command.push(filepath)
 
@@ -792,7 +832,7 @@ async function render(
       audio_input_ids.push(`[a_in_${input_index}]`)
     }
     if (info.type === 'image') {
-      ffmpeg_cmd.push('-framerate', 30, '-loop', 1, '-t', duration, '-i', clip.filepath)
+      ffmpeg_cmd.push('-framerate', 60, '-loop', 1, '-t', duration, '-i', clip.filepath)
     } else if (info.type === 'video') {
       ffmpeg_cmd.push('-ss', trim_start, '-t', duration, '-i', clip.filepath)
     } else if (info.type === 'audio') {

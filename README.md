@@ -157,3 +157,8 @@ complicated tutorials, no hidden settings in a application preferences. Its just
 - [X] add transitions
     - [X] cross fade
     - [ ] screen wipe?
+- [ ] crop width/height percentage instead of left vs right?
+- [ ] input error on crop <= 0
+- cache some of the font asset creation work
+- add `-pix_fmt yuv420p` to get better compatability
+- trim.stop_total where stop is performed against _total_ time.

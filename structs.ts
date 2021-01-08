@@ -76,8 +76,17 @@ interface ClipBase {
   /**
    * Trim how long a clip lasts, trimming from either the beginning of a clip, or the end.
    * The special value 'fit' will automatically trim a clip the length of the final render
+   * Note that 'end', 'stop', and 'stop_at_output' are mutually exclusive
    */
-  trim?: { start?: 'fit' | Timestamp; end?: 'fit' | Timestamp; stop?: Timestamp }
+  trim?: {
+    /** Trim the start of a clip */
+    start?: 'fit' | Timestamp
+    /** Trim the end of a clip (subtract from the end) */
+    end?: 'fit' | Timestamp
+    /** Trim at to a specific time in the clip */
+    stop?: Timestamp
+    /** Trim at to a specific time in the output */
+    stop_at_output?: Timestamp }
   /** Specify the length of a clip exactly */
   duration?: Timestamp
   /** Increase or decrease the playback speed */
@@ -111,6 +120,9 @@ interface FontClip extends ClipBase {
 
   /** File path to a ttf file for the font */
   font: string
+
+  /** Font background color (default is none) */
+  font_background?: HexColor
 }
 
 type Clip = MediaClip | FontClip
