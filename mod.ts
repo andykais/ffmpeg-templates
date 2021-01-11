@@ -30,6 +30,7 @@ type Seconds = number
 interface MediaClipParsed extends MediaClip {
   id: ClipID
   filepath: string
+  source_clip: MediaClip | FontClip
 }
 type Font = NonNullable<FontClip['font']>
 interface FontParsed extends Font {
@@ -41,6 +42,7 @@ interface FontParsed extends Font {
 interface FontClipParsed extends FontClip {
   id: ClipID
   font: FontParsed
+  source_clip: FontClip
 }
 type ClipParsed = MediaClipParsed | FontClipParsed
 interface TemplateParsed extends Template {
@@ -79,7 +81,7 @@ function parse_template(template_input: Template, cwd: string): TemplateParsed {
 
     if (is_media_clip(clip)) {
       const filepath = path.resolve(cwd, clip.file)
-      clips.push({ id, filepath, ...clip })
+      clips.push({ id, filepath, ...clip, source_clip: clip })
     } else {
       // its a font
       clips.push({
@@ -92,6 +94,7 @@ function parse_template(template_input: Template, cwd: string): TemplateParsed {
           background_radius: 4.3,
           ...clip.font,
         },
+        source_clip: clip
       })
     }
   }
@@ -172,7 +175,8 @@ async function probe_clips(
   const probe_clips_promises = unique_media_clips.map(async (clip: MediaClipParsed) => {
     const { id, filepath } = clip
     if (use_cache && clip_info_map_cache[filepath]) return clip_info_map_cache[filepath]
-    console.log(`Probing file ${clip.file}`)
+    if (is_media_clip(clip.source_clip)) console.log(`Probing file ${clip.file}`)
+    else console.log(`Probing font asset ${clip.file}`)
     const result = await exec([
       'ffprobe',
       '-v',
@@ -613,7 +617,6 @@ function compute_tempo(val: number) {
 }
 
 
-// const font_asset_cache_map: {[json_key: string]: } = {}
 // generate font assets and replace font clips with media clips
 async function replace_font_clips_with_image_clips(
   template: TemplateParsed,
@@ -711,7 +714,7 @@ async function replace_font_clips_with_image_clips(
         throw new CommandError(`Command "${magick_command.join(' ')}" failed. No image was produced.\n\n`)
       }
       const { text, font, ...base_clip_params } = clip
-      return { ...base_clip_params, filepath, file: filename, audio_volume: 0 }
+      return { ...base_clip_params, filepath, file: filename, audio_volume: 0, source_clip: clip }
     }
   )
 
