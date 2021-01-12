@@ -94,7 +94,7 @@ function parse_template(template_input: Template, cwd: string): TemplateParsed {
           background_radius: 4.3,
           ...clip.font,
         },
-        source_clip: clip
+        source_clip: clip,
       })
     }
   }
@@ -616,7 +616,6 @@ function compute_tempo(val: number) {
   return Array(numMultipliers).fill(`atempo=${multVal}`).join(',')
 }
 
-
 // generate font assets and replace font clips with media clips
 async function replace_font_clips_with_image_clips(
   template: TemplateParsed,
@@ -838,7 +837,9 @@ async function render(
     }
     const pts_speed = clip.speed ? `${1 / parse_percentage(clip.speed)}*` : ''
     const setpts =
-      start_at === 0 ? `setpts=${pts_speed}PTS-STARTPTS` : `setpts=${pts_speed}PTS+${start_at}/TB`
+      start_at === 0 || options?.render_sample_frame
+        ? `setpts=${pts_speed}PTS-STARTPTS`
+        : `setpts=${pts_speed}PTS+${start_at}/TB`
     const vscale = `scale=${geometry.scale.width}:${geometry.scale.height}`
 
     video_input_filters.push(setpts, vscale)
@@ -867,7 +868,12 @@ async function render(
     if (info.type === 'image') {
       ffmpeg_cmd.push('-framerate', 60, '-loop', 1, '-t', duration, '-i', clip.filepath)
     } else if (info.type === 'video') {
-      ffmpeg_cmd.push('-ss', trim_start, '-t', duration, '-i', clip.filepath)
+      if (options?.render_sample_frame) {
+        const trim_start_for_preview = trim_start + sample_frame! - start_at
+        ffmpeg_cmd.push('-ss', trim_start_for_preview, '-t', duration, '-i', clip.filepath)
+      } else {
+        ffmpeg_cmd.push('-ss', trim_start, '-t', duration, '-i', clip.filepath)
+      }
     } else if (info.type === 'audio') {
       throw new Error('unimplemented')
     }
@@ -894,7 +900,8 @@ async function render(
         `sample-frame position ${template.preview} is greater than duration of the output (${total_duration})`
       )
     }
-    ffmpeg_cmd.push('-ss', sample_frame!, '-vframes', '1')
+    // ffmpeg_cmd.push('-ss', sample_frame!, '-vframes', '1')
+    ffmpeg_cmd.push('-vframes', '1')
   } else {
     // ffmpeg_cmd.push('-t', total_duration)
     if (audio_input_ids.length === 0) {
