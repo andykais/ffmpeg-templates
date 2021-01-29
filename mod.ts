@@ -811,6 +811,9 @@ async function render(
   const audio_input_ids: string[] = []
   const ffmpeg_cmd: (string | number)[] = ['ffmpeg', '-v', options?.ffmpeg_verbosity ?? 'info']
 
+  // TODO double check that this isnt producing non-error logs on other machines
+  ffmpeg_cmd.push('-hwaccel', 'auto')
+
   let last_clip = undefined
   let input_index = 0
   for (const i of timeline.keys()) {
@@ -841,6 +844,10 @@ async function render(
         ? `setpts=${pts_speed}PTS-STARTPTS`
         : `setpts=${pts_speed}PTS+${start_at}/TB`
     const vscale = `scale=${geometry.scale.width}:${geometry.scale.height}`
+    if (clip.speed) {
+      // TODO expose 'smooth' option or 'fps' option
+      // video_input_filters.push(`minterpolate='mi_mode=mci:mc_mode=aobmc:vsbmc=1:fps=29.97'`)
+    }
 
     video_input_filters.push(setpts, vscale)
     if (geometry.rotate) {
@@ -913,8 +920,9 @@ async function render(
       complex_filter.push(`${audio_inputs} amix=inputs=${audio_input_ids.length} [audio]`)
       map_audio_arg.push('-map', '[audio]')
     }
-    ffmpeg_cmd.push('-vcodec', 'libx265')
-    ffmpeg_cmd.push('-x265-params', 'log-level=error')
+    // ffmpeg_cmd.push('-vcodec', 'libx265')
+    // // ffmpeg_cmd.push('-vcodec', 'libx264')
+    // ffmpeg_cmd.push('-x265-params', 'log-level=error')
   }
   ffmpeg_cmd.push('-filter_complex', complex_filter.join(';\n'))
   ffmpeg_cmd.push(...map_audio_arg)

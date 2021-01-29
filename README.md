@@ -139,6 +139,11 @@ complicated tutorials, no hidden settings in a application preferences. Its just
 - [ ] create placeholder loading image (from imagemagick) that immediately shows up on preview
 - [ ] add warning about unused clips in timeline
 - [ ] report this one as a bug?
+- [ ] add 'smoothing' option. Just unsure what the name of it would be
+  - `interpolate_frames: 60`?
+  - `smooth: 30`?
+  - `smooth_fps: 30`?
+  - `smooth_frames: 30`?
 ```
   2s [----------------------------------------------] 0.0%error: Uncaught (in promise) Busy: Resource is unavailable because it is in use by a promise
     at processResponse (deno:core/core.js:223:11)
@@ -166,3 +171,4 @@ complicated tutorials, no hidden settings in a application preferences. Its just
 - cancel previous render when file is changed
 - improve preview time by seeking inputs right to the desired frame. Unsure if there are implications, but it
     should work!
+- if we run into more memory topping out issues, we can try out [segment muxer](https://askubuntu.com/a/948449/390949) (or possibly do it by hand)

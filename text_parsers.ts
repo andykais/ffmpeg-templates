@@ -55,7 +55,7 @@ function parse_unit<T = number, U = number, V = number>(
 const duration_var_regex = /\{[a-zA-Z0-9._-]+\}/
 function parse_duration(duration_expr: string, template: TemplateParsed): Seconds {
   try {
-    const [duration, operator, expr] = duration_expr
+    const [duration, operator, ...expr] = duration_expr
       .trim()
       .split(' ')
       .map(s => s.trim())
@@ -89,16 +89,16 @@ function parse_duration(duration_expr: string, template: TemplateParsed): Second
     // const [hours, minutes, seconds] = duration_split.map(v => parseFloat(v.split(/,|\./).join('.')))
     // const duration_in_seconds = hours * 60 * 60 + minutes * 60 + seconds
     if (operator) {
-      if (operator && expr) {
+      if (operator && expr.length) {
         switch (operator) {
           case '+':
-            return duration_in_seconds + parse_duration(expr, template)
+            return duration_in_seconds + parse_duration(expr.join(' '), template)
           case '-':
-            return duration_in_seconds - parse_duration(expr, template)
+            return duration_in_seconds - parse_duration(expr.join(' '), template)
           case '/':
-            return duration_in_seconds / parse_duration(expr, template)
+            return duration_in_seconds / parse_duration(expr.join(' '), template)
           case '*':
-            return duration_in_seconds * parse_duration(expr, template)
+            return duration_in_seconds * parse_duration(expr.join(' '), template)
           default:
             throw new InputError(
               `Invalid duration "${duration_expr}". Expected "+,-,/,*" where "${operator}" was`
