@@ -164,6 +164,7 @@ complicated tutorials, no hidden settings in a application preferences. Its just
     - [ ] screen wipe?
 - [ ] crop width/height percentage instead of left vs right?
 - [ ] input error on `crop <= 0`
+- [ ] make framerate configurable `framerate: { fps: 60, smooth: true }`
 - cache some of the font asset creation work
 - add `-pix_fmt yuv420p` to get better compatability
 - trim.stop_total where stop is performed against _total_ time.
@@ -172,3 +173,15 @@ complicated tutorials, no hidden settings in a application preferences. Its just
 - improve preview time by seeking inputs right to the desired frame. Unsure if there are implications, but it
     should work!
 - if we run into more memory topping out issues, we can try out [segment muxer](https://askubuntu.com/a/948449/390949) (or possibly do it by hand)
+- reverse the stacking order. Lower things in the timeline appear on top of other things. It makes more sense
+- some kind of audio cues in the preview window. Its impossible to line up audio only clips with the preview
+    system right now
+- secondary command for building music videos? General workflow would be:
+```
+ffmpeg-music-video <audio_file>
+> "Tap [spacebar] whenever you hear a beat that you want a clip to start at. Ready? Y/n"
+> ...[space]..[space]....[space]...etc
+> "3 marker(s) recorded for clips. Preview markers, reset markers, or add clips? Pp/Rr/Cc"
+> "Input a folder containing clips. Clips will be added in alphabetical order:" <clip_folder>
+> "Clips and timeline have been recorded to template.yml. Render video now? Y/n"
+```

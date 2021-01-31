@@ -907,7 +907,6 @@ async function render(
         `sample-frame position ${template.preview} is greater than duration of the output (${total_duration})`
       )
     }
-    // ffmpeg_cmd.push('-ss', sample_frame!, '-vframes', '1')
     ffmpeg_cmd.push('-vframes', '1')
   } else {
     // ffmpeg_cmd.push('-t', total_duration)
@@ -920,8 +919,8 @@ async function render(
       complex_filter.push(`${audio_inputs} amix=inputs=${audio_input_ids.length} [audio]`)
       map_audio_arg.push('-map', '[audio]')
     }
+    // ffmpeg_cmd.push('-vcodec', 'libx264')
     // ffmpeg_cmd.push('-vcodec', 'libx265')
-    // // ffmpeg_cmd.push('-vcodec', 'libx264')
     // ffmpeg_cmd.push('-x265-params', 'log-level=error')
   }
   ffmpeg_cmd.push('-filter_complex', complex_filter.join(';\n'))
