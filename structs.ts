@@ -91,6 +91,15 @@ interface ClipBase {
   duration?: Timestamp
   /** Increase or decrease the playback speed */
   speed: Percentage
+
+  /** Set the framerate for the clip */
+  framerate?: {
+    /** Set the frames per second for the input clip */
+    fps: number
+    /** smooth: true will interpolate frames that are missing
+    * _if_ the desired framerate is higher than the input framerate */
+    smooth?: boolean
+  }
   /** Effect to transition a clip in or out of the page */
   transition?: { fade_in?: Timestamp; fade_out?: Timestamp }
 }

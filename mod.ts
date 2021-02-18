@@ -72,7 +72,7 @@ function parse_template(template_input: Template, cwd: string): TemplateParsed {
   for (const i of template_input.clips.keys()) {
     const clip = template_input.clips[i]
     const id = clip.id ?? `CLIP_${i}`
-    if (clips.find(c => c.id === id)) throw new InputError(`Clip id ${id} is defined more than once.`)
+    if (clips.find((c) => c.id === id)) throw new InputError(`Clip id ${id} is defined more than once.`)
     if (clip.trim?.stop && clip.trim?.end) {
       throw new InputError('Clip cannot provide both trim.stop and trim.end')
     } else if (clip.trim?.stop && clip.duration) {
@@ -98,14 +98,14 @@ function parse_template(template_input: Template, cwd: string): TemplateParsed {
       })
     }
   }
-  const timeline = template_input.timeline ?? { '00:00:00': clips.map(clip => [clip.id]) }
+  const timeline = template_input.timeline ?? { '00:00:00': clips.map((clip) => [clip.id]) }
 
   const first_media_clip = clips.find(is_media_clip)
   const is_pixel_unit = { percentage: () => true, pixels: () => false, undefined: () => true }
   const has_non_pixel_unit =
     parse_unit(template_input.size?.width, is_pixel_unit) &&
     parse_unit(template_input.size?.height, is_pixel_unit)
-  const relative_to_clip = clips.find(c => c.id === template_input.size?.relative_to)
+  const relative_to_clip = clips.find((c) => c.id === template_input.size?.relative_to)
   if (relative_to_clip && !is_media_clip(relative_to_clip)) {
     throw new InputError(`Cannot specify a font clip as a relative size source`)
   } else if (has_non_pixel_unit && !first_media_clip) {
@@ -148,6 +148,7 @@ interface ClipInfoMap {
     filepath: string
     width: number
     height: number
+    framerate: number
     aspect_ratio: number
     has_audio: boolean
     duration: Seconds
@@ -170,7 +171,7 @@ async function probe_clips(
 
   const unique_files = new Set<string>()
   // we only need to probe files once
-  const unique_media_clips = media_clips.filter(c => unique_files.size < unique_files.add(c.filepath).size)
+  const unique_media_clips = media_clips.filter((c) => unique_files.size < unique_files.add(c.filepath).size)
 
   const probe_clips_promises = unique_media_clips.map(async (clip: MediaClipParsed) => {
     const { id, filepath } = clip
@@ -185,7 +186,7 @@ async function probe_clips(
       'json',
       '-show_streams',
       '-show_entries',
-      'stream=width,height,display_aspect_ratio,codec_type,codec_name:stream_tags=rotate',
+      'stream=width,height,display_aspect_ratio,codec_type,codec_name,avg_frame_rate:stream_tags=rotate',
       // 'format=duration',
       filepath,
     ])
@@ -206,20 +207,42 @@ async function probe_clips(
 
     if (['mjpeg', 'jpeg', 'jpg', 'png'].includes(video_stream.codec_name)) {
       const duration = NaN
-      return { type: 'image' as const, filepath, id, width, height, aspect_ratio, has_audio, duration }
+      const framerate = 60
+      return {
+        type: 'image' as const,
+        filepath,
+        id,
+        width,
+        height,
+        aspect_ratio,
+        has_audio,
+        duration,
+        framerate,
+      }
     } else {
+      const { framerate } = video_stream
       // ffprobe's duration is unreliable. The best solutions I have are:
       // 1. ffmpeg guessing: https://stackoverflow.com/a/33115316/3795137
       // 2. ffprobe packets: https://stackoverflow.com/a/33346572/3795137 but this is a ton of output, so were using ffmpeg
       // I picked #2 because #1 is very slow to complete, it has to iterate the whole video, often at regular playback speed
       let packet_str_buffer: string[] = []
-      const out = await exec(['ffprobe', '-v', 'error', '-show_packets', '-i', filepath], line => {
+      const out = await exec(['ffprobe', '-v', 'error', '-show_packets', '-i', filepath], (line) => {
         if (line === '[PACKET]') packet_str_buffer = []
         packet_str_buffer.push(line)
       })
       const packet = parse_ffmpeg_packet(packet_str_buffer)
       const duration = parseFloat(packet.dts_time)
-      return { type: 'video' as const, filepath, id, width, height, aspect_ratio, has_audio, duration }
+      return {
+        type: 'video' as const,
+        filepath,
+        id,
+        width,
+        height,
+        aspect_ratio,
+        has_audio,
+        framerate,
+        duration,
+      }
     }
   })
 
@@ -272,14 +295,14 @@ function compute_background_size(template: TemplateParsed, clip_info_map: ClipIn
 
   const compute_size = () => {
     const info = get_clip(clip_info_map, size.relative_to)
-    const { rotate } = template.clips.find(c => c.id === size.relative_to)!
+    const { rotate } = template.clips.find((c) => c.id === size.relative_to)!
     return compute_rotated_size(info, rotate)
   }
   const background_width = parse_unit(size.width, {
-    percentage: p => Math.floor(p * compute_size().width),
+    percentage: (p) => Math.floor(p * compute_size().width),
   })
   const background_height = parse_unit(size.height, {
-    percentage: p => Math.floor(p * compute_size().height),
+    percentage: (p) => Math.floor(p * compute_size().height),
   })
   return { background_width, background_height }
 }
@@ -295,11 +318,11 @@ function compute_geometry(
     const { layout } = clip
 
     const input_width = parse_unit(layout?.width, {
-      percentage: p => p * background_width,
+      percentage: (p) => p * background_width,
       undefined: () => null,
     })
     const input_height = parse_unit(layout?.height, {
-      percentage: p => p * background_height,
+      percentage: (p) => p * background_height,
       undefined: () => null,
     })
 
@@ -326,23 +349,23 @@ function compute_geometry(
       let height_crop = 'in_h'
 
       if (right) {
-        const r = parse_unit(right, { percentage: p => p * width_relative_to_crop })
+        const r = parse_unit(right, { percentage: (p) => p * width_relative_to_crop })
         width_crop = `in_w - ${r}`
         width -= r
       }
       if (bottom) {
-        const b = parse_unit(bottom, { percentage: p => p * height_relative_to_crop })
+        const b = parse_unit(bottom, { percentage: (p) => p * height_relative_to_crop })
         height_crop = `in_h - ${b}`
         height -= b
       }
       if (left) {
-        const l = parse_unit(left, { percentage: p => p * width_relative_to_crop })
+        const l = parse_unit(left, { percentage: (p) => p * width_relative_to_crop })
         x_crop = l
         width -= l
         width_crop = `${width_crop} - ${x_crop}`
       }
       if (top) {
-        const t = parse_unit(top, { percentage: p => p * height_relative_to_crop })
+        const t = parse_unit(top, { percentage: (p) => p * height_relative_to_crop })
         y_crop = t
         height -= t
         height_crop = `${height_crop} - ${y_crop}`
@@ -356,9 +379,9 @@ function compute_geometry(
     // if (typeof layout?.x?.offset) x = parse_pixels(layout.x.offset)
 
     const parse_x = (v: string | undefined) =>
-      parse_unit(v, { pixels: x => x, percentage: x => `(main_w * ${x})`, undefined: () => 0 })
+      parse_unit(v, { pixels: (x) => x, percentage: (x) => `(main_w * ${x})`, undefined: () => 0 })
     const parse_y = (v: string | undefined) =>
-      parse_unit(v, { pixels: y => y, percentage: y => `(main_h * ${y})`, undefined: () => 0 })
+      parse_unit(v, { pixels: (y) => y, percentage: (y) => `(main_h * ${y})`, undefined: () => 0 })
 
     if (typeof layout?.x === 'object') x = parse_x(layout.x.offset)
     else if (typeof layout?.x === 'string') x = parse_x(layout.x)
@@ -403,16 +426,16 @@ interface TimelineClip {
 function compute_timeline(template: TemplateParsed, clip_info_map: ClipInfoMap) {
   const { timeline } = template
 
-  const all_clips_trim_to_fit = Object.values(template.timeline).every(layers =>
-    layers.every(layer =>
+  const all_clips_trim_to_fit = Object.values(template.timeline).every((layers) =>
+    layers.every((layer) =>
       layer
-        .filter(id => id !== TIMELINE_ENUMS.PAD)
-        .map(id => {
-          const clip = template.clips.find(c => c.id === id)
+        .filter((id) => id !== TIMELINE_ENUMS.PAD)
+        .map((id) => {
+          const clip = template.clips.find((c) => c.id === id)
           if (!clip) throw new InputError(`Clip ${id} does not exist.`)
           return clip
         })
-        .every(clip => clip.trim?.start === 'fit' || clip.trim?.end === 'fit')
+        .every((clip) => clip.trim?.start === 'fit' || clip.trim?.end === 'fit')
     )
   )
 
@@ -432,7 +455,7 @@ function compute_timeline(template: TemplateParsed, clip_info_map: ClipInfoMap) 
       // PAD does nothing while calculating longest duration
       if (clip_id === TIMELINE_ENUMS.PAD) continue
 
-      const clip = template.clips.find(c => c.id === clip_id)
+      const clip = template.clips.find((c) => c.id === clip_id)
       if (clip === undefined)
         throw new InputError(`Clip ${clip_id} does not exist. I cannot be used in the timeline.`)
       const info = get_clip(clip_info_map, clip_id)
@@ -451,7 +474,7 @@ function compute_timeline(template: TemplateParsed, clip_info_map: ClipInfoMap) 
         else continue
       }
 
-      if (Object.keys(trim || {}).filter(k => ['end', 'stop', 'stop_at_output'].includes(k)).length > 1) {
+      if (Object.keys(trim || {}).filter((k) => ['end', 'stop', 'stop_at_output'].includes(k)).length > 1) {
         throw new InputError(`'end', 'stop', and 'stop_at_output' are mutually exclusive.`)
       }
 
@@ -525,7 +548,7 @@ function compute_timeline(template: TemplateParsed, clip_info_map: ClipInfoMap) 
           const seconds_until_complete = total_duration - (layer_start_position + remaining_duration)
           if (math.gt(seconds_until_complete, 0)) layer_start_position += seconds_until_complete
         } else {
-          const clip = template.clips.find(c => c.id === clip_id)!
+          const clip = template.clips.find((c) => c.id === clip_id)!
           const info = get_clip(clip_info_map, clip_id)
           const { trim } = clip
           let clip_duration = info.duration
@@ -636,11 +659,11 @@ async function replace_font_clips_with_image_clips(
       if (await fs.exists(filepath)) await Deno.remove(filepath)
 
       const width = parse_unit(clip.layout?.width, {
-        percentage: p => p * background_width,
+        percentage: (p) => p * background_width,
         undefined: () => null,
       })
       const height = parse_unit(clip.layout?.height, {
-        percentage: p => p * background_height,
+        percentage: (p) => p * background_height,
         undefined: () => null,
       })
 
@@ -722,10 +745,10 @@ async function replace_font_clips_with_image_clips(
   for (const clip of Object.values(font_media_clip_info_map)) {
     clip_info_map[clip.id] = clip
   }
-  const clips: MediaClipParsed[] = template.clips.map(clip => {
+  const clips: MediaClipParsed[] = template.clips.map((clip) => {
     if (is_media_clip(clip)) return clip
     else {
-      const res = font_media_clips.find(c => clip.id === c.id)!
+      const res = font_media_clips.find((c) => clip.id === c.id)!
       if (res) return res
       else throw new Error('fatal error. Expected font clip but none found')
     }
@@ -747,7 +770,7 @@ async function ffmpeg(
   longest_duration: number,
   progress_callback?: OnProgress
 ) {
-  const ffmpeg_safe_cmd = ffmpeg_cmd.map(a => a.toString())
+  const ffmpeg_safe_cmd = ffmpeg_cmd.map((a) => a.toString())
   if (progress_callback) {
     ffmpeg_safe_cmd.push('-progress', 'pipe:1')
     const proc = Deno.run({ cmd: ffmpeg_safe_cmd, stdout: 'piped', stdin: 'inherit' })
@@ -823,7 +846,7 @@ async function render(
     if (options?.render_sample_frame && !(start_at <= sample_frame! && start_at + duration >= sample_frame!))
       continue
 
-    const clip = clips.find(c => c.id === clip_id)!
+    const clip = clips.find((c) => c.id === clip_id)!
     const info = clip_info_map[clip_id]
     const geometry = clip_geometry_map[clip_id]
 
@@ -844,9 +867,18 @@ async function render(
         ? `setpts=${pts_speed}PTS-STARTPTS`
         : `setpts=${pts_speed}PTS+${start_at}/TB`
     const vscale = `scale=${geometry.scale.width}:${geometry.scale.height}`
-    if (clip.speed) {
-      // TODO expose 'smooth' option or 'fps' option
-      // video_input_filters.push(`minterpolate='mi_mode=mci:mc_mode=aobmc:vsbmc=1:fps=29.97'`)
+
+    const framerate = clip.framerate?.fps ?? info.framerate
+    if (clip.framerate?.smooth) {
+      // TODO only do this if the info.framerate * speed is lower than the framerate.fps
+      video_input_filters.push(`minterpolate='mi_mode=mci:mc_mode=aobmc:vsbmc=1:fps=${framerate}'`)
+      // this is the slowest, but most effective
+      // video_input_filters.push(`minterpolate='mi_mode=mci:mc_mode=aobmc:me_mode=bidir:vsbmc=1:scd=:fps=${clip.framerate.fps}'`)
+      // video_input_filters.push(`minterpolate='mi_mode=blend:fps=${clip.framerate.fps}'`)
+    }
+
+    if (clip.speed && parse_percentage(clip.speed) < 1) {
+      // TODO drop frames as necessary from the input
     }
 
     video_input_filters.push(setpts, vscale)
@@ -873,7 +905,7 @@ async function render(
       audio_input_ids.push(`[a_in_${input_index}]`)
     }
     if (info.type === 'image') {
-      ffmpeg_cmd.push('-framerate', 60, '-loop', 1, '-t', duration, '-i', clip.filepath)
+      ffmpeg_cmd.push('-framerate', framerate, '-loop', 1, '-t', duration, '-i', clip.filepath)
     } else if (info.type === 'video') {
       if (options?.render_sample_frame) {
         const trim_start_for_preview = trim_start + sample_frame! - start_at
