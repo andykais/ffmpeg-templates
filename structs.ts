@@ -72,6 +72,16 @@ interface ClipBase {
     bottom?: Pixels
   }
 
+  /** Zoom and pan a clip */
+  zoompan?: {
+    [timestamp: string]: {
+      zoom?: Percentage
+      // zoom?: Percentage | Pixels
+      x?: Percentage | Pixels
+      y?: Percentage | Pixels
+    }
+  }
+
   rotate?: Degrees
   /**
    * Trim how long a clip lasts, trimming from either the beginning of a clip, or the end.

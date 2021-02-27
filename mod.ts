@@ -220,7 +220,8 @@ async function probe_clips(
         framerate,
       }
     } else {
-      const { framerate } = video_stream
+      console.log(video_stream)
+      const framerate = eval(video_stream.avg_frame_rate)
       // ffprobe's duration is unreliable. The best solutions I have are:
       // 1. ffmpeg guessing: https://stackoverflow.com/a/33115316/3795137
       // 2. ffprobe packets: https://stackoverflow.com/a/33346572/3795137 but this is a ton of output, so were using ffmpeg
@@ -888,8 +889,98 @@ async function render(
     }
     if (geometry.crop) {
       const { crop } = geometry
-      video_input_filters.push(`crop=w=${crop.width}:h=${crop.height}:x=${crop.x}:y=${crop.y}:keep_aspect=1`)
+      let crop_x = crop.x.toString()
+      const prev = { timestamp_seconds: 0, x_offset: crop.x, y_offset: crop.y }
+      let zoompan_after_preview: { x?: number; y?: number; zoom?: number } | undefined
+      for (const timestamp of Object.keys(clip.zoompan ?? {})) {
+        const zoompan = clip.zoompan![timestamp]
+        const timestamp_seconds = parse_duration(timestamp, template)
+
+        if (zoompan.x) {
+          const x_after_pan = parse_unit(zoompan.x, { percentage: (n) => n * geometry.scale.width })
+          const n_frames = (timestamp_seconds - prev.timestamp_seconds) * info.framerate
+          const x_step = (x_after_pan - prev.x_offset) / n_frames
+          const n_frames_so_far = info.framerate * prev.timestamp_seconds
+          const x_expression = `(n - ${n_frames_so_far})*${x_step}+${prev.x_offset}`
+          crop_x = `if(between(t, ${prev.timestamp_seconds}, ${timestamp_seconds}), ${x_expression}, ${crop_x})`
+          prev.x_offset = Math.min(Math.max(x_after_pan, 0), geometry.scale.width)
+
+          if (sample_frame && !zoompan_after_preview && sample_frame < timestamp_seconds) {
+            zoompan_after_preview = { x: x_after_pan }
+          }
+        }
+        prev.timestamp_seconds = timestamp_seconds
+      }
+      if (prev.x_offset) crop_x = `if(gte(t, ${prev.timestamp_seconds}), ${prev.x_offset}, ${crop_x})`
+      video_input_filters.push(
+        `crop=w=${crop.width}:h=${crop.height}:x='${crop_x}':y=${crop.y}:keep_aspect=1`
+      )
+
+      console.log({ zoompan_after_preview, prev  })
+      if (zoompan_after_preview) {
+        const arrow_size = (background_width * 0.1) / 15
+        const start_x = prev.x_offset
+        const dest_x = zoompan_after_preview.x ?? 0
+
+        const start_y = 0
+        const dest_y = 0
+
+        const arrow_angle = Math.atan((dest_x - start_x) / (dest_y - start_y))
+        const imagemagick_arrows_cmd = [
+          'convert',
+          '-size',
+          // '100x60',
+          `${background_width}x${background_height}`,
+          'xc:',
+          '-stroke', 'black',
+          '-strokewidth', '10',
+          '-draw',
+          // `line ${prev.x_offset},55 ${zoompan_after_preview.x},10`,
+          `stroke-linecap round line ${start_x},${start_y} ${dest_x},${dest_y}`,
+          '-strokewidth', '1',
+          '-draw',
+          `stroke blue fill skyblue
+          translate ${dest_x},${dest_y} rotate ${arrow_angle}
+          path "M 0,0  l ${-15*arrow_size},${-5*arrow_size}  ${+5*arrow_size},${+5*arrow_size}  ${-5*arrow_size},${+5*arrow_size}  ${+15*arrow_size},${-5*arrow_size} z"`,
+          'samples/zoompan/arrow.png'
+        ]
+        console.log(imagemagick_arrows_cmd)
+        const proc = Deno.run({ cmd: imagemagick_arrows_cmd })
+        const result = await proc.status()
+        // const imagemagick_arrows_command `
+// arrow_head="l -15,-5  +5,+5  -5,+5  +15,-5 z"
+
+  // convert -size ${background_width}x${background_height} xc: -draw 'line 10,30 80,30' \
+        //   -draw "stroke blue fill skyblue
+        //          path 'M 80,30  $arrow_head' " \
+        //   arrow_horizontal.gif
+
+        // `
+      }
     }
+    // if (clip.zoompan) {
+    //   const zooms = []
+    //   for (const timestamp of Object.keys(clip.zoompan)) {
+    //     const { zoom, x, y } = clip.zoompan[timestamp]
+    //     const fully_applied_at = parse_duration(timestamp, template)
+    //     if (zoom) {
+    //       const zoom_percentage = parse_percentage(zoom)
+    //       const ZOOM_DURATION = '300'
+    //       zooms.push(`'if(between(in_time, 1, ${fully_applied_at}), ${zoom_percentage}, 1)'`)
+    //     }
+    //   }
+    //   console.log(geometry)
+    //   // video_input_filters.push(`pad=${geometry.scale.width}:${geometry.scale.height}`)
+    //   video_input_filters.push(`pad=${1920 + 500}:${1080}:color=red`)
+
+    //   console.log(zooms)
+    //   video_input_filters.push(`zoompan=x='px+0.5':d=1:s=${1920}x${1080}`)
+    //   // video_input_filters.push(`zoompan=z='min(pzoom+(2.13-1)/X,2.13)'`)
+    //   // video_input_filters.push(`zoompan=z='min(max(zoom,pzoom)+0.0015,1.5)':d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'`)
+    //   // video_input_filters.push(`zoompan=zoom=${zooms}`)
+    //   // video_input_filters.push(`zoompan=z='min(zoom+0.0015,1.5)':d=700:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'`)
+    // }
+
     complex_filter_inputs.push(`[${input_index}:v] ${video_input_filters.join(', ')} [v_in_${input_index}]`)
     if (!options?.render_sample_frame && info.has_audio) {
       const audio_filters: string[] = [
@@ -964,7 +1055,7 @@ async function render(
   ffmpeg_cmd.push('-y')
   // console.log(ffmpeg_cmd.join('\n'))
   // replace w/ this when you want to copy the command
-  // console.log(ffmpeg_cmd.map(c => `'${c}'`).join(' '))
+  console.log(ffmpeg_cmd.map((c) => `'${c}'`).join(' '))
 
   await ffmpeg(template, ffmpeg_cmd, total_duration, options?.progress_callback)
 
