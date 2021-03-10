@@ -220,7 +220,6 @@ async function probe_clips(
         framerate,
       }
     } else {
-      console.log(video_stream)
       const framerate = eval(video_stream.avg_frame_rate)
       // ffprobe's duration is unreliable. The best solutions I have are:
       // 1. ffmpeg guessing: https://stackoverflow.com/a/33115316/3795137
@@ -269,8 +268,8 @@ function compute_rotated_size(size: { width: number; height: number }, rotation?
   return { width, height }
 }
 
-function get_clip(clip_info_map: ClipInfoMap, clip_id: ClipID) {
-  const clip = clip_info_map[clip_id]
+function get_clip<T>(clip_map: {[clip_id: string]: T}, clip_id: ClipID) {
+  const clip = clip_map[clip_id]
   if (!clip) throw new InputError(`Clip ${clip_id} does not exist.`)
   return clip
 }
@@ -286,8 +285,8 @@ interface ClipGeometryMap {
     crop?: {
       x: number
       y: number
-      width: string
-      height: string
+      width: number
+      height: number
     }
   }
 }
@@ -346,30 +345,30 @@ function compute_geometry(
       const { left, right, top, bottom } = clip.crop
       let x_crop = 0
       let y_crop = 0
-      let width_crop = 'in_w'
-      let height_crop = 'in_h'
+      let width_crop = scale.width
+      let height_crop = scale.height
 
       if (right) {
         const r = parse_unit(right, { percentage: (p) => p * width_relative_to_crop })
-        width_crop = `in_w - ${r}`
+        width_crop = width_crop - r
         width -= r
       }
       if (bottom) {
         const b = parse_unit(bottom, { percentage: (p) => p * height_relative_to_crop })
-        height_crop = `in_h - ${b}`
+        height_crop = height_crop - b
         height -= b
       }
       if (left) {
         const l = parse_unit(left, { percentage: (p) => p * width_relative_to_crop })
         x_crop = l
         width -= l
-        width_crop = `${width_crop} - ${x_crop}`
+        width_crop = width_crop - x_crop
       }
       if (top) {
         const t = parse_unit(top, { percentage: (p) => p * height_relative_to_crop })
         y_crop = t
         height -= t
-        height_crop = `${height_crop} - ${y_crop}`
+        height_crop = height_crop - y_crop
       }
       crop = { width: width_crop, height: height_crop, x: x_crop, y: y_crop }
     }
@@ -415,6 +414,96 @@ function compute_geometry(
     clip_geometry_map[clip.id] = { x, y, width, height, scale, rotate, crop }
   }
   return clip_geometry_map
+}
+
+type ClipZoompanMap = {
+  [clip_id: string]: {
+    start_at_seconds: number
+    end_at_seconds: number
+
+    start_x: number
+    start_y: number
+    start_zoom: number
+
+    dest_x?: number
+    dest_y?: number
+    dest_zoom?: number
+
+    x_expression?: string
+    y_expression?: string
+  }[]
+}
+
+function compute_zoompans(
+  template: TemplateParsed,
+  clip_info_map: ClipInfoMap,
+  clip_geometry_map: ClipGeometryMap
+) {
+  const clip_zoompan_map: ClipZoompanMap = {}
+  for (const clip of template.clips) {
+    const geometry = get_clip(clip_geometry_map, clip.id)
+    const { crop } = geometry
+    const info = get_clip(clip_info_map, clip.id)
+    clip_zoompan_map[clip.id] = []
+
+    let prev_zoompan = { timestamp_seconds: 0, x_offset: 0, y_offset: 0, zoom: 1 }
+    for (const timestamp of Object.keys(clip.zoompan ?? {})) {
+      const zoompan = clip.zoompan![timestamp]
+      const zoompan_end_at_seconds = parse_duration(timestamp, template)
+      const next_prev_zoompan = { ...prev_zoompan, timestamp_seconds: zoompan_end_at_seconds }
+
+      const computed_zoompan: ClipZoompanMap['<clip_id>'][0] = {
+        start_at_seconds: prev_zoompan.timestamp_seconds,
+        end_at_seconds: zoompan_end_at_seconds,
+
+        start_x: prev_zoompan.x_offset,
+        start_y: prev_zoompan.y_offset,
+        start_zoom: prev_zoompan.zoom
+      }
+
+
+      if (zoompan.x) {
+        // this may change in the future (by adding a pad around images)
+        if (!crop) throw new InputError(`Zoompan panning cannot be used without cropping the clip`)
+        const max_x_pan_distance = geometry.scale.width - crop.width
+        const x_after_pan = prev_zoompan.x_offset + parse_unit(zoompan.x, { percentage: (n) => n * geometry.scale.width })
+        computed_zoompan.dest_x = x_after_pan
+        if (x_after_pan < 0 || x_after_pan > max_x_pan_distance) throw new InputError(`Zoompan out of bounds. X pan must be between ${0} and ${max_x_pan_distance}. ${timestamp} x input was ${x_after_pan}`)
+        next_prev_zoompan.x_offset = x_after_pan
+
+        const n_frames = (computed_zoompan.end_at_seconds - computed_zoompan.start_at_seconds) * info.framerate
+        const x_step = (computed_zoompan.dest_x - computed_zoompan.start_x) / n_frames
+        const n_frames_so_far = info.framerate * computed_zoompan.start_at_seconds
+        const x_expression = `(n - ${n_frames_so_far})*${x_step}+${computed_zoompan.start_x}`
+        computed_zoompan.x_expression = x_expression
+      }
+      if (zoompan.y) {
+        // this may change in the future (by adding a pad around images)
+        if (!crop) throw new InputError(`Zoompan panning cannot be used without cropping the clip`)
+        const max_y_pan_distance = geometry.scale.height - crop.height
+        const y_after_pan = prev_zoompan.y_offset + parse_unit(zoompan.y, { percentage: (n) => n * geometry.scale.height })
+        computed_zoompan.dest_y = y_after_pan
+        if (y_after_pan < 0 || y_after_pan > max_y_pan_distance) throw new InputError(`Zoompan out of bounds. y pan must be between ${0} and ${max_y_pan_distance}. ${timestamp} y input was ${y_after_pan}`)
+        next_prev_zoompan.y_offset = y_after_pan
+
+        const n_frames = (computed_zoompan.end_at_seconds - computed_zoompan.start_at_seconds) * info.framerate
+        const y_step = (computed_zoompan.dest_y - computed_zoompan.start_y) / n_frames
+        const n_frames_so_far = info.framerate * computed_zoompan.start_at_seconds
+        const y_eypression = `(n - ${n_frames_so_far})*${y_step}+${computed_zoompan.start_y}`
+        computed_zoompan.y_expression = y_eypression
+      }
+      if (zoompan.zoom) {
+        const zoom = parse_percentage(zoompan.zoom)
+        computed_zoompan.dest_zoom = zoom
+        next_prev_zoompan.zoom = zoom
+      }
+
+      prev_zoompan = next_prev_zoompan
+      clip_zoompan_map[clip.id].push(computed_zoompan)
+    }
+    clip_zoompan_map[clip.id].sort((a,b) => a.start_at_seconds - b.start_at_seconds)
+  }
+  return clip_zoompan_map
 }
 
 interface TimelineClip {
@@ -826,6 +915,7 @@ async function render(
     cwd
   )
   const clip_geometry_map = compute_geometry(template, background_width, background_height, clip_info_map)
+  const clip_zoompan_map = compute_zoompans(template, clip_info_map, clip_geometry_map)
   const { timeline, total_duration } = compute_timeline(template, clip_info_map)
 
   const complex_filter_inputs = [
@@ -840,6 +930,7 @@ async function render(
 
   let last_clip = undefined
   let input_index = 0
+
   for (const i of timeline.keys()) {
     const { clip_id, start_at, trim_start, duration, speed } = timeline[i]
 
@@ -850,6 +941,7 @@ async function render(
     const clip = clips.find((c) => c.id === clip_id)!
     const info = clip_info_map[clip_id]
     const geometry = clip_geometry_map[clip_id]
+    const zoompans = clip_zoompan_map[clip_id]
 
     const video_input_filters = []
     if (clip.transition?.fade_in) {
@@ -890,96 +982,29 @@ async function render(
     if (geometry.crop) {
       const { crop } = geometry
       let crop_x = crop.x.toString()
-      const prev = { timestamp_seconds: 0, x_offset: crop.x, y_offset: crop.y }
-      let zoompan_after_preview: { x?: number; y?: number; zoom?: number } | undefined
-      for (const timestamp of Object.keys(clip.zoompan ?? {})) {
-        const zoompan = clip.zoompan![timestamp]
-        const timestamp_seconds = parse_duration(timestamp, template)
 
-        if (zoompan.x) {
-          const x_after_pan = parse_unit(zoompan.x, { percentage: (n) => n * geometry.scale.width })
-          const n_frames = (timestamp_seconds - prev.timestamp_seconds) * info.framerate
-          const x_step = (x_after_pan - prev.x_offset) / n_frames
-          const n_frames_so_far = info.framerate * prev.timestamp_seconds
-          const x_expression = `(n - ${n_frames_so_far})*${x_step}+${prev.x_offset}`
-          crop_x = `if(between(t, ${prev.timestamp_seconds}, ${timestamp_seconds}), ${x_expression}, ${crop_x})`
-          prev.x_offset = Math.min(Math.max(x_after_pan, 0), geometry.scale.width)
-
-          if (sample_frame && !zoompan_after_preview && sample_frame < timestamp_seconds) {
-            zoompan_after_preview = { x: x_after_pan }
+      for (const i of zoompans.keys()) {
+        const zoompan = zoompans[i]
+        if (zoompan.dest_x && zoompan.x_expression) {
+          if (sample_frame !== undefined) {
+            if (sample_frame >= zoompan.start_at_seconds && sample_frame < zoompan.end_at_seconds) {
+              const n = sample_frame * info.framerate
+              crop_x = eval(zoompan.x_expression)
+            }
+          } else {
+            crop_x = `if(between(t, ${zoompan.start_at_seconds}, ${zoompan.end_at_seconds}), ${zoompan.x_expression}, ${crop_x})`
+            if (i === zoompans.length - 1) {
+              crop_x = `if(gte(t, ${zoompan.end_at_seconds}), ${zoompan.dest_x}, ${crop_x})`
+            }
           }
         }
-        prev.timestamp_seconds = timestamp_seconds
       }
-      if (prev.x_offset) crop_x = `if(gte(t, ${prev.timestamp_seconds}), ${prev.x_offset}, ${crop_x})`
+
       video_input_filters.push(
         `crop=w=${crop.width}:h=${crop.height}:x='${crop_x}':y=${crop.y}:keep_aspect=1`
       )
 
-      console.log({ zoompan_after_preview, prev  })
-      if (zoompan_after_preview) {
-        const arrow_size = (background_width * 0.1) / 15
-        const start_x = prev.x_offset
-        const dest_x = zoompan_after_preview.x ?? 0
-
-        const start_y = 0
-        const dest_y = 0
-
-        const arrow_angle = Math.atan((dest_x - start_x) / (dest_y - start_y))
-        const imagemagick_arrows_cmd = [
-          'convert',
-          '-size',
-          // '100x60',
-          `${background_width}x${background_height}`,
-          'xc:',
-          '-stroke', 'black',
-          '-strokewidth', '10',
-          '-draw',
-          // `line ${prev.x_offset},55 ${zoompan_after_preview.x},10`,
-          `stroke-linecap round line ${start_x},${start_y} ${dest_x},${dest_y}`,
-          '-strokewidth', '1',
-          '-draw',
-          `stroke blue fill skyblue
-          translate ${dest_x},${dest_y} rotate ${arrow_angle}
-          path "M 0,0  l ${-15*arrow_size},${-5*arrow_size}  ${+5*arrow_size},${+5*arrow_size}  ${-5*arrow_size},${+5*arrow_size}  ${+15*arrow_size},${-5*arrow_size} z"`,
-          'samples/zoompan/arrow.png'
-        ]
-        console.log(imagemagick_arrows_cmd)
-        const proc = Deno.run({ cmd: imagemagick_arrows_cmd })
-        const result = await proc.status()
-        // const imagemagick_arrows_command `
-// arrow_head="l -15,-5  +5,+5  -5,+5  +15,-5 z"
-
-  // convert -size ${background_width}x${background_height} xc: -draw 'line 10,30 80,30' \
-        //   -draw "stroke blue fill skyblue
-        //          path 'M 80,30  $arrow_head' " \
-        //   arrow_horizontal.gif
-
-        // `
-      }
     }
-    // if (clip.zoompan) {
-    //   const zooms = []
-    //   for (const timestamp of Object.keys(clip.zoompan)) {
-    //     const { zoom, x, y } = clip.zoompan[timestamp]
-    //     const fully_applied_at = parse_duration(timestamp, template)
-    //     if (zoom) {
-    //       const zoom_percentage = parse_percentage(zoom)
-    //       const ZOOM_DURATION = '300'
-    //       zooms.push(`'if(between(in_time, 1, ${fully_applied_at}), ${zoom_percentage}, 1)'`)
-    //     }
-    //   }
-    //   console.log(geometry)
-    //   // video_input_filters.push(`pad=${geometry.scale.width}:${geometry.scale.height}`)
-    //   video_input_filters.push(`pad=${1920 + 500}:${1080}:color=red`)
-
-    //   console.log(zooms)
-    //   video_input_filters.push(`zoompan=x='px+0.5':d=1:s=${1920}x${1080}`)
-    //   // video_input_filters.push(`zoompan=z='min(pzoom+(2.13-1)/X,2.13)'`)
-    //   // video_input_filters.push(`zoompan=z='min(max(zoom,pzoom)+0.0015,1.5)':d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'`)
-    //   // video_input_filters.push(`zoompan=zoom=${zooms}`)
-    //   // video_input_filters.push(`zoompan=z='min(zoom+0.0015,1.5)':d=700:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'`)
-    // }
 
     complex_filter_inputs.push(`[${input_index}:v] ${video_input_filters.join(', ')} [v_in_${input_index}]`)
     if (!options?.render_sample_frame && info.has_audio) {
@@ -1018,6 +1043,67 @@ async function render(
     last_clip = current_clip
     input_index++
   }
+
+  if (sample_frame !== undefined) {
+    const origin_size = (background_width * 0.003)
+    const arrow_size = (background_width * 0.03) / 15
+    const imagemagick_draw_arrows = []
+    for (const clip of template.clips) {
+      for (const zoompan of clip_zoompan_map[clip.id]) {
+        const color = 'red'
+        if (zoompan.start_at_seconds <= sample_frame && zoompan.end_at_seconds > sample_frame) {
+          const info = get_clip(clip_info_map, clip.id)
+          const n = sample_frame * info.framerate
+          const start_x = background_width / 2
+          const start_y = background_height / 2
+          const dest_x = background_width/2 + (zoompan.dest_x ?? 0) - (zoompan.x_expression ? eval(zoompan.x_expression) : 0)
+          const dest_y = (zoompan.y_expression ? eval(zoompan.y_expression) : 0) + background_height/2
+          const arrow_angle = Math.atan((dest_x - start_x) / (dest_y - start_y)) * 180.0/Math.PI - 90.0
+          const arrow_x = dest_x
+          const arrow_y = dest_y
+          imagemagick_draw_arrows.push(
+            `-draw`,
+            `stroke ${color} fill ${color} circle ${start_x},${start_y} ${start_x+origin_size},${start_y+origin_size}`,
+            `-draw`,
+            `stroke ${color} stroke-linecap round line ${start_x},${start_y} ${dest_x},${dest_y}`,
+            `-strokewidth`,
+            '10',
+            '-draw',
+            `stroke ${color} fill ${color}
+        translate ${arrow_x},${arrow_y} rotate ${arrow_angle}
+        path "M 0,0  l ${-15*arrow_size},${-5*arrow_size}  ${+5*arrow_size},${+5*arrow_size}  ${-5*arrow_size},${+5*arrow_size}  ${+15*arrow_size},${-5*arrow_size} z"`,
+          )
+        }
+      }
+    }
+    if (imagemagick_draw_arrows.length) {
+      const zoompan_assets_path = path.join('/tmp/ffmpeg-templates', cwd)
+      const zoompan_filepath = path.join(zoompan_assets_path, 'zoompan.png')
+      await Deno.mkdir(zoompan_assets_path, { recursive: true })
+      const imagemagick_cmd = [
+        'convert',
+        '-size',
+        `${background_width}x${background_height}`,
+        'xc:none',
+        '-stroke',
+        'black',
+        '-strokewidth',
+        '6',
+        ...imagemagick_draw_arrows,
+        zoompan_filepath
+      ]
+      const proc = Deno.run({ cmd: imagemagick_cmd })
+      const result = await proc.status()
+      ffmpeg_cmd.push('-framerate', 60, '-loop', 1, '-t', 1, '-i', zoompan_filepath)
+      // complex_filter_inputs.push(`[${input_index}:v][v_in_${input_index}]`)
+      const overlay_filter = `overlay=x=${0}:y=${0}:eof_action=pass`
+      const current_clip = `[v_out_${input_index}]`
+      complex_filter_overlays.push(`${last_clip}[${input_index}:v] ${overlay_filter} ${current_clip}`)
+      last_clip = current_clip
+      input_index++
+    }
+  }
+
   const complex_filter = [...complex_filter_inputs, ...complex_filter_overlays]
   // we may have an output that is just a black screen
   if (last_clip) ffmpeg_cmd.push('-map', last_clip)
@@ -1055,7 +1141,7 @@ async function render(
   ffmpeg_cmd.push('-y')
   // console.log(ffmpeg_cmd.join('\n'))
   // replace w/ this when you want to copy the command
-  console.log(ffmpeg_cmd.map((c) => `'${c}'`).join(' '))
+  // console.log(ffmpeg_cmd.map((c) => `'${c}'`).join(' '))
 
   await ffmpeg(template, ffmpeg_cmd, total_duration, options?.progress_callback)
 
