@@ -96,21 +96,20 @@ async function try_render_video(
   options: RenderOptions
 ) {
   try {
-    const copied_options = { ...options }
+    options = { ...options }
     const execution_start_time = performance.now()
     if (args['verbose']) {
-      copied_options.ffmpeg_verbosity = 'info'
-    } else if (args['quiet']) {
+      options.ffmpeg_verbosity = 'info'
     } else {
-      copied_options.progress_callback = progress => progress_callback(execution_start_time, progress)
+      options.progress_callback = progress => progress_callback(execution_start_time, progress)
     }
     if (!overwrite && (await fs.exists(output_filepath))) {
       throw new Error(`Output file ${output_filepath} exists. Use the --overwrite flag to overwrite it.`)
     }
     const template_input = await read_template(template_filepath)
     const { template, rendered_clips_count } = args['preview']
-      ? await render_sample_frame(template_input, output_filepath, copied_options)
-      : await render_video(template_input, output_filepath, copied_options)
+      ? await render_sample_frame(template_input, output_filepath, options)
+      : await render_video(template_input, output_filepath, options)
     const execution_time_seconds = (performance.now() - execution_start_time) / 1000
 
     if (!args['preview'] && args['open']) {
@@ -159,7 +158,7 @@ OPTIONS:
 
   --verbose                                 Show ffmpeg logging instead of outputting a progress bar.
 
-  --quiet                                   Do not log anything
+  --debug                                   Write debug information to a file
 
   --help                                    Print this message.`)
   Deno.exit(args['help'] ? 0 : 1)
@@ -171,6 +170,7 @@ const output_filepath = positional_args[1] ?? construct_output_filepath(args, te
 const options: RenderOptions = {
   ffmpeg_verbosity: 'error',
   cwd: path.resolve(path.dirname(template_filepath)),
+  debug_logs: args['debug'],
 }
 
 const output_filepath_is_image = ['.jpg', '.jpeg', '.png'].some(ext => output_filepath.endsWith(ext))

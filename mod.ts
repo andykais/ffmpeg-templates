@@ -53,6 +53,11 @@ interface TemplateParsed extends Template {
   preview: NonNullable<Template['preview']>
 }
 
+interface Context {
+  template: TemplateParsed
+  output_folder: string
+}
+
 const decoder = new TextDecoder()
 
 function is_media_clip(clip: Clip): clip is MediaClip
@@ -473,7 +478,9 @@ function compute_zoompans(
 
         const n_frames = (computed_zoompan.end_at_seconds - computed_zoompan.start_at_seconds) * info.framerate
         const x_step = (computed_zoompan.dest_x - computed_zoompan.start_x) / n_frames
+        console.log({ x_step, from: `(${computed_zoompan.dest_x} - ${computed_zoompan.start_x}) / ${n_frames}` })
         const n_frames_so_far = info.framerate * computed_zoompan.start_at_seconds
+        if (computed_zoompan.end_at_seconds === 0) { computed_zoompan.start_x = 0 }
         const x_expression = `(n - ${n_frames_so_far})*${x_step}+${computed_zoompan.start_x}`
         computed_zoompan.x_expression = x_expression
       }
@@ -489,6 +496,7 @@ function compute_zoompans(
         const n_frames = (computed_zoompan.end_at_seconds - computed_zoompan.start_at_seconds) * info.framerate
         const y_step = (computed_zoompan.dest_y - computed_zoompan.start_y) / n_frames
         const n_frames_so_far = info.framerate * computed_zoompan.start_at_seconds
+        if (computed_zoompan.end_at_seconds === 0) { computed_zoompan.start_y = 0 }
         const y_eypression = `(n - ${n_frames_so_far})*${y_step}+${computed_zoompan.start_y}`
         computed_zoompan.y_expression = y_eypression
       }
@@ -889,6 +897,7 @@ async function ffmpeg(
 
 interface RenderOptions {
   ffmpeg_verbosity?: 'quiet' | 'error' | 'warning' | 'info' | 'debug'
+  debug_logs?: boolean,
   progress_callback?: OnProgress
   cwd?: string
 }
@@ -985,7 +994,8 @@ async function render(
 
       for (const i of zoompans.keys()) {
         const zoompan = zoompans[i]
-        if (zoompan.dest_x && zoompan.x_expression) {
+        console.log(zoompan)
+        if (zoompan.dest_x !== undefined && zoompan.x_expression !== undefined) {
           if (sample_frame !== undefined) {
             if (sample_frame >= zoompan.start_at_seconds && sample_frame < zoompan.end_at_seconds) {
               const n = sample_frame * info.framerate
@@ -1050,7 +1060,7 @@ async function render(
     const imagemagick_draw_arrows = []
     for (const clip of template.clips) {
       for (const zoompan of clip_zoompan_map[clip.id]) {
-        const color = 'red'
+        const color = 'hsl(0,   255,   147.5)'
         if (zoompan.start_at_seconds <= sample_frame && zoompan.end_at_seconds > sample_frame) {
           const info = get_clip(clip_info_map, clip.id)
           const n = sample_frame * info.framerate
@@ -1142,6 +1152,7 @@ async function render(
   // console.log(ffmpeg_cmd.join('\n'))
   // replace w/ this when you want to copy the command
   // console.log(ffmpeg_cmd.map((c) => `'${c}'`).join(' '))
+  if (options?.debug_logs) await write_cmd_to_file(ffmpeg_cmd, path.parse(output_filepath).dir, 'ffmpeg-debug.sh')
 
   await ffmpeg(template, ffmpeg_cmd, total_duration, options?.progress_callback)
 
@@ -1158,6 +1169,17 @@ async function render_sample_frame(
   options?: RenderOptions
 ) {
   return await render(template_input, output_filepath, { ...options, render_sample_frame: true })
+}
+
+async function write_cmd_to_file(cmd: (string | number)[], output_dir: string, filepath: string) {
+  console.log(`Saved ffmpeg command to ${filepath}`)
+  const debug_filepath = path.join(output_dir, 'debug-ffmpeg.sh')
+  const cmd_str = cmd
+    .map(c => c.toString())
+    .map(c => /[ \/]/.test(c) ? `'${c}'` : c)
+    .join(' \\\n  ')
+
+  await Deno.writeTextFile(debug_filepath, cmd_str, { mode: 0o777 })
 }
 
 export { render_video, render_sample_frame }
