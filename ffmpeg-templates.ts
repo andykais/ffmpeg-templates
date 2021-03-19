@@ -29,6 +29,7 @@ async function create_loading_placeholder_preview(output_path: string) {
       output_path,
     ],
   })
+  await Deno.mkdir(path.dirname(output_path), { recursive: true })
   const result = await proc.status()
   if (result.code !== 0) {
     // console.error(await proc.output())
@@ -55,9 +56,16 @@ function human_readable_duration(duration_seconds: number): string {
   else return `${duration_seconds.toFixed(0)}s`
 }
 
-function progress_callback(execution_start_time: number, ffmpeg_progress: FfmpegProgress) {
+let writing_progress_bar = false
+let queued: {execution_start_time: number, ffmpeg_progress: FfmpegProgress} | null = null
+async function progress_callback(execution_start_time: number, ffmpeg_progress: FfmpegProgress) {
+  if (writing_progress_bar) {
+    queued = {execution_start_time, ffmpeg_progress}
+    return
+  }
+  writing_progress_bar = true
   const { out_time, progress, percentage } = ffmpeg_progress
-  const console_width = Deno.consoleSize(Deno.stdout.rid).columns
+  const console_width = await Deno.consoleSize(Deno.stdout.rid).columns
   // const unicode_bar = '\u2588'
   const unicode_bar = '#'
   const execution_time_seconds = (performance.now() - execution_start_time) / 1000
@@ -66,7 +74,13 @@ function progress_callback(execution_start_time: number, ffmpeg_progress: Ffmpeg
   const total_bar_width = console_width - prefix.length - suffix.length
   const bar = unicode_bar.repeat(Math.min(percentage, 1) * total_bar_width)
   const message = `\r${prefix}${bar.padEnd(total_bar_width, '-')}${suffix}`
-  Deno.stdout.write(encoder.encode(message))
+  await Deno.writeAll(Deno.stdout, encoder.encode(message))
+  writing_progress_bar = false
+  if (queued) {
+    const args = queued
+    queued = null
+    progress_callback(args.execution_start_time, args.ffmpeg_progress)
+  }
 }
 
 async function read_template(template_filepath: string): Promise<Template> {
