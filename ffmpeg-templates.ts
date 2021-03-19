@@ -3,7 +3,7 @@ import * as fs from 'https://deno.land/std@0.75.0/fs/mod.ts'
 import * as flags from 'https://deno.land/std@0.75.0/flags/mod.ts'
 import * as yaml from 'https://deno.land/std@0.75.0/encoding/yaml.ts'
 import * as errors from './errors.ts'
-import { render_video, render_sample_frame } from './mod.ts'
+import { render_video, render_sample_frame, get_output_locations } from './mod.ts'
 import type { Template, RenderOptions, FfmpegProgress } from './mod.ts'
 
 const VERSION = 'v0.1.0'
@@ -43,10 +43,10 @@ function open(filename: string) {
   return proc
 }
 
-function construct_output_filepath(args: flags.Args, template_filepath: string) {
+function construct_output_folder(args: flags.Args, template_filepath: string) {
   const { dir, name } = path.parse(template_filepath)
   const render_ext = args['preview'] ? '.jpg' : '.mp4'
-  return path.join(dir, `${name}${render_ext}`)
+  return path.join(dir, `${name}`)
 }
 
 function human_readable_duration(duration_seconds: number): string {
@@ -142,8 +142,8 @@ ARGS:
   <template_filepath>                       Path to a YAML or JSON template file which defines the structure of
                                             the outputted video
 
-  <output_filepath>                         The file that will be outputted by ffmpeg. When not specified, a
-                                            file will be created adjacent to the template ending in .mp4.
+  <output_folder>                           The folder in which the output and generated assets will be saved to.
+                                            When not specified, a folder will be created adjacent to the template.
 
 OPTIONS:
   --preview                                 Instead of outputting the whole video, output a single frame as a jpg.
@@ -166,26 +166,27 @@ OPTIONS:
 
 const positional_args = args._.map(a => a.toString())
 const template_filepath = positional_args[0]
-const output_filepath = positional_args[1] ?? construct_output_filepath(args, template_filepath)
+const output_folder = positional_args[1] ?? construct_output_folder(args, template_filepath)
 const options: RenderOptions = {
   ffmpeg_verbosity: 'error',
   cwd: path.resolve(path.dirname(template_filepath)),
   debug_logs: args['debug'],
 }
+const output_locations = get_output_locations(output_folder)
 
-const output_filepath_is_image = ['.jpg', '.jpeg', '.png'].some(ext => output_filepath.endsWith(ext))
-if (args['preview'] && !output_filepath_is_image) {
-  throw new Error('Invalid commands. <output_filepath> must be a video filename when rendering video output.')
-}
-if (!args['preview'] && output_filepath_is_image) {
-  throw new Error('Invalid commands. <output_filepath> must be an video filename.')
-}
+// const output_filepath_is_image = ['.jpg', '.jpeg', '.png'].some(ext => output_filepath.endsWith(ext))
+// if (args['preview'] && !output_filepath_is_image) {
+//   throw new Error('Invalid commands. <output_filepath> must be a video filename when rendering video output.')
+// }
+// if (!args['preview'] && output_filepath_is_image) {
+//   throw new Error('Invalid commands. <output_filepath> must be an video filename.')
+// }
 
 if (args['preview'] && args['open']) {
-  await create_loading_placeholder_preview(output_filepath)
-  open(output_filepath)
+  await create_loading_placeholder_preview(output_locations.rendered_preview)
+  open(output_locations.rendered_preview)
 }
-await try_render_video(template_filepath, output_filepath, Boolean(args['overwrite']), options)
+await try_render_video(template_filepath, output_folder, Boolean(args['overwrite']), options)
 
 if (args.watch) {
   console.log(`watching ${template_filepath} for changes`)
@@ -195,7 +196,7 @@ if (args.watch) {
       lock = true
       setTimeout(() => {
         console.log(`template ${template_filepath} was changed. Starting render.`)
-        try_render_video(template_filepath, output_filepath, true, options).then(() => {
+        try_render_video(template_filepath, output_folder, true, options).then(() => {
           lock = false
           console.log(`watching ${template_filepath} for changes`)
         })

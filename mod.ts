@@ -53,11 +53,6 @@ interface TemplateParsed extends Template {
   preview: NonNullable<Template['preview']>
 }
 
-interface Context {
-  template: TemplateParsed
-  output_folder: string
-}
-
 const decoder = new TextDecoder()
 
 function is_media_clip(clip: Clip): clip is MediaClip
@@ -67,6 +62,24 @@ function is_media_clip(clip: Clip | ClipParsed): clip is MediaClipParsed | Media
 }
 function is_font_clip(clip: ClipParsed): clip is FontClipParsed {
   return !is_media_clip(clip)
+}
+
+interface OutputLocations {
+  rendered_preview: string
+  rendered_video: string
+  generated_text_folder: string
+  generated_zoompan_preview: string
+  debug_ffmpeg: string
+}
+
+function get_output_locations(output_folder: string): OutputLocations {
+  return {
+    rendered_preview: path.join(output_folder, 'preview.jpg'),
+    rendered_video: path.join(output_folder, 'output.mp4'),
+    generated_text_folder: path.join(output_folder, 'text_clips/'),
+    generated_zoompan_preview: path.join(output_folder, 'zoompan.jpg'),
+    debug_ffmpeg: path.join(output_folder, 'ffmpeg.sh')
+  }
 }
 
 function parse_template(template_input: Template, cwd: string): TemplateParsed {
@@ -478,7 +491,6 @@ function compute_zoompans(
 
         const n_frames = (computed_zoompan.end_at_seconds - computed_zoompan.start_at_seconds) * info.framerate
         const x_step = (computed_zoompan.dest_x - computed_zoompan.start_x) / n_frames
-        console.log({ x_step, from: `(${computed_zoompan.dest_x} - ${computed_zoompan.start_x}) / ${n_frames}` })
         const n_frames_so_far = info.framerate * computed_zoompan.start_at_seconds
         if (computed_zoompan.end_at_seconds === 0) { computed_zoompan.start_x = 0 }
         const x_expression = `(n - ${n_frames_so_far})*${x_step}+${computed_zoompan.start_x}`
@@ -906,14 +918,16 @@ interface RenderOptionsInternal extends RenderOptions {
 }
 async function render(
   template_input: Template,
-  output_filepath: string,
+  output_folder: string,
   options?: RenderOptionsInternal
 ): Promise<{ template: TemplateParsed; rendered_clips_count: number }> {
   const cwd = options?.cwd ?? Deno.cwd()
   const template = parse_template(template_input, cwd)
+  const output_locations = get_output_locations(output_folder)
 
   const sample_frame = options?.render_sample_frame ? parse_duration(template.preview, template) : undefined
 
+  await Deno.mkdir(output_folder, { recursive: true })
   const clip_info_map = await probe_clips(template, template.clips)
   const { background_width, background_height } = compute_background_size(template, clip_info_map)
   const clips: MediaClipParsed[] = await replace_font_clips_with_image_clips(
@@ -994,7 +1008,6 @@ async function render(
 
       for (const i of zoompans.keys()) {
         const zoompan = zoompans[i]
-        console.log(zoompan)
         if (zoompan.dest_x !== undefined && zoompan.x_expression !== undefined) {
           if (sample_frame !== undefined) {
             if (sample_frame >= zoompan.start_at_seconds && sample_frame < zoompan.end_at_seconds) {
@@ -1145,44 +1158,43 @@ async function render(
   ffmpeg_cmd.push('-filter_complex', complex_filter.join(';\n'))
   ffmpeg_cmd.push(...map_audio_arg)
   // ffmpeg_cmd.push('-segment_time', '00:00:05', '-f', 'segment', 'output%03d.mp4')
-  ffmpeg_cmd.push(output_filepath)
+  ffmpeg_cmd.push(options?.render_sample_frame ? output_locations.rendered_preview : output_locations.rendered_video)
   // overwriting output files is handled in ffmpeg-templates.ts
   // We can just assume by this point the user is sure they want to write to this file
   ffmpeg_cmd.push('-y')
   // console.log(ffmpeg_cmd.join('\n'))
   // replace w/ this when you want to copy the command
   // console.log(ffmpeg_cmd.map((c) => `'${c}'`).join(' '))
-  if (options?.debug_logs) await write_cmd_to_file(ffmpeg_cmd, path.parse(output_filepath).dir, 'ffmpeg-debug.sh')
+  if (options?.debug_logs) await write_cmd_to_file(ffmpeg_cmd, output_locations.debug_ffmpeg)
 
   await ffmpeg(template, ffmpeg_cmd, total_duration, options?.progress_callback)
 
   return { template, rendered_clips_count: input_index }
 }
 
-async function render_video(template_input: Template, output_filepath: string, options?: RenderOptions) {
-  return await render(template_input, output_filepath, options)
+async function render_video(template_input: Template, output_folder: string, options?: RenderOptions) {
+  return await render(template_input, output_folder, options)
 }
 
 async function render_sample_frame(
   template_input: Template,
-  output_filepath: string,
+  output_folder: string,
   options?: RenderOptions
 ) {
-  return await render(template_input, output_filepath, { ...options, render_sample_frame: true })
+  return await render(template_input, output_folder, { ...options, render_sample_frame: true })
 }
 
-async function write_cmd_to_file(cmd: (string | number)[], output_dir: string, filepath: string) {
+async function write_cmd_to_file(cmd: (string | number)[], filepath: string) {
   console.log(`Saved ffmpeg command to ${filepath}`)
-  const debug_filepath = path.join(output_dir, 'debug-ffmpeg.sh')
   const cmd_str = cmd
     .map(c => c.toString())
     .map(c => /[ \/]/.test(c) ? `'${c}'` : c)
     .join(' \\\n  ')
 
-  await Deno.writeTextFile(debug_filepath, cmd_str, { mode: 0o777 })
+  await Deno.writeTextFile(filepath, cmd_str, { mode: 0o777 })
 }
 
-export { render_video, render_sample_frame }
+export { render_video, render_sample_frame, get_output_locations }
 export type {
   Template,
   TemplateParsed, // internal type
