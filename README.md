@@ -186,3 +186,4 @@ ffmpeg-music-video <audio_file>
 > "Clips and timeline have been recorded to template.yml. Render video now? Y/n"
 ```
 - audio visualizations to help with previews? https://www.youtube.com/watch?v=M58rc7cxl_s
+- template.layers or template.stack or template.order to separate the vertical ordering from the timeline

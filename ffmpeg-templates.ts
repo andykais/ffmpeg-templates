@@ -114,7 +114,7 @@ async function try_render_video(
     const execution_start_time = performance.now()
     if (args['verbose']) {
       options.ffmpeg_verbosity = 'info'
-    } else {
+    } else if (!args['quiet']) {
       options.progress_callback = progress => progress_callback(execution_start_time, progress)
     }
     if (!overwrite && (await fs.exists(output_filepath))) {
@@ -172,6 +172,8 @@ OPTIONS:
 
   --verbose                                 Show ffmpeg logging instead of outputting a progress bar.
 
+  --quiet                                   Do not print a progress bar
+
   --debug                                   Write debug information to a file
 
   --help                                    Print this message.`)
@@ -188,14 +190,7 @@ const options: RenderOptions = {
 }
 const output_locations = get_output_locations(output_folder)
 
-// const output_filepath_is_image = ['.jpg', '.jpeg', '.png'].some(ext => output_filepath.endsWith(ext))
-// if (args['preview'] && !output_filepath_is_image) {
-//   throw new Error('Invalid commands. <output_filepath> must be a video filename when rendering video output.')
-// }
-// if (!args['preview'] && output_filepath_is_image) {
-//   throw new Error('Invalid commands. <output_filepath> must be an video filename.')
-// }
-
+if (!(await fs.exists(template_filepath))) throw new errors.InputError(`Template file ${template_filepath} does not exist`)
 if (args['preview'] && args['open']) {
   await create_loading_placeholder_preview(output_locations.rendered_preview)
   open(output_locations.rendered_preview)

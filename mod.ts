@@ -720,6 +720,7 @@ function compute_timeline(template: TemplateParsed, clip_info_map: ClipInfoMap) 
           }
 
           layer_ordered_clips[layer_index] = layer_ordered_clips[layer_index] ?? []
+          console.log({ layer_index, clip_id, speed, clip_duration })
           layer_ordered_clips[layer_index].push({
             clip_id: clip_id,
             duration: clip_duration,
@@ -735,7 +736,7 @@ function compute_timeline(template: TemplateParsed, clip_info_map: ClipInfoMap) 
   return {
     // flatten the layers and timelines into a single stream of overlays
     // (where the stuff that should appear in the background is first)
-    timeline: layer_ordered_clips.reduce((acc: TimelineClip[], layer) => [...acc, ...layer], []),
+    timeline: layer_ordered_clips.reduce((acc: TimelineClip[], layer) => acc.concat(layer), []),
     total_duration,
   }
 }
@@ -956,6 +957,7 @@ async function render(
 
   for (const i of timeline.keys()) {
     const { clip_id, start_at, trim_start, duration, speed } = timeline[i]
+    console.log({clip_id})
 
     // we dont care about clips that do not involve the sample frame
     if (options?.render_sample_frame && !(start_at <= sample_frame! && start_at + duration >= sample_frame!))
@@ -1010,7 +1012,7 @@ async function render(
         const zoompan = zoompans[i]
         if (zoompan.dest_x !== undefined && zoompan.x_expression !== undefined) {
           if (sample_frame !== undefined) {
-            if (sample_frame >= zoompan.start_at_seconds && sample_frame < zoompan.end_at_seconds) {
+            if (sample_frame >= zoompan.start_at_seconds && sample_frame <= zoompan.end_at_seconds) {
               const n = sample_frame * info.framerate
               crop_x = eval(zoompan.x_expression)
             }
