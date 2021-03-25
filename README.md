@@ -51,7 +51,7 @@ ffmpeg-templates template.yml output.jpg --render-sample-frame 00:00:03 --watch
 
 ## Template Syntax
 A video project is defined using a template file like this example one below. Think of this like the video
-editor GUI. Full documentation exists [here](https://doc.deno.land/https/raw.githubusercontent.com/andykais/ffmpeg-templates/main/structs.ts#Template)
+editor GUI. Full documentation exists [here](https://doc.deno.land/https/raw.githubusercontent.com/andykais/ffmpeg-templates/main/template_input.ts#Template)
 ```yaml
 clips:
   # specify clips in an array, the only field necessary is 'file'
@@ -107,7 +107,7 @@ project file, massaging the new clip to the same shape, size and length as an ol
 
 `ffmpeg-templates`
 is really just nicer syntax on top of what the ffmpeg program already offers, but it offers an easy to pick up
-syntax and schema. Everything that this program can do, is defined in a single [schema file](./structs.ts). No
+syntax and schema. Everything that this program can do, is defined in a single [schema file](./template_input.ts). No
 complicated tutorials, no hidden settings in a application preferences. Its just a bare bones video editor.
 
 ## Roadmap
@@ -186,4 +186,5 @@ ffmpeg-music-video <audio_file>
 > "Clips and timeline have been recorded to template.yml. Render video now? Y/n"
 ```
 - audio visualizations to help with previews? https://www.youtube.com/watch?v=M58rc7cxl_s
-- template.layers or template.stack or template.order to separate the vertical ordering from the timeline
+- template.layers or template.stack or template.order to separate the vertical ordering from the timeline? Not necessary, but possibly more clear
+- add CI testing (install ffmpeg via apt, or use a cache: https://stackoverflow.com/questions/59269850/caching-apt-packages-in-github-actions-workflow)
