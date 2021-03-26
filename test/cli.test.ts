@@ -22,3 +22,11 @@ Deno.test('zoompan', async () => {
   const ffmpeg_cmd_fixture = await Deno.readTextFile('test/fixtures/zoompan/ffmpeg.sh')
   assertEquals(ffmpeg_cmd, ffmpeg_cmd_fixture)
 })
+
+Deno.test('speed', async () => {
+  await Deno.remove('test/resources/speed/ffmpeg.sh')
+  await ffmpeg_templates('test/resources/speed.yml', '--overwrite', '--debug')
+  const ffmpeg_cmd = await Deno.readTextFile('test/resources/speed/ffmpeg.sh')
+  const ffmpeg_cmd_fixture = await Deno.readTextFile('test/fixtures/speed/ffmpeg.sh')
+  assertEquals(ffmpeg_cmd, ffmpeg_cmd_fixture)
+})

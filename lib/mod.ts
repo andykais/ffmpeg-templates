@@ -193,7 +193,7 @@ async function render(
         const trim_start_for_preview = trim_start + sample_frame! - start_at
         ffmpeg_cmd.push('-ss', trim_start_for_preview, '-t', duration, '-i', clip.filepath)
       } else {
-        ffmpeg_cmd.push('-ss', trim_start, '-t', duration, '-i', clip.filepath)
+        ffmpeg_cmd.push('-ss', trim_start, '-t', duration * speed, '-i', clip.filepath)
       }
     } else if (info.type === 'audio') {
       throw new Error('unimplemented')
