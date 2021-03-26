@@ -1,25 +1,24 @@
 import * as io from 'https://deno.land/std@0.75.0/io/mod.ts'
 import { ProbeError, CommandError } from './errors.ts'
 import { parse_aspect_ratio, parse_ffmpeg_packet } from './parsers/ffmpeg_output.ts'
-import { is_media_clip } from './parsers/template.ts'
+import { is_media_clip, AbstractClipMap } from './parsers/template.ts'
 import { compute_rotated_size } from './geometry.ts'
 import type * as template_parsed from './parsers/template.ts'
+import type { Seconds } from './parsers/duration.ts'
 
-type Seconds = number
-
-interface ClipInfoMap {
-  [clip_id: string]: {
-    id: string
-    filepath: string
-    width: number
-    height: number
-    framerate: number
-    aspect_ratio: number
-    has_audio: boolean
-    duration: Seconds
-    type: 'video' | 'audio' | 'image'
-  }
+interface ClipInfo {
+  id: string
+  filepath: string
+  width: number
+  height: number
+  framerate: number
+  aspect_ratio: number
+  has_audio: boolean
+  duration: Seconds
+  type: 'video' | 'audio' | 'image'
 }
+
+class ClipInfoMap extends AbstractClipMap<ClipInfo> {}
 
 type OnReadLine = (line: string) => void
 async function exec(cmd: string[], readline_cb?: OnReadLine) {
@@ -41,11 +40,13 @@ async function exec(cmd: string[], readline_cb?: OnReadLine) {
   }
 }
 
+class ClipZoompansMap extends AbstractClipMap<ClipInfo> {}
+
 // The cache key is the filename only
 // That means if the file is overwritten, the cache will not pick up that change
 // So for now, if you edit a file, you restart the watcher
 // This is fair enough since its how most video editors function (and how often are people manipulating source files?)
-const clip_info_map_cache: ClipInfoMap = {}
+const clip_info_map_cache = new ClipInfoMap()
 async function probe_clips(
   template: template_parsed.Template,
   clips: template_parsed.Template['clips'],
@@ -60,7 +61,7 @@ async function probe_clips(
 
   const probe_clips_promises = unique_media_clips.map(async (clip: template_parsed.MediaClip) => {
     const { id, filepath } = clip
-    if (use_cache && clip_info_map_cache[filepath]) return clip_info_map_cache[filepath]
+    if (use_cache && clip_info_map_cache.has(filepath)) return clip_info_map_cache.get_or_else(filepath)
     if (is_media_clip(clip.source_clip)) console.log(`Probing file ${clip.file}`)
     else console.log(`Probing font asset ${clip.file}`)
     const result = await exec([
@@ -133,13 +134,13 @@ async function probe_clips(
 
   const probed_clips = await Promise.all(probe_clips_promises)
   for (const probed_clip of probed_clips) {
-    clip_info_map_cache[probed_clip.filepath] = probed_clip
+    clip_info_map_cache.set(probed_clip.filepath, probed_clip)
   }
   return media_clips.reduce((acc: ClipInfoMap, clip, i) => {
-    const clip_info = clip_info_map_cache[clip.filepath]
-    acc[clip.id] = clip_info
+    const clip_info = clip_info_map_cache.get_or_else(clip.filepath)
+    acc.set(clip.id, clip_info)
     return acc
-  }, {})
+  }, new ClipInfoMap())
 }
 
 export { probe_clips }

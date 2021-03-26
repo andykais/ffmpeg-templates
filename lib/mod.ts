@@ -8,6 +8,7 @@ import { parse_percentage } from './parsers/unit.ts'
 import { parse_template } from './parsers/template.ts'
 import { probe_clips } from './probe.ts'
 import { compute_geometry, compute_background_size, compute_rotated_size } from './geometry.ts'
+// import { compute_zoompans } from './zoompan.ts'
 import { compute_zoompans } from './zoompan.ts'
 import { compute_timeline } from './timeline.ts'
 import { replace_font_clips_with_image_clips } from './font.ts'
@@ -16,7 +17,6 @@ import type * as template_input from './template_input.ts'
 import type * as template_parsed from './parsers/template.ts'
 import type { ClipGeometryMap } from './geometry.ts'
 import type { ClipInfoMap } from './probe.ts'
-import type { ClipZoompanMap } from './zoompan.ts'
 import type { OnProgress, FfmpegProgress } from './bindings/ffmpeg.ts'
 
 const decoder = new TextDecoder()
@@ -37,12 +37,6 @@ function get_output_locations(output_folder: string): OutputLocations {
     generated_zoompan_preview: path.join(output_folder, 'zoompan.jpg'),
     debug_ffmpeg: path.join(output_folder, 'ffmpeg.sh'),
   }
-}
-
-function get_clip<T>(clip_map: { [clip_id: string]: T }, clip_id: template_input.ClipID) {
-  const clip = clip_map[clip_id]
-  if (!clip) throw new InputError(`Clip ${clip_id} does not exist.`)
-  return clip
 }
 
 // NOTE atempo cannot exceed the range of 0.5 to 100.0. To get around this, we need to string multiple atempo calls together.
@@ -110,9 +104,9 @@ async function render(
       continue
 
     const clip = clips.find((c) => c.id === clip_id)!
-    const info = clip_info_map[clip_id]
-    const geometry = clip_geometry_map[clip_id]
-    const zoompans = clip_zoompan_map[clip_id]
+    const info = clip_info_map.get_or_else(clip_id)
+    const geometry = clip_geometry_map.get_or_else(clip_id)
+    const zoompans = clip_zoompan_map.get_or_else(clip_id)
 
     const video_input_filters = []
     if (clip.transition?.fade_in) {
@@ -219,10 +213,10 @@ async function render(
     const arrow_size = (background_width * 0.03) / 15
     const imagemagick_draw_arrows = []
     for (const clip of template.clips) {
-      for (const zoompan of clip_zoompan_map[clip.id]) {
+      for (const zoompan of clip_zoompan_map.get_or_else(clip.id)) {
         const color = 'hsl(0,   255,   147.5)'
         if (zoompan.start_at_seconds <= sample_frame && zoompan.end_at_seconds > sample_frame) {
-          const info = get_clip(clip_info_map, clip.id)
+          const info = clip_info_map.get_or_else(clip.id)
           const n = sample_frame * info.framerate
           const start_x = background_width / 2
           const start_y = background_height / 2

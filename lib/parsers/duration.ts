@@ -93,3 +93,4 @@ export {
   parse_aspect_ratio,
   parse_ffmpeg_packet,
 }
+export type { Seconds }

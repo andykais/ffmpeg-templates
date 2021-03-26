@@ -1,32 +1,25 @@
 import { InputError } from './errors.ts'
 import { parse_unit } from './parsers/unit.ts'
+import { AbstractClipMap } from './parsers/template.ts'
 import type { ClipID } from './template_input.ts'
 import type * as template_parsed from './parsers/template.ts'
 import type { ClipInfoMap } from './probe.ts'
 
-interface ClipGeometryMap {
-  [clip_id: string]: {
-    x: number | string
-    y: number | string
+interface ComputedGeometry {
+  x: number | string
+  y: number | string
+  width: number
+  height: number
+  scale: { width: number; height: number }
+  rotate?: { degrees: number; width: number; height: number }
+  crop?: {
+    x: number
+    y: number
     width: number
     height: number
-    scale: { width: number; height: number }
-    rotate?: { degrees: number; width: number; height: number }
-    crop?: {
-      x: number
-      y: number
-      width: number
-      height: number
-    }
   }
 }
-
-// TODO consolidate
-function get_clip<T>(clip_map: { [clip_id: string]: T }, clip_id: ClipID) {
-  const clip = clip_map[clip_id]
-  if (!clip) throw new InputError(`Clip ${clip_id} does not exist.`)
-  return clip
-}
+class ClipGeometryMap extends AbstractClipMap<ComputedGeometry> {}
 
 function compute_rotated_size(size: { width: number; height: number }, rotation?: number) {
   if (!rotation) return size
@@ -43,7 +36,7 @@ function compute_background_size(template: template_parsed.Template, clip_info_m
   const { size } = template
 
   const compute_size = () => {
-    const info = get_clip(clip_info_map, size.relative_to)
+    const info = clip_info_map.get_or_else(size.relative_to)
     const { rotate } = template.clips.find((c) => c.id === size.relative_to)!
     return compute_rotated_size(info, rotate)
   }
@@ -62,9 +55,9 @@ function compute_geometry(
   background_height: number,
   clip_info_map: ClipInfoMap
 ) {
-  const clip_geometry_map: ClipGeometryMap = {}
+  const clip_geometry_map = new ClipGeometryMap()
   for (const clip of template.clips) {
-    const info = get_clip(clip_info_map, clip.id)
+    const info = clip_info_map.get_or_else(clip.id)
     const { layout } = clip
 
     const input_width = parse_unit(layout?.width, {
@@ -80,7 +73,7 @@ function compute_geometry(
     let height = input_height ?? (input_width ? input_width / info.aspect_ratio : info.height)
 
     let scale = { width, height }
-    let rotate: ClipGeometryMap['clip-id']['rotate'] = undefined
+    let rotate: ComputedGeometry['rotate'] = undefined
     if (clip.rotate) {
       // we want scaling to happen before rotation because (on average) we scale down, and if we can scale
       // sooner, then we have less pixels to rotate/crop/etc
@@ -88,7 +81,7 @@ function compute_geometry(
       rotate = { degrees: clip.rotate, width, height }
     }
 
-    let crop: ClipGeometryMap[string]['crop']
+    let crop: ComputedGeometry['crop']
     if (clip.crop && Object.keys(clip.crop).length) {
       const width_relative_to_crop = width
       const height_relative_to_crop = height
@@ -161,7 +154,7 @@ function compute_geometry(
         y = `(main_h / 2) - ${height / 2} + ${y}`
         break
     }
-    clip_geometry_map[clip.id] = { x, y, width, height, scale, rotate, crop }
+    clip_geometry_map.set(clip.id, { x, y, width, height, scale, rotate, crop })
   }
   return clip_geometry_map
 }

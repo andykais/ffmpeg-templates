@@ -8,13 +8,6 @@ import type { ClipID } from './template_input.ts'
 import type * as template_parsed from './parsers/template.ts'
 import type { ClipInfoMap } from './probe.ts'
 
-// TODO consolidate
-function get_clip<T>(clip_map: {[clip_id: string]: T}, clip_id: ClipID) {
-  const clip = clip_map[clip_id]
-  if (!clip) throw new InputError(`Clip ${clip_id} does not exist.`)
-  return clip
-}
-
 interface TimelineClip {
   clip_id: ClipID
   duration: number
@@ -57,7 +50,7 @@ function compute_timeline(template: template_parsed.Template, clip_info_map: Cli
       const clip = template.clips.find((c) => c.id === clip_id)
       if (clip === undefined)
         throw new InputError(`Clip ${clip_id} does not exist. I cannot be used in the timeline.`)
-      const info = get_clip(clip_info_map, clip_id)
+      const info = clip_info_map.get_or_else(clip_id)
       let clip_duration = info.duration
 
       const { trim } = clip
@@ -148,7 +141,7 @@ function compute_timeline(template: template_parsed.Template, clip_info_map: Cli
           if (math.gt(seconds_until_complete, 0)) layer_start_position += seconds_until_complete
         } else {
           const clip = template.clips.find((c) => c.id === clip_id)!
-          const info = get_clip(clip_info_map, clip_id)
+          const info = clip_info_map.get_or_else(clip_id)
           const { trim } = clip
           let clip_duration = info.duration
           if (Number.isNaN(clip_duration)) clip_duration = total_duration

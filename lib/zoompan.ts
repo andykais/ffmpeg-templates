@@ -1,47 +1,41 @@
 import { InputError } from './errors.ts'
 import { parse_unit, parse_percentage } from './parsers/unit.ts'
-import { parse_duration, } from './parsers/duration.ts'
+import { parse_duration } from './parsers/duration.ts'
+import { AbstractClipMap } from './parsers/template.ts'
 import type { ClipID } from './template_input.ts'
 import type * as template_parsed from './parsers/template.ts'
 import type { ClipInfoMap } from './probe.ts'
 import type { ClipGeometryMap } from './geometry.ts'
 
-type ClipZoompanMap = {
-  [clip_id: string]: {
-    start_at_seconds: number
-    end_at_seconds: number
+type ComputedZoompan = {
+  start_at_seconds: number
+  end_at_seconds: number
 
-    start_x: number
-    start_y: number
-    start_zoom: number
+  start_x: number
+  start_y: number
+  start_zoom: number
 
-    dest_x?: number
-    dest_y?: number
-    dest_zoom?: number
+  dest_x?: number
+  dest_y?: number
+  dest_zoom?: number
 
-    x_expression?: string
-    y_expression?: string
-  }[]
+  x_expression?: string
+  y_expression?: string
 }
 
-// TODO consolidate
-function get_clip<T>(clip_map: { [clip_id: string]: T }, clip_id: ClipID) {
-  const clip = clip_map[clip_id]
-  if (!clip) throw new InputError(`Clip ${clip_id} does not exist.`)
-  return clip
-}
+class ClipZoompansMap extends AbstractClipMap<ComputedZoompan[]> {}
 
 function compute_zoompans(
   template: template_parsed.Template,
   clip_info_map: ClipInfoMap,
   clip_geometry_map: ClipGeometryMap
-) {
-  const clip_zoompan_map: ClipZoompanMap = {}
+): ClipZoompansMap {
+  const clip_zoompan_map = new ClipZoompansMap()
   for (const clip of template.clips) {
-    const geometry = get_clip(clip_geometry_map, clip.id)
+    const geometry = clip_geometry_map.get_or_else(clip.id)
     const { crop } = geometry
-    const info = get_clip(clip_info_map, clip.id)
-    clip_zoompan_map[clip.id] = []
+    const info = clip_info_map.get_or_else(clip.id)
+    clip_zoompan_map.set(clip.id, [])
 
     let prev_zoompan = { timestamp_seconds: 0, x_offset: 0, y_offset: 0, zoom: 1 }
     for (const timestamp of Object.keys(clip.zoompan ?? {})) {
@@ -49,7 +43,7 @@ function compute_zoompans(
       const zoompan_end_at_seconds = parse_duration(timestamp, template)
       const next_prev_zoompan = { ...prev_zoompan, timestamp_seconds: zoompan_end_at_seconds }
 
-      const computed_zoompan: ClipZoompanMap['<clip_id>'][0] = {
+      const computed_zoompan: ComputedZoompan = {
         start_at_seconds: prev_zoompan.timestamp_seconds,
         end_at_seconds: zoompan_end_at_seconds,
 
@@ -111,13 +105,12 @@ function compute_zoompans(
       }
 
       prev_zoompan = next_prev_zoompan
-      clip_zoompan_map[clip.id].push(computed_zoompan)
+      clip_zoompan_map.get_or_else(clip.id).push(computed_zoompan)
     }
-    clip_zoompan_map[clip.id].sort((a, b) => a.start_at_seconds - b.start_at_seconds)
+    clip_zoompan_map.get_or_else(clip.id).sort((a, b) => a.start_at_seconds - b.start_at_seconds)
   }
   return clip_zoompan_map
 }
 
 export { compute_zoompans }
-
-export type { ClipZoompanMap }
+export type { ClipZoompansMap }

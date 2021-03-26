@@ -2,17 +2,14 @@ import * as path from 'https://deno.land/std@0.75.0/path/mod.ts'
 import { InputError } from '../errors.ts'
 import { parse_unit } from './unit.ts'
 import type * as template_input from '../template_input.ts'
-// import type {
-//   Pixels,
-//   Percentage,
-//   Timestamp,
-//   ClipID,
-//   TimelineEnums,
-//   Clip,
-//   MediaClip,
-//   FontClip,
-//   Template,
-// } from '../template_input.ts'
+
+abstract class AbstractClipMap<T> extends Map<template_input.ClipID, T> {
+  get_or_else(clip_id: template_input.ClipID): T {
+    const clip = this.get(clip_id)
+    if (!clip) throw new InputError(`Clip ${clip_id} does not exist.`)
+    else return clip
+  }
+}
 
 // Parsed Template
 interface MediaClip extends template_input.MediaClip {
@@ -109,5 +106,5 @@ function parse_template(template_input: template_input.Template, cwd: string): T
   return { ...template_input, size, clips, timeline, preview }
 }
 
-export { is_media_clip, is_font_clip, parse_template }
+export { is_media_clip, is_font_clip, parse_template, AbstractClipMap }
 export type { MediaClip, FontClip, Font, Clip, Template }

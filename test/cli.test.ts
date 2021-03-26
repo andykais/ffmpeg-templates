@@ -16,6 +16,7 @@ async function assert_file_md5(path: string, md5checksum: string) {
 }
 
 Deno.test('zoompan', async () => {
+  await Deno.remove('test/resources/zoompan/ffmpeg.sh')
   await ffmpeg_templates('test/resources/zoompan.yml', '--overwrite', '--debug')
   const ffmpeg_cmd = await Deno.readTextFile('test/resources/zoompan/ffmpeg.sh')
   const ffmpeg_cmd_fixture = await Deno.readTextFile('test/fixtures/zoompan/ffmpeg.sh')

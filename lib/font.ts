@@ -111,7 +111,7 @@ async function replace_font_clips_with_image_clips(
   const font_media_clips = await Promise.all(font_generation_promises)
   const font_media_clip_info_map = await probe_clips(template, font_media_clips, false)
   for (const clip of Object.values(font_media_clip_info_map)) {
-    clip_info_map[clip.id] = clip
+    clip_info_map.set(clip.id, clip)
   }
   const clips: template_parsed.MediaClip[] = template.clips.map((clip) => {
     if (is_media_clip(clip)) return clip
