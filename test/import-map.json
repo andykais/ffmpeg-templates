@@ -1,0 +1,10 @@
+{
+  "imports": {
+    "../lib/bindings/ffmpeg.ts": "./mock/bindings/ffmpeg.ts"
+  },
+  "scopes": {
+    "./mock/bindings/ffmpeg.ts": {
+      "../lib/bindings/ffmpeg.ts": "../lib/bindings/ffmpeg.ts"
+    }
+  }
+}

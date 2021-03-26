@@ -38,6 +38,7 @@ async function ffmpeg(
   longest_duration: number,
   progress_callback?: OnProgress
 ) {
+  if (Date.now() > 0) throw new Error('REAL!!!')
   const ffmpeg_safe_cmd = ffmpeg_cmd.map((a) => a.toString())
   if (progress_callback) {
     ffmpeg_safe_cmd.push('-progress', 'pipe:1')
