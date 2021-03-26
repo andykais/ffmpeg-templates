@@ -29,8 +29,6 @@ OPTIONS:
   --watch                                   Run continously when the template file changes. This is most useful
                                             in tandem with --preview.
 
-  --verbose                                 Show ffmpeg logging instead of outputting a progress bar.
-
   --quiet                                   Do not print a progress bar
 
   --debug                                   Write debug information to a file

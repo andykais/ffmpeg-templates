@@ -13,6 +13,7 @@ import { compute_zoompans } from './zoompan.ts'
 import { compute_timeline } from './timeline.ts'
 import { replace_font_clips_with_image_clips } from './font.ts'
 import { ffmpeg } from './bindings/ffmpeg.ts'
+import type { Logger } from './logger.ts'
 import type * as template_input from './template_input.ts'
 import type * as template_parsed from './parsers/template.ts'
 import type { ClipGeometryMap } from './geometry.ts'
@@ -58,6 +59,7 @@ interface RenderOptionsInternal extends RenderOptions {
   render_sample_frame?: boolean
 }
 async function render(
+  logger: Logger,
   input: template_input.Template,
   output_folder: string,
   options?: RenderOptionsInternal
@@ -69,9 +71,10 @@ async function render(
   const sample_frame = options?.render_sample_frame ? parse_duration(template.preview, template) : undefined
 
   await Deno.mkdir(output_folder, { recursive: true })
-  const clip_info_map = await probe_clips(template, template.clips)
+  const clip_info_map = await probe_clips(logger, template, template.clips)
   const { background_width, background_height } = compute_background_size(template, clip_info_map)
   const clips: template_parsed.MediaClip[] = await replace_font_clips_with_image_clips(
+    logger,
     template,
     background_width,
     background_height,
@@ -97,7 +100,6 @@ async function render(
 
   for (const i of timeline.keys()) {
     const { clip_id, start_at, trim_start, duration, speed } = timeline[i]
-    console.log({ clip_id })
 
     // we dont care about clips that do not involve the sample frame
     if (options?.render_sample_frame && !(start_at <= sample_frame! && start_at + duration >= sample_frame!))
@@ -312,36 +314,39 @@ async function render(
   // overwriting output files is handled in ffmpeg-templates.ts
   // We can just assume by this point the user is sure they want to write to this file
   ffmpeg_cmd.push('-y')
-  // console.log(ffmpeg_cmd.join('\n'))
-  // replace w/ this when you want to copy the command
-  // console.log(ffmpeg_cmd.map((c) => `'${c}'`).join(' '))
-  if (options?.debug_logs) await write_cmd_to_file(ffmpeg_cmd, output_locations.debug_ffmpeg)
+  if (options?.debug_logs) await write_cmd_to_file(logger, ffmpeg_cmd, output_locations.debug_ffmpeg)
 
   await ffmpeg(template, ffmpeg_cmd, total_duration, options?.progress_callback)
 
   return { template, rendered_clips_count: input_index }
 }
 
-async function render_video(input: template_input.Template, output_folder: string, options?: RenderOptions) {
-  return await render(input, output_folder, options)
-}
-
-async function render_sample_frame(
+async function render_video(
+  logger: Logger,
   input: template_input.Template,
   output_folder: string,
   options?: RenderOptions
 ) {
-  return await render(input, output_folder, { ...options, render_sample_frame: true })
+  return await render(logger, input, output_folder, options)
 }
 
-async function write_cmd_to_file(cmd: (string | number)[], filepath: string) {
-  console.log(`Saved ffmpeg command to ${filepath}`)
+async function render_sample_frame(
+  logger: Logger,
+  input: template_input.Template,
+  output_folder: string,
+  options?: RenderOptions
+) {
+  return await render(logger, input, output_folder, { ...options, render_sample_frame: true })
+}
+
+async function write_cmd_to_file(logger: Logger, cmd: (string | number)[], filepath: string) {
   const cmd_str = cmd
     .map((c) => c.toString())
     .map((c) => (/[ \/]/.test(c) ? `'${c}'` : c))
     .join(' \\\n  ')
 
   await Deno.writeTextFile(filepath, cmd_str, { mode: 0o777 })
+  logger.info(`Saved ffmpeg command to ${filepath}`)
 }
 
 export { render_video, render_sample_frame, get_output_locations }

@@ -3,6 +3,7 @@ import { ProbeError, CommandError } from './errors.ts'
 import { parse_aspect_ratio, parse_ffmpeg_packet } from './parsers/ffmpeg_output.ts'
 import { is_media_clip, AbstractClipMap } from './parsers/template.ts'
 import { compute_rotated_size } from './geometry.ts'
+import type { Logger } from './logger.ts'
 import type * as template_parsed from './parsers/template.ts'
 import type { Seconds } from './parsers/duration.ts'
 
@@ -48,6 +49,7 @@ class ClipZoompansMap extends AbstractClipMap<ClipInfo> {}
 // This is fair enough since its how most video editors function (and how often are people manipulating source files?)
 const clip_info_map_cache = new ClipInfoMap()
 async function probe_clips(
+  logger: Logger,
   template: template_parsed.Template,
   clips: template_parsed.Template['clips'],
   use_cache = true
@@ -62,8 +64,8 @@ async function probe_clips(
   const probe_clips_promises = unique_media_clips.map(async (clip: template_parsed.MediaClip) => {
     const { id, filepath } = clip
     if (use_cache && clip_info_map_cache.has(filepath)) return clip_info_map_cache.get_or_else(filepath)
-    if (is_media_clip(clip.source_clip)) console.log(`Probing file ${clip.file}`)
-    else console.log(`Probing font asset ${clip.file}`)
+    if (is_media_clip(clip.source_clip)) logger.info(`Probing file ${clip.file}`)
+    else logger.info(`Probing font asset ${clip.file}`)
     const result = await exec([
       'ffprobe',
       '-v',

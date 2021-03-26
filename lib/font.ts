@@ -4,11 +4,13 @@ import { CommandError } from './errors.ts'
 import { parse_unit } from './parsers/unit.ts'
 import { is_font_clip, is_media_clip } from './parsers/template.ts'
 import { probe_clips } from './probe.ts'
+import type { Logger } from './logger.ts'
 import type * as template_parsed from './parsers/template.ts'
 import type { ClipInfoMap } from './probe.ts'
 
 // generate font assets and replace font clips with media clips
 async function replace_font_clips_with_image_clips(
+  logger: Logger,
   template: template_parsed.Template,
   background_width: number,
   background_height: number,
@@ -109,7 +111,7 @@ async function replace_font_clips_with_image_clips(
   )
 
   const font_media_clips = await Promise.all(font_generation_promises)
-  const font_media_clip_info_map = await probe_clips(template, font_media_clips, false)
+  const font_media_clip_info_map = await probe_clips(logger, template, font_media_clips, false)
   for (const clip of Object.values(font_media_clip_info_map)) {
     clip_info_map.set(clip.id, clip)
   }

@@ -202,7 +202,6 @@ function compute_timeline(template: template_parsed.Template, clip_info_map: Cli
           }
 
           layer_ordered_clips[layer_index] = layer_ordered_clips[layer_index] ?? []
-          console.log({ layer_index, clip_id, speed, clip_duration })
           layer_ordered_clips[layer_index].push({
             clip_id: clip_id,
             duration: clip_duration,

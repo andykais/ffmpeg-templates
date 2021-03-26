@@ -6,14 +6,9 @@ import type * as template_parsed from '../parsers/template.ts'
 import type { Timestamp } from '../template_input.ts'
 
 type OnReadLine = (line: string) => void
-async function exec(cmd: string[], readline_cb?: OnReadLine) {
+async function exec(cmd: string[]) {
   const decoder = new TextDecoder()
   const proc = Deno.run({ cmd, stdout: 'piped' })
-  if (readline_cb) {
-    for await (const line of io.readLines(proc.stdout)) {
-      readline_cb(line)
-    }
-  }
   const result = await proc.status()
   const output_buffer = await proc.output()
   const output = decoder.decode(output_buffer)
@@ -31,14 +26,13 @@ type FfmpegProgress = {
   speed: string
   percentage: number
 }
-type OnProgress = (progress: FfmpegProgress) => void
+type OnProgress = (percentage: number) => void
 async function ffmpeg(
   template: template_parsed.Template,
   ffmpeg_cmd: (string | number)[],
   longest_duration: number,
   progress_callback?: OnProgress
 ) {
-  if (Date.now() > 0) throw new Error('REAL!!!')
   const ffmpeg_safe_cmd = ffmpeg_cmd.map((a) => a.toString())
   if (progress_callback) {
     ffmpeg_safe_cmd.push('-progress', 'pipe:1')
@@ -48,11 +42,9 @@ async function ffmpeg(
       const [key, value] = line.split('=')
       ;(progress as any)[key] = value
       if (key === 'progress') {
-        progress.percentage =
-          value === 'end' ? 1 : parse_duration(progress.out_time!, template) / longest_duration
-        // sometimes ffmpeg has a negative out_time. I do not know what this means yet
-        if (progress.percentage < 0) progress.percentage = 0
-        progress_callback(progress as FfmpegProgress)
+        const ffmpeg_percentage = parse_duration(progress.out_time!, template) / longest_duration
+        const percentage = Math.max(0, Math.min(1, ffmpeg_percentage))
+        progress_callback(percentage)
         progress = {}
       }
     }
