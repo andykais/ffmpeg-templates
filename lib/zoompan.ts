@@ -2,7 +2,7 @@ import { InputError } from './errors.ts'
 import { parse_unit, parse_percentage } from './parsers/unit.ts'
 import { parse_duration, } from './parsers/duration.ts'
 import type { ClipID } from './template_input.ts'
-import type { TemplateParsed } from './parsers/template.ts'
+import type * as template_parsed from './parsers/template.ts'
 import type { ClipInfoMap } from './probe.ts'
 import type { ClipGeometryMap } from './geometry.ts'
 
@@ -32,7 +32,7 @@ function get_clip<T>(clip_map: { [clip_id: string]: T }, clip_id: ClipID) {
 }
 
 function compute_zoompans(
-  template: TemplateParsed,
+  template: template_parsed.Template,
   clip_info_map: ClipInfoMap,
   clip_geometry_map: ClipGeometryMap
 ) {

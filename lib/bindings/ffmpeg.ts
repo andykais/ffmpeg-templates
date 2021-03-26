@@ -2,7 +2,7 @@ import * as io from 'https://deno.land/std@0.75.0/io/mod.ts'
 import { InputError, CommandError } from '../errors.ts'
 import { parse_duration } from '../parsers/duration.ts'
 import type { ClipID } from '../template_input.ts'
-import type { TemplateParsed } from '../parsers/template.ts'
+import type * as template_parsed from '../parsers/template.ts'
 import type { Timestamp } from '../template_input.ts'
 
 type OnReadLine = (line: string) => void
@@ -25,15 +25,6 @@ async function exec(cmd: string[], readline_cb?: OnReadLine) {
   }
 }
 
-// NOTE atempo cannot exceed the range of 0.5 to 100.0. To get around this, we need to string multiple atempo calls together.
-// Example provided here: https://trac.ffmpeg.org/wiki/How%20to%20speed%20up%20/%20slow%20down%20a%20video
-function compute_tempo(val: number) {
-  const numMultipliers =
-    val > 1 ? Math.ceil(Math.log(val) / Math.log(2)) : Math.ceil(Math.log(val) / Math.log(0.5))
-  const multVal = Math.pow(Math.E, Math.log(val) / numMultipliers)
-  return Array(numMultipliers).fill(`atempo=${multVal}`).join(',')
-}
-
 type FfmpegProgress = {
   out_time: Timestamp
   progress: 'continue' | 'end'
@@ -42,7 +33,7 @@ type FfmpegProgress = {
 }
 type OnProgress = (progress: FfmpegProgress) => void
 async function ffmpeg(
-  template: TemplateParsed,
+  template: template_parsed.Template,
   ffmpeg_cmd: (string | number)[],
   longest_duration: number,
   progress_callback?: OnProgress

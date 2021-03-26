@@ -1,5 +1,4 @@
 import { InputError } from '../errors.ts'
-import type { TemplateParsed } from './template.ts'
 
 class UnitError extends InputError {}
 function parse_percentage(percentage: string): number {

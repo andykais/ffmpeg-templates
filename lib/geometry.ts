@@ -1,7 +1,7 @@
 import { InputError } from './errors.ts'
 import { parse_unit } from './parsers/unit.ts'
 import type { ClipID } from './template_input.ts'
-import type { TemplateParsed } from './parsers/template.ts'
+import type * as template_parsed from './parsers/template.ts'
 import type { ClipInfoMap } from './probe.ts'
 
 interface ClipGeometryMap {
@@ -39,7 +39,7 @@ function compute_rotated_size(size: { width: number; height: number }, rotation?
   return { width, height }
 }
 
-function compute_background_size(template: TemplateParsed, clip_info_map: ClipInfoMap) {
+function compute_background_size(template: template_parsed.Template, clip_info_map: ClipInfoMap) {
   const { size } = template
 
   const compute_size = () => {
@@ -57,7 +57,7 @@ function compute_background_size(template: TemplateParsed, clip_info_map: ClipIn
 }
 
 function compute_geometry(
-  template: TemplateParsed,
+  template: template_parsed.Template,
   background_width: number,
   background_height: number,
   clip_info_map: ClipInfoMap

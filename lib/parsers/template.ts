@@ -1,59 +1,60 @@
 import * as path from 'https://deno.land/std@0.75.0/path/mod.ts'
 import { InputError } from '../errors.ts'
 import { parse_unit } from './unit.ts'
-import type {
-  Pixels,
-  Percentage,
-  Timestamp,
-  ClipID,
-  TimelineEnums,
-  Clip,
-  MediaClip,
-  FontClip,
-  Template,
-} from '../template_input.ts'
+import type * as template_input from '../template_input.ts'
+// import type {
+//   Pixels,
+//   Percentage,
+//   Timestamp,
+//   ClipID,
+//   TimelineEnums,
+//   Clip,
+//   MediaClip,
+//   FontClip,
+//   Template,
+// } from '../template_input.ts'
 
 // Parsed Template
-interface MediaClipParsed extends MediaClip {
-  id: ClipID
+interface MediaClip extends template_input.MediaClip {
+  id: template_input.ClipID
   filepath: string
-  source_clip: MediaClip | FontClip
+  source_clip: template_input.MediaClip | template_input.FontClip
 }
-type Font = NonNullable<FontClip['font']>
-interface FontParsed extends Font {
+// type Font = NonNullable<template_input.FontClip['font']>
+interface Font extends NonNullable<template_input.FontClip['font']> {
   color: string
   outline_color: string
   size: number
   background_radius: number
 }
-interface FontClipParsed extends FontClip {
-  id: ClipID
-  font: FontParsed
-  source_clip: FontClip
+interface FontClip extends template_input.FontClip {
+  id: template_input.ClipID
+  font: Font
+  source_clip: template_input.FontClip
 }
-type ClipParsed = MediaClipParsed | FontClipParsed
-interface TemplateParsed extends Template {
-  size: NonNullable<Required<Template['size']>>
-  clips: ClipParsed[]
+type Clip = MediaClip | FontClip
+interface Template extends template_input.Template {
+  size: NonNullable<Required<template_input.Template['size']>>
+  clips: Clip[]
   // clips: (Clip & { id: ClipID; filepath: string })[]
-  timeline: { [start_position: string]: (ClipID | TimelineEnums)[][] }
-  preview: NonNullable<Template['preview']>
+  timeline: { [start_position: string]: (template_input.ClipID | template_input.TimelineEnums)[][] }
+  preview: NonNullable<template_input.Template['preview']>
 }
 
+function is_media_clip(clip: template_input.Clip): clip is template_input.MediaClip
 function is_media_clip(clip: Clip): clip is MediaClip
-function is_media_clip(clip: ClipParsed): clip is MediaClipParsed
-function is_media_clip(clip: Clip | ClipParsed): clip is MediaClipParsed | MediaClip {
+function is_media_clip(clip: template_input.Clip | Clip): clip is MediaClip | template_input.MediaClip {
   return 'file' in clip
 }
-function is_font_clip(clip: ClipParsed): clip is FontClipParsed {
+function is_font_clip(clip: Clip): clip is FontClip {
   return !is_media_clip(clip)
 }
 
-function parse_template(template_input: Template, cwd: string): TemplateParsed {
+function parse_template(template_input: template_input.Template, cwd: string): Template {
   if (template_input.clips.length === 0) {
     throw new InputError(`template "clips" must have at least one clip present.`)
   }
-  const clips: TemplateParsed['clips'] = []
+  const clips: Template['clips'] = []
   for (const i of template_input.clips.keys()) {
     const clip = template_input.clips[i]
     const id = clip.id ?? `CLIP_${i}`
@@ -109,4 +110,4 @@ function parse_template(template_input: Template, cwd: string): TemplateParsed {
 }
 
 export { is_media_clip, is_font_clip, parse_template }
-export type { MediaClipParsed, FontClipParsed, FontParsed, ClipParsed, TemplateParsed }
+export type { MediaClip, FontClip, Font, Clip, Template }

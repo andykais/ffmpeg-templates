@@ -1,5 +1,5 @@
 import { InputError } from '../errors.ts'
-import type { TemplateParsed } from './template.ts'
+import type * as template_parsed from './template.ts'
 
 type Seconds = number
 
@@ -11,7 +11,7 @@ type Seconds = number
 // "00:00:03.0000 + {CLIP_0.trim.start}"
 const duration_var_regex = /\{([a-zA-Z0-9._-]+)\}/
 const parens_regex = /^\(.*?\)/
-function parse_duration(duration_expr: string, template: TemplateParsed): Seconds {
+function parse_duration(duration_expr: string, template: template_parsed.Template): Seconds {
   try {
     let current_duration_expr = duration_expr.trim()
     const [parens_expr] = current_duration_expr.match(parens_regex) ?? [null]

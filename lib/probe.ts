@@ -3,7 +3,7 @@ import { ProbeError, CommandError } from './errors.ts'
 import { parse_aspect_ratio, parse_ffmpeg_packet } from './parsers/ffmpeg_output.ts'
 import { is_media_clip } from './parsers/template.ts'
 import { compute_rotated_size } from './geometry.ts'
-import type { MediaClipParsed, FontClipParsed, TemplateParsed } from './parsers/template.ts'
+import type * as template_parsed from './parsers/template.ts'
 
 type Seconds = number
 
@@ -47,8 +47,8 @@ async function exec(cmd: string[], readline_cb?: OnReadLine) {
 // This is fair enough since its how most video editors function (and how often are people manipulating source files?)
 const clip_info_map_cache: ClipInfoMap = {}
 async function probe_clips(
-  template: TemplateParsed,
-  clips: TemplateParsed['clips'],
+  template: template_parsed.Template,
+  clips: template_parsed.Template['clips'],
   use_cache = true
 ): Promise<ClipInfoMap> {
   // only probe media clips
@@ -58,7 +58,7 @@ async function probe_clips(
   // we only need to probe files once
   const unique_media_clips = media_clips.filter((c) => unique_files.size < unique_files.add(c.filepath).size)
 
-  const probe_clips_promises = unique_media_clips.map(async (clip: MediaClipParsed) => {
+  const probe_clips_promises = unique_media_clips.map(async (clip: template_parsed.MediaClip) => {
     const { id, filepath } = clip
     if (use_cache && clip_info_map_cache[filepath]) return clip_info_map_cache[filepath]
     if (is_media_clip(clip.source_clip)) console.log(`Probing file ${clip.file}`)

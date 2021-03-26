@@ -5,7 +5,7 @@ import { parse_percentage } from './parsers/unit.ts'
 import { parse_duration } from './parsers/duration.ts'
 import { TIMELINE_ENUMS } from './template_input.ts'
 import type { ClipID } from './template_input.ts'
-import type { TemplateParsed } from './parsers/template.ts'
+import type * as template_parsed from './parsers/template.ts'
 import type { ClipInfoMap } from './probe.ts'
 
 // TODO consolidate
@@ -22,7 +22,7 @@ interface TimelineClip {
   speed: number
   trim_start: number
 }
-function compute_timeline(template: TemplateParsed, clip_info_map: ClipInfoMap) {
+function compute_timeline(template: template_parsed.Template, clip_info_map: ClipInfoMap) {
   const { timeline } = template
 
   const all_clips_trim_to_fit = Object.values(template.timeline).every((layers) =>

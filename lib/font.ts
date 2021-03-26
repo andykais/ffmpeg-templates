@@ -4,23 +4,23 @@ import { CommandError } from './errors.ts'
 import { parse_unit } from './parsers/unit.ts'
 import { is_font_clip, is_media_clip } from './parsers/template.ts'
 import { probe_clips } from './probe.ts'
-import type { TemplateParsed, MediaClipParsed, FontClipParsed } from './parsers/template.ts'
+import type * as template_parsed from './parsers/template.ts'
 import type { ClipInfoMap } from './probe.ts'
 
 // generate font assets and replace font clips with media clips
 async function replace_font_clips_with_image_clips(
-  template: TemplateParsed,
+  template: template_parsed.Template,
   background_width: number,
   background_height: number,
   clip_info_map: ClipInfoMap,
   cwd: string
-): Promise<MediaClipParsed[]> {
-  const font_clips: FontClipParsed[] = template.clips.filter(is_font_clip)
+): Promise<template_parsed.MediaClip[]> {
+  const font_clips: template_parsed.FontClip[] = template.clips.filter(is_font_clip)
   const font_assets_path = path.join('/tmp/ffmpeg-templates', cwd, `font_assets/`)
   if (font_clips.length) await Deno.mkdir(font_assets_path, { recursive: true })
 
-  const font_generation_promises: Promise<MediaClipParsed>[] = font_clips.map(
-    async (clip: FontClipParsed) => {
+  const font_generation_promises: Promise<template_parsed.MediaClip>[] = font_clips.map(
+    async (clip: template_parsed.FontClip) => {
       const filename = `${clip.id}.png`
       const filepath = path.join(font_assets_path, filename)
       // we remove the file so we can be certain it was created
@@ -113,7 +113,7 @@ async function replace_font_clips_with_image_clips(
   for (const clip of Object.values(font_media_clip_info_map)) {
     clip_info_map[clip.id] = clip
   }
-  const clips: MediaClipParsed[] = template.clips.map((clip) => {
+  const clips: template_parsed.MediaClip[] = template.clips.map((clip) => {
     if (is_media_clip(clip)) return clip
     else {
       const res = font_media_clips.find((c) => clip.id === c.id)!

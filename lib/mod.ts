@@ -6,32 +6,14 @@ import { ProbeError, CommandError, InputError } from './errors.ts'
 import { parse_duration } from './parsers/duration.ts'
 import { parse_percentage } from './parsers/unit.ts'
 import { parse_template } from './parsers/template.ts'
-import { TIMELINE_ENUMS } from './template_input.ts'
-import type * as template_input from './template_input.ts'
-import type {
-  Pixels,
-  Percentage,
-  Timestamp,
-  ClipID,
-  TimelineEnums,
-  Clip,
-  MediaClip,
-  FontClip,
-  Template,
-} from './template_input.ts'
 import { probe_clips } from './probe.ts'
 import { compute_geometry, compute_background_size, compute_rotated_size } from './geometry.ts'
 import { compute_zoompans } from './zoompan.ts'
 import { compute_timeline } from './timeline.ts'
 import { replace_font_clips_with_image_clips } from './font.ts'
 import { ffmpeg } from './bindings/ffmpeg.ts'
-import type {
-  MediaClipParsed,
-  FontParsed,
-  FontClipParsed,
-  ClipParsed,
-  TemplateParsed,
-} from './parsers/template.ts'
+import type * as template_input from './template_input.ts'
+import type * as template_parsed from './parsers/template.ts'
 import type { ClipGeometryMap } from './geometry.ts'
 import type { ClipInfoMap } from './probe.ts'
 import type { ClipZoompanMap } from './zoompan.ts'
@@ -57,7 +39,7 @@ function get_output_locations(output_folder: string): OutputLocations {
   }
 }
 
-function get_clip<T>(clip_map: { [clip_id: string]: T }, clip_id: ClipID) {
+function get_clip<T>(clip_map: { [clip_id: string]: T }, clip_id: template_input.ClipID) {
   const clip = clip_map[clip_id]
   if (!clip) throw new InputError(`Clip ${clip_id} does not exist.`)
   return clip
@@ -82,12 +64,12 @@ interface RenderOptionsInternal extends RenderOptions {
   render_sample_frame?: boolean
 }
 async function render(
-  template_input: Template,
+  input: template_input.Template,
   output_folder: string,
   options?: RenderOptionsInternal
-): Promise<{ template: TemplateParsed; rendered_clips_count: number }> {
+): Promise<{ template: template_parsed.Template; rendered_clips_count: number }> {
   const cwd = options?.cwd ?? Deno.cwd()
-  const template = parse_template(template_input, cwd)
+  const template = parse_template(input, cwd)
   const output_locations = get_output_locations(output_folder)
 
   const sample_frame = options?.render_sample_frame ? parse_duration(template.preview, template) : undefined
@@ -95,7 +77,7 @@ async function render(
   await Deno.mkdir(output_folder, { recursive: true })
   const clip_info_map = await probe_clips(template, template.clips)
   const { background_width, background_height } = compute_background_size(template, clip_info_map)
-  const clips: MediaClipParsed[] = await replace_font_clips_with_image_clips(
+  const clips: template_parsed.MediaClip[] = await replace_font_clips_with_image_clips(
     template,
     background_width,
     background_height,
@@ -346,12 +328,16 @@ async function render(
   return { template, rendered_clips_count: input_index }
 }
 
-async function render_video(template_input: Template, output_folder: string, options?: RenderOptions) {
-  return await render(template_input, output_folder, options)
+async function render_video(input: template_input.Template, output_folder: string, options?: RenderOptions) {
+  return await render(input, output_folder, options)
 }
 
-async function render_sample_frame(template_input: Template, output_folder: string, options?: RenderOptions) {
-  return await render(template_input, output_folder, { ...options, render_sample_frame: true })
+async function render_sample_frame(
+  input: template_input.Template,
+  output_folder: string,
+  options?: RenderOptions
+) {
+  return await render(input, output_folder, { ...options, render_sample_frame: true })
 }
 
 async function write_cmd_to_file(cmd: (string | number)[], filepath: string) {
@@ -365,15 +351,17 @@ async function write_cmd_to_file(cmd: (string | number)[], filepath: string) {
 }
 
 export { render_video, render_sample_frame, get_output_locations }
+export * from './template_input.ts'
+export type Template = template_parsed.Template
 export type {
-  Template,
-  TemplateParsed, // internal type
-  Clip,
-  Pixels,
-  Percentage,
-  Timestamp,
-  ClipID,
-  TimelineEnums,
+  // Template,
+  // TemplateParsed, // internal type
+  // Clip,
+  // Pixels,
+  // Percentage,
+  // Timestamp,
+  // ClipID,
+  // TimelineEnums,
   RenderOptions,
   FfmpegProgress,
 }
