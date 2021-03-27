@@ -27,6 +27,8 @@ OPTIONS:
   --watch                                   Run continously when the template file changes. This is most useful
                                             in tandem with --preview.
 
+  --develop                                 Alias for running "--watch --preview --open"
+
   --quiet                                   Do not print a progress bar
 
   --debug                                   Write debug information to a file

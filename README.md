@@ -32,7 +32,9 @@ OPTIONS:
   --watch                                   Run continously when the template file changes. This is most useful
                                             in tandem with --preview.
 
-  --quiet                                   Do not print output
+  --develop                                 Alias for running "--watch --preview --open"
+
+  --quiet                                   Do not print a progress bar
 
   --debug                                   Write debug information to a file
 
@@ -56,28 +58,26 @@ editor GUI. Full documentation exists [here](https://doc.deno.land/https/raw.git
 clips:
   # specify clips in an array, the only field necessary is 'file'
   - file: './some-neato-video.mp4'
+  
   - file: './another-clip.mp4'
-    # use layout to place the clip somewhere
-    layout:
-      # lots of fields can accept fractions of the total size of the output
-      width: '1/2'
+    layout: # use the layout field to position and size the clip in the output
+      width: '50%' # lots of fields can accept percentages of the total size of the output
       x:
-        # regular integers are also accepted most places (in this case they are pixels)
-        offset: 12
-        # snap this clip to the lefthand side
-        align: 'right'
-    # sometimes you may want to crop a clip, this is also optional
-    crop:
-      left: 50
+        offset: '12px' # regular pixel inputs are also accepted most places
+        align: 'right' # snap this clip to the righthand side
+    crop: # sometimes you may want to crop a clip, this is also optional
+      left: '10%'
+      
   - file: './something-really-long.mp4'
-    # you can specify an id for the timeline below
-    id: 'background-video'
+    id: 'BACKGROUND_VIDEO' # you can specify an id for the timeline below
+    speed: '50%' # slow down or speed up a video
+    trim: { end: 'fit' } # this video is too long, so lets make sure it is trimmed to the length of the next-longest video
 
 # by default, all clips are started at the same time, but you can use the timeline to change up that order.
 # Lets start one video in the background, and then play two other clips on top of it, one after the other.
 timeline:
   00:00:00:
-    - ['background-video']
+    - ['BACKGROUND_VIDEO']
     - [CLIP_0, CLIP_1]
 ```
 
@@ -86,10 +86,8 @@ timeline:
 import { render_video, render_sample_frame } from 'https://raw.githubusercontent.com/andykais/ffmpeg-templates/main/mod.ts'
 
 
-const template = {
-  clips: [{ file: './input.mp4' }]
-}
-const output_filepath = 'output.mp4'
+const template = { clips: [{ file: './input.mp4' }] }
+const output_folder = 'output'
 const options = { cwd: '~/Projects' }
 await render_video(template, output_filepath, options)
 ```

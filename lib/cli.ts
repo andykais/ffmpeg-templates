@@ -143,7 +143,8 @@ async function try_render_video(
 }
 
 export default async function (...deno_args: string[]) {
-  const args = flags.parse(deno_args)
+  let args = flags.parse(deno_args)
+  if (args['develop']) args = { ...args, watch: true, preview: true, open: true }
   const logger = new Logger('info')
   if (args['quiet']) logger.set_level('error')
   const positional_args = args._.map((a) => a.toString())
