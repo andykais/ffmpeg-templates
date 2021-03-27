@@ -12,29 +12,29 @@ deno install --allow-read --allow-run --unstable -f https://raw.githubuserconten
 
 ## Usage
 ```
-ffmpeg-templates v0.1.0
+ffmpeg-templates v0.2.0
 
-Usage: ffmpeg-templates <template_filepath> [<output_filepath>] [options]
+Usage: ffmpeg-templates <template_filepath> [<output_folder>] [options]
 
 ARGS:
   <template_filepath>                       Path to a YAML or JSON template file which defines the structure of
                                             the outputted video
 
-  <output_filepath>                         The file that will be outputted by ffmpeg. When not specified, a
-                                            file will be created adjacent to the template ending in .mp4 or .jpg
-                                            depending on whether --render-sample-frame is present or not.
+  <output_folder>                           The folder in which the output and generated assets will be saved to.
+                                            When not specified, a folder will be created adjacent to the template.
 
 OPTIONS:
-  --render-sample-frame <timestamp>         Instead of outputting the whole video, output a single frame as a jpg.
-                                            Use this flag to set up your layouts and iterate quickly. Note that you
-                                            must change <output_filepath> to be an image filename (e.g. sample.jpg).
+  --preview                                 Instead of outputting the whole video, output a single frame as a jpg.
+                                            Use this flag to set up your layouts and iterate quickly.
 
-  --overwrite                               Overwrite an existing output file.
+  --open                                    Open the outputted file after it is rendered.
 
   --watch                                   Run continously when the template file changes. This is most useful
-                                            in tandem with --render-sample-frame.
+                                            in tandem with --preview.
 
-  --verbose                                 Show ffmpeg logging instead of outputting a progress bar.
+  --quiet                                   Do not print output
+
+  --debug                                   Write debug information to a file
 
   --help                                    Print this message.
 ```

@@ -2,14 +2,14 @@ import * as flags from 'https://deno.land/std@0.75.0/flags/mod.ts'
 import ffmpeg_templates from './lib/cli.ts'
 
 
-const VERSION = 'v0.1.0'
+const VERSION = 'v0.2.0'
 
 
 const args = flags.parse(Deno.args)
 if (args._.length < 1 || args._.length > 2 || args['help']) {
   console.error(`ffmpeg-templates ${VERSION}
 
-Usage: ffmpeg-templates <template_filepath> [<output_filepath>] [options]
+Usage: ffmpeg-templates <template_filepath> [<output_folder>] [options]
 
 ARGS:
   <template_filepath>                       Path to a YAML or JSON template file which defines the structure of
@@ -23,8 +23,6 @@ OPTIONS:
                                             Use this flag to set up your layouts and iterate quickly.
 
   --open                                    Open the outputted file after it is rendered.
-
-  --overwrite                               Overwrite an existing output file.
 
   --watch                                   Run continously when the template file changes. This is most useful
                                             in tandem with --preview.

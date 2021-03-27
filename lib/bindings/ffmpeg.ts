@@ -12,6 +12,7 @@ async function exec(cmd: string[]) {
   const result = await proc.status()
   const output_buffer = await proc.output()
   const output = decoder.decode(output_buffer)
+  await proc.stdout.close()
   await proc.close()
   if (result.success) {
     return output
@@ -49,10 +50,11 @@ async function ffmpeg(
       }
     }
     const result = await proc.status()
+    await proc.stdout.close()
+    await proc.close()
     if (!result.success) {
       throw new CommandError(`Command "${ffmpeg_safe_cmd.join(' ')}" failed.\n\n`)
     }
-    await proc.close()
   } else {
     await exec(ffmpeg_safe_cmd)
   }

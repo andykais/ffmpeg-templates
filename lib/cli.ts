@@ -7,8 +7,6 @@ import { Logger } from './logger.ts'
 import { render_video, render_sample_frame, get_output_locations } from './mod.ts'
 import type { Template, RenderOptions, FfmpegProgress } from './mod.ts'
 
-const VERSION = 'v0.1.0'
-
 const encoder = new TextEncoder()
 const decoder = new TextDecoder()
 
@@ -108,7 +106,6 @@ async function try_render_video(
   logger: Logger,
   template_filepath: string,
   output_filepath: string,
-  overwrite: boolean,
   options: RenderOptions
 ) {
   try {
@@ -118,9 +115,6 @@ async function try_render_video(
       options.ffmpeg_verbosity = 'info'
     } else if (!args['quiet']) {
       options.progress_callback = (progress) => progress_callback(execution_start_time, progress)
-    }
-    if (!overwrite && (await fs.exists(output_filepath))) {
-      throw new Error(`Output file ${output_filepath} exists. Use the --overwrite flag to overwrite it.`)
     }
     const template_input = await read_template(template_filepath)
     const { template, rendered_clips_count } = args['preview']
@@ -168,7 +162,7 @@ export default async function (...deno_args: string[]) {
     await create_loading_placeholder_preview(output_locations.rendered_preview)
     open(output_locations.rendered_preview)
   }
-  await try_render_video(args, logger, template_filepath, output_folder, Boolean(args['overwrite']), options)
+  await try_render_video(args, logger, template_filepath, output_folder, options)
 
   if (args.watch) {
     logger.info(`watching ${template_filepath} for changes`)
@@ -178,7 +172,7 @@ export default async function (...deno_args: string[]) {
         lock = true
         setTimeout(() => {
           logger.info(`template ${template_filepath} was changed. Starting render.`)
-          try_render_video(args, logger, template_filepath, output_folder, true, options).then(() => {
+          try_render_video(args, logger, template_filepath, output_folder, options).then(() => {
             lock = false
             logger.info(`watching ${template_filepath} for changes`)
           })

@@ -26,7 +26,7 @@ async function assert_file_md5(path: string, md5checksum: string) {
 
 Deno.test('zoompan', async () => {
   await rmrf('test/resources/zoompan')
-  await ffmpeg_templates('test/resources/zoompan.yml', '--overwrite', '--debug')
+  await ffmpeg_templates('test/resources/zoompan.yml', '--debug')
   const ffmpeg_cmd = await Deno.readTextFile('test/resources/zoompan/ffmpeg.sh')
   const ffmpeg_cmd_fixture = await Deno.readTextFile('test/fixtures/zoompan/ffmpeg.sh')
   assertEquals(ffmpeg_cmd, ffmpeg_cmd_fixture)
@@ -34,7 +34,7 @@ Deno.test('zoompan', async () => {
 
 Deno.test('speed', async () => {
   await rmrf('test/resources/speed')
-  await ffmpeg_templates('test/resources/speed.yml', '--overwrite', '--debug')
+  await ffmpeg_templates('test/resources/speed.yml', '--debug')
   const ffmpeg_cmd = await Deno.readTextFile('test/resources/speed/ffmpeg.sh')
   const ffmpeg_cmd_fixture = await Deno.readTextFile('test/fixtures/speed/ffmpeg.sh')
   assertEquals(ffmpeg_cmd, ffmpeg_cmd_fixture)
