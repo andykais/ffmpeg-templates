@@ -1,6 +1,7 @@
 import * as path from 'https://deno.land/std@0.75.0/path/mod.ts'
 import * as fs from 'https://deno.land/std@0.75.0/fs/mod.ts'
 import ffmpeg_templates from '../lib/cli.ts'
+import { render_sample_frame } from '../lib/mod.ts'
 import { createHash } from 'https://deno.land/std@0.75.0/hash/mod.ts'
 import { assertEquals } from "https://deno.land/std@0.90.0/testing/asserts.ts";
 
@@ -37,5 +38,14 @@ Deno.test('speed', async () => {
   await ffmpeg_templates('test/resources/speed.yml', '--debug')
   const ffmpeg_cmd = await Deno.readTextFile('test/resources/speed/ffmpeg.sh')
   const ffmpeg_cmd_fixture = await Deno.readTextFile('test/fixtures/speed/ffmpeg.sh')
+  assertEquals(ffmpeg_cmd, ffmpeg_cmd_fixture)
+})
+
+Deno.test('empty preview', async () => {
+  await rmrf('test/resources/empty_preview')
+  await ffmpeg_templates('test/resources/empty_preview.yml', '--debug', '--preview')
+  return
+  const ffmpeg_cmd = await Deno.readTextFile('test/resources/empty_preview/ffmpeg.sh')
+  const ffmpeg_cmd_fixture = await Deno.readTextFile('test/fixtures/empty_preview/ffmpeg.sh')
   assertEquals(ffmpeg_cmd, ffmpeg_cmd_fixture)
 })

@@ -1,0 +1,13 @@
+clips:
+  - file: './assets/Pexels Videos 2048452.mp4'
+    duration: '2'
+
+  - file: './assets/Pexels Videos 2048452.mp4'
+    duration: '2'
+
+timeline:
+  00:00:00: [['CLIP_0']]
+
+  00:00:04: [['CLIP_1']]
+
+preview: '3'

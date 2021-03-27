@@ -92,10 +92,7 @@ async function render(
   const audio_input_ids: string[] = []
   const ffmpeg_cmd: (string | number)[] = ['ffmpeg', '-v', options?.ffmpeg_verbosity ?? 'info']
 
-  // TODO double check that this isnt producing non-error logs on other machines
-  ffmpeg_cmd.push('-hwaccel', 'auto')
-
-  let last_clip = undefined
+  let last_clip = '[base]'
   let input_index = 0
 
   for (const i of timeline.keys()) {
@@ -201,11 +198,11 @@ async function render(
 
     const overlay_filter = `overlay=x=${geometry.x}:y=${geometry.y}:eof_action=pass`
     const current_clip = `[v_out_${input_index}]`
-    if (last_clip) {
-      complex_filter_overlays.push(`${last_clip}[v_in_${input_index}] ${overlay_filter} ${current_clip}`)
-    } else {
-      complex_filter_overlays.push(`[base][v_in_${input_index}] ${overlay_filter} ${current_clip}`)
-    }
+    // if (last_clip) {
+    complex_filter_overlays.push(`${last_clip}[v_in_${input_index}] ${overlay_filter} ${current_clip}`)
+    // } else {
+    //   complex_filter_overlays.push(`[base][v_in_${input_index}] ${overlay_filter} ${current_clip}`)
+    // }
     last_clip = current_clip
     input_index++
   }
@@ -279,7 +276,7 @@ async function render(
 
   const complex_filter = [...complex_filter_inputs, ...complex_filter_overlays]
   // we may have an output that is just a black screen
-  if (last_clip) ffmpeg_cmd.push('-map', last_clip)
+  ffmpeg_cmd.push('-map', last_clip)
 
   const map_audio_arg: string[] = []
   if (options?.render_sample_frame) {
@@ -307,6 +304,11 @@ async function render(
   }
   ffmpeg_cmd.push('-filter_complex', complex_filter.join(';\n'))
   ffmpeg_cmd.push(...map_audio_arg)
+
+  // TODO double check that this isnt producing non-error logs on other machines
+  // hwaccel cannot be applied when there are no inputs
+  // if (last_clip !== '[base]') ffmpeg_cmd.push('-hwaccel', 'auto')
+
   // ffmpeg_cmd.push('-segment_time', '00:00:05', '-f', 'segment', 'output%03d.mp4')
   ffmpeg_cmd.push(
     options?.render_sample_frame ? output_locations.rendered_preview : output_locations.rendered_video

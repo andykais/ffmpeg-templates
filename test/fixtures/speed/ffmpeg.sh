@@ -1,8 +1,6 @@
 ffmpeg \
   -v \
   error \
-  -hwaccel \
-  auto \
   -ss \
   0 \
   -t \
