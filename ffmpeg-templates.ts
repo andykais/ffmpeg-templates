@@ -1,5 +1,5 @@
 import * as flags from 'https://deno.land/std@0.75.0/flags/mod.ts'
-import cli from './lib/cli.ts'
+import ffmpeg_templates from './lib/cli.ts'
 
 
 const VERSION = 'v0.1.0'
@@ -36,4 +36,4 @@ OPTIONS:
   --help                                    Print this message.`)
   Deno.exit(args['help'] ? 0 : 1)
 }
-await cli(...Deno.args)
+await ffmpeg_templates(...Deno.args)

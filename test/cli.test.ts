@@ -5,6 +5,13 @@ import { createHash } from 'https://deno.land/std@0.75.0/hash/mod.ts'
 import { assertEquals } from "https://deno.land/std@0.90.0/testing/asserts.ts";
 
 
+async function rmrf(path: string) {
+  try {
+    await Deno.remove(path, { recursive: true })
+  } catch (e) {
+    if (e.name !== 'NotFound') throw e
+  }
+}
 
 async function assert_file_md5(path: string, md5checksum: string) {
   const hash = createHash('md5')
@@ -15,8 +22,10 @@ async function assert_file_md5(path: string, md5checksum: string) {
 
 }
 
+// NOTE ffprobe info map cache is shared between tests
+
 Deno.test('zoompan', async () => {
-  await Deno.remove('test/resources/zoompan/ffmpeg.sh')
+  await rmrf('test/resources/zoompan')
   await ffmpeg_templates('test/resources/zoompan.yml', '--overwrite', '--debug')
   const ffmpeg_cmd = await Deno.readTextFile('test/resources/zoompan/ffmpeg.sh')
   const ffmpeg_cmd_fixture = await Deno.readTextFile('test/fixtures/zoompan/ffmpeg.sh')
@@ -24,7 +33,7 @@ Deno.test('zoompan', async () => {
 })
 
 Deno.test('speed', async () => {
-  await Deno.remove('test/resources/speed/ffmpeg.sh')
+  await rmrf('test/resources/speed')
   await ffmpeg_templates('test/resources/speed.yml', '--overwrite', '--debug')
   const ffmpeg_cmd = await Deno.readTextFile('test/resources/speed/ffmpeg.sh')
   const ffmpeg_cmd_fixture = await Deno.readTextFile('test/fixtures/speed/ffmpeg.sh')

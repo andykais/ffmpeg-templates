@@ -7,5 +7,5 @@ clips:
   - file: './assets/Video Of People Waiting For A Taxi On A Rainy Night.mp4'
     trim: { end: 'fit' }
     layout: { x: { align: 'left' }, height: '100%' }
-    speed: '150%' # despite the speed change, these clips should end at the same time
+    speed: '200%' # despite the speed change, these clips should end at the same time
     crop: { left: '50%' }
