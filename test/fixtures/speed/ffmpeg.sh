@@ -19,9 +19,9 @@ ffmpeg \
   'color=s=1920x1080:color=black:duration=7.4986665[base];
 [0:v] setpts=PTS-STARTPTS, scale=1920:1080, crop=w=960:h=1080:x='0':y=0:keep_aspect=1 [v_in_0];
 [0:a] asetpts=PTS-STARTPTS, adelay=0:all=1, volume=1[a_in_0];
-[1:v] setpts=0.5*PTS-STARTPTS, scale=1921.8568665377175:1080, crop=w=960.9284332688587:h=1080:x='960.9284332688587':y=0:keep_aspect=1 [v_in_1];
+[1:v] setpts=0.5*PTS-STARTPTS, scale=1921:1080, crop=w=960.5:h=1080:x='960.5':y=0:keep_aspect=1 [v_in_1];
 [1:a] asetpts=PTS-STARTPTS, adelay=0:all=1, volume=1, atempo=1.9999999999999998[a_in_1];
-[base][v_in_0] overlay=x=main_w - 960 + 0:y=0:eof_action=pass [v_out_0];
+[base][v_in_0] overlay=x=960:y=0:eof_action=pass [v_out_0];
 [v_out_0][v_in_1] overlay=x=0:y=0:eof_action=pass [v_out_1];
 [a_in_0][a_in_1] amix=inputs=2 [audio]' \
   -map \

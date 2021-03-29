@@ -71,6 +71,8 @@ function compute_geometry(
 
     let width = input_width ?? (input_height ? input_height * info.aspect_ratio : info.width)
     let height = input_height ?? (input_width ? input_width / info.aspect_ratio : info.height)
+    // ffmpeg will round down the scale filter, so we need to round down early to avoid "Invalid too big or non positive size for width '...' or height '...'" errors with crops
+    ;[width, height] = [width, height].map(Math.floor)
 
     let scale = { width, height }
     let rotate: ComputedGeometry['rotate'] = undefined
@@ -115,16 +117,16 @@ function compute_geometry(
       }
       crop = { width: width_crop, height: height_crop, x: x_crop, y: y_crop }
     }
-    let x: string | number = 0
-    let y: string | number = 0
+    let x: number = 0
+    let y: number = 0
     let x_align = 'left'
     let y_align = 'top'
     // if (typeof layout?.x?.offset) x = parse_pixels(layout.x.offset)
 
-    const parse_x = (v: string | undefined) =>
-      parse_unit(v, { pixels: (x) => x, percentage: (x) => `(main_w * ${x})`, undefined: () => 0 })
-    const parse_y = (v: string | undefined) =>
-      parse_unit(v, { pixels: (y) => y, percentage: (y) => `(main_h * ${y})`, undefined: () => 0 })
+    const parse_value = (relative_to: number) => (v: string | undefined) =>
+      parse_unit(v, { pixels: (x) => x, percentage: (x) => relative_to * x, undefined: () => 0 })
+    const parse_x = parse_value(background_width)
+    const parse_y = parse_value(background_height)
 
     if (typeof layout?.x === 'object') x = parse_x(layout.x.offset)
     else if (typeof layout?.x === 'string') x = parse_x(layout.x)
@@ -138,20 +140,20 @@ function compute_geometry(
       case 'left':
         break
       case 'right':
-        x = `main_w - ${width} + ${x}`
+        x = background_width - width + x
         break
       case 'center':
-        x = `(main_w / 2) - ${width / 2} + ${x}`
+        x = background_width / 2 - width / 2 + x
         break
     }
     switch (y_align) {
       case 'top':
         break
       case 'bottom':
-        y = `main_h - ${height} + ${y}`
+        y = background_height - height + y
         break
       case 'center':
-        y = `(main_h / 2) - ${height / 2} + ${y}`
+        y = background_height / 2 - height / 2 + y
         break
     }
     clip_geometry_map.set(clip.id, { x, y, width, height, scale, rotate, crop })
