@@ -13,9 +13,9 @@ class Logger {
     this.set_level(level)
   }
 
-  public error = this.log('error', console.error)
-  public warn = this.log('warn')
-  public info = this.log('info')
+  public error = (...args: any[]) => this.log('error', args, console.error)
+  public warn = (...args: any[]) => this.log('warn', args)
+  public info = (...args: any[]) => this.log('info', args)
 
   public set_level(level: LogLevel) {
     this.level = LEVEL_MAP[level]
@@ -25,9 +25,8 @@ class Logger {
     return this.level >= LEVEL_MAP[level]
   }
 
-  private log(level: LogLevel, writer = console.log) {
-    if (this.can_log(level)) return writer
-    else return () => {}
+  private log(level: LogLevel, message: any[], writer = console.log) {
+    if (this.can_log(level)) writer(...message)
   }
 }
 

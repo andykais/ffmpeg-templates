@@ -2,6 +2,7 @@ import * as path from 'https://deno.land/std@0.91.0/path/mod.ts'
 import * as fs from 'https://deno.land/std@0.91.0/fs/mod.ts'
 import * as flags from 'https://deno.land/std@0.91.0/flags/mod.ts'
 import * as yaml from 'https://deno.land/std@0.91.0/encoding/yaml.ts'
+import { opn } from "https://denopkg.com/hashrock/deno-opn/opn.ts";
 import * as errors from './errors.ts'
 import { Logger } from './logger.ts'
 import { render_video, render_sample_frame, get_output_locations } from './mod.ts'
@@ -161,7 +162,7 @@ export default async function (...deno_args: string[]) {
     throw new errors.InputError(`Template file ${template_filepath} does not exist`)
   if (args['preview'] && args['open']) {
     await create_loading_placeholder_preview(output_locations.rendered_preview)
-    open(output_locations.rendered_preview)
+    opn(output_locations.rendered_preview)
   }
   await try_render_video(args, logger, template_filepath, output_folder, options)
 
