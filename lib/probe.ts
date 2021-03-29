@@ -1,4 +1,4 @@
-import * as io from 'https://deno.land/std@0.75.0/io/mod.ts'
+import * as io from 'https://deno.land/std@0.91.0/io/mod.ts'
 import { ProbeError, CommandError } from './errors.ts'
 import { parse_aspect_ratio, parse_ffmpeg_packet } from './parsers/ffmpeg_output.ts'
 import { is_media_clip, AbstractClipMap } from './parsers/template.ts'

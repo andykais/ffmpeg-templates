@@ -1,4 +1,4 @@
-import * as flags from 'https://deno.land/std@0.75.0/flags/mod.ts'
+import * as flags from 'https://deno.land/std@0.91.0/flags/mod.ts'
 import ffmpeg_templates from './lib/cli.ts'
 
 

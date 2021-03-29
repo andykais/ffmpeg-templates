@@ -1,4 +1,4 @@
-import * as io from 'https://deno.land/std@0.75.0/io/mod.ts'
+import * as io from 'https://deno.land/std@0.91.0/io/mod.ts'
 import { InputError, CommandError } from '../errors.ts'
 import { parse_duration } from '../parsers/duration.ts'
 import type { ClipID } from '../template_input.ts'

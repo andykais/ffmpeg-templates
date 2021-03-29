@@ -1,5 +1,5 @@
-import * as path from 'https://deno.land/std@0.75.0/path/mod.ts'
-import * as fs from 'https://deno.land/std@0.75.0/fs/mod.ts'
+import * as path from 'https://deno.land/std@0.91.0/path/mod.ts'
+import * as fs from 'https://deno.land/std@0.91.0/fs/mod.ts'
 import { CommandError } from './errors.ts'
 import { parse_unit } from './parsers/unit.ts'
 import { is_font_clip, is_media_clip } from './parsers/template.ts'
