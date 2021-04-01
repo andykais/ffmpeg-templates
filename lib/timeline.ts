@@ -128,6 +128,9 @@ function compute_timeline(template: template_parsed.Template, clip_info_map: Cli
 
       let layer_start_position = start_position_seconds
       for (const clip_index of clips.keys()) {
+        // TODO this might be wrong. Lets figure that out later
+        // I believe we need to do something smarter with the keyframes. Detect where the prev keyframe is,
+        // and start the next clip there
         if (clip_index > 0) layer_start_position += 0.001
         const clip_id = clips[clip_index]
         if (clip_id === TIMELINE_ENUMS.PAD) {

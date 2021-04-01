@@ -8,11 +8,11 @@ import { parse_percentage } from './parsers/unit.ts'
 import { parse_template } from './parsers/template.ts'
 import { probe_clips } from './probe.ts'
 import { compute_geometry, compute_background_size, compute_rotated_size } from './geometry.ts'
-// import { compute_zoompans } from './zoompan.ts'
 import { compute_zoompans } from './zoompan.ts'
 import { compute_timeline } from './timeline.ts'
 import { replace_font_clips_with_image_clips } from './font.ts'
 import { ffmpeg } from './bindings/ffmpeg.ts'
+import { get_hardware_acceleration_options } from './bindings/detect_hardware_acceleration.ts'
 import type { Logger } from './logger.ts'
 import type * as template_input from './template_input.ts'
 import type * as template_parsed from './parsers/template.ts'
@@ -70,8 +70,11 @@ async function render(
 
   const sample_frame = options?.render_sample_frame ? parse_duration(template.preview, template) : undefined
 
-  await Deno.mkdir(output_folder, { recursive: true })
-  const clip_info_map = await probe_clips(logger, template, template.clips)
+  const [hw_accel_options, clip_info_map] = await Promise.all([
+    get_hardware_acceleration_options(),
+    probe_clips(logger, template, template.clips),
+    Deno.mkdir(output_folder, { recursive: true }),
+  ])
   const { background_width, background_height } = compute_background_size(template, clip_info_map)
   const clips: template_parsed.MediaClip[] = await replace_font_clips_with_image_clips(
     logger,
@@ -165,7 +168,7 @@ async function render(
       }
 
       video_input_filters.push(
-        `crop=w=${crop.width}:h=${crop.height}:x='${crop_x}':y=${crop.y}:keep_aspect=1`
+        `crop=w=${crop.width}:h=${crop.height}:x='${crop_x}':y='${crop.y}':keep_aspect=1`
       )
     }
 
@@ -186,6 +189,8 @@ async function render(
     if (info.type === 'image') {
       ffmpeg_cmd.push('-framerate', framerate, '-loop', 1, '-t', duration, '-i', clip.filepath)
     } else if (info.type === 'video') {
+      if (hw_accel_options) ffmpeg_cmd.push(...hw_accel_options.input_decoder)
+
       if (options?.render_sample_frame) {
         const trim_start_for_preview = trim_start + sample_frame! - start_at
         ffmpeg_cmd.push('-ss', trim_start_for_preview, '-t', duration, '-i', clip.filepath)
@@ -275,8 +280,6 @@ async function render(
   }
 
   const complex_filter = [...complex_filter_inputs, ...complex_filter_overlays]
-  // we may have an output that is just a black screen
-  ffmpeg_cmd.push('-map', last_clip)
 
   const map_audio_arg: string[] = []
   if (options?.render_sample_frame) {
@@ -302,12 +305,19 @@ async function render(
     // ffmpeg_cmd.push('-vcodec', 'libx265')
     // ffmpeg_cmd.push('-x265-params', 'log-level=error')
   }
+  if (hw_accel_options) ffmpeg_cmd.push(...hw_accel_options.filter)
   ffmpeg_cmd.push('-filter_complex', complex_filter.join(';\n'))
   ffmpeg_cmd.push(...map_audio_arg)
+  // we may have an output that is just a black screen
+  ffmpeg_cmd.push('-map', last_clip)
+
+  if (hw_accel_options) ffmpeg_cmd.push(...hw_accel_options.video_encoder)
+
 
   // TODO double check that this isnt producing non-error logs on other machines
   // hwaccel cannot be applied when there are no inputs
   // if (last_clip !== '[base]') ffmpeg_cmd.push('-hwaccel', 'auto')
+  // ffmpeg_cmd.push('-filter_hw_device', 'auto')
 
   // ffmpeg_cmd.push('-segment_time', '00:00:05', '-f', 'segment', 'output%03d.mp4')
   ffmpeg_cmd.push(
@@ -344,7 +354,7 @@ async function render_sample_frame(
 async function write_cmd_to_file(logger: Logger, cmd: (string | number)[], filepath: string) {
   const cmd_str = cmd
     .map((c) => c.toString())
-    .map((c) => (/[ \/]/.test(c) ? `'${c}'` : c))
+    .map((c) => (/[ \/]/.test(c) ? `"${c}"` : c))
     .join(' \\\n  ')
 
   await Deno.writeTextFile(filepath, cmd_str, { mode: 0o777 })
