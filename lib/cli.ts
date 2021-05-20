@@ -47,7 +47,7 @@ function open(filename: string) {
 function construct_output_folder(args: flags.Args, template_filepath: string) {
   const { dir, name } = path.parse(template_filepath)
   const render_ext = args['preview'] ? '.jpg' : '.mp4'
-  return path.join(dir, `${name}`)
+  return path.join(dir, 'ffmpeg-templates-projects', dir, `${name}`)
 }
 
 function human_readable_duration(duration_seconds: number): string {
@@ -106,7 +106,7 @@ async function try_render_video(
   args: flags.Args,
   logger: Logger,
   template_filepath: string,
-  output_filepath: string,
+  output_folder: string,
   options: RenderOptions
 ) {
   try {
@@ -119,20 +119,21 @@ async function try_render_video(
     }
     const template_input = await read_template(template_filepath)
     const { template, rendered_clips_count } = args['preview']
-      ? await render_sample_frame(logger, template_input, output_filepath, options)
-      : await render_video(logger, template_input, output_filepath, options)
+      ? await render_sample_frame(logger, template_input, output_folder, options)
+      : await render_video(logger, template_input, output_folder, options)
     const execution_time_seconds = (performance.now() - execution_start_time) / 1000
 
     if (!args['preview'] && args['open']) {
       // TODO we cannot open a video renders because deno exits. We need to run a detached process
       // the deno feature is not shipped yet: https://github.com/denoland/deno/issues/5501
     }
+    const output_locations = get_output_locations(output_folder)
     if (args['preview']) {
       // prettier-ignore
-      logger.info(`created ${output_filepath} at ${template.preview} out of ${rendered_clips_count} clips in ${execution_time_seconds.toFixed(1)} seconds.`)
+      logger.info(`created "${output_locations.rendered_preview}" at ${template.preview} out of ${rendered_clips_count} clips in ${execution_time_seconds.toFixed(1)} seconds.`)
     } else {
       // prettier-ignore
-      logger.info(`created ${output_filepath} out of ${rendered_clips_count} clips in ${execution_time_seconds.toFixed(1)} seconds.`)
+      logger.info(`created "${output_locations.rendered_video}" out of ${rendered_clips_count} clips in ${execution_time_seconds.toFixed(1)} seconds.`)
     }
   } catch (e) {
     if (e instanceof errors.InputError) {
@@ -151,6 +152,7 @@ export default async function (...deno_args: string[]) {
   const positional_args = args._.map((a) => a.toString())
   const template_filepath = positional_args[0]
   const output_folder = positional_args[1] ?? construct_output_folder(args, template_filepath)
+  await Deno.mkdir(output_folder, { recursive: true })
   const options: RenderOptions = {
     ffmpeg_verbosity: 'error',
     cwd: path.resolve(path.dirname(template_filepath)),

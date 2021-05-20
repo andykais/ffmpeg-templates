@@ -10,6 +10,7 @@ async function exec(...cmd: string[]) {
 }
 
 const QSV_FFMPEG_ARGS = { input_decoder: [], filter: [], video_encoder: ['-codec:v', 'h264_qsv'] }
+// const QSV_FFMPEG_ARGS = { input_decoder: [], filter: ['-init_hw_device', 'qsv=hw', '-filter_hw_device', 'hw'], video_encoder: ['-codec:v', 'h264_qsv'] }
 const GPU_HARDWARE_ACCELERATION_MAP = {
   intel: [{ requires: { device: 'qsv', video_encoder: 'h264_qsv' }, ffmpeg_args: QSV_FFMPEG_ARGS }],
   nvidia: [],

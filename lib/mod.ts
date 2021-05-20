@@ -70,8 +70,8 @@ async function render(
 
   const sample_frame = options?.render_sample_frame ? parse_duration(template.preview, template) : undefined
 
-  const [hw_accel_options, clip_info_map] = await Promise.all([
-    get_hardware_acceleration_options(),
+  const [clip_info_map] = await Promise.all([
+    //   get_hardware_acceleration_options(),
     probe_clips(logger, template, template.clips),
     Deno.mkdir(output_folder, { recursive: true }),
   ])
@@ -149,22 +149,34 @@ async function render(
     if (geometry.crop) {
       const { crop } = geometry
       let crop_x = crop.x.toString()
+      let crop_y = crop.y.toString()
 
       for (const i of zoompans.keys()) {
         const zoompan = zoompans[i]
         if (zoompan.dest_x !== undefined && zoompan.x_expression !== undefined) {
-          if (sample_frame !== undefined) {
-            if (sample_frame >= zoompan.start_at_seconds && sample_frame <= zoompan.end_at_seconds) {
-              const n = sample_frame * info.framerate
-              crop_x = eval(zoompan.x_expression)
-            }
-          } else {
-            crop_x = `if(between(t, ${zoompan.start_at_seconds}, ${zoompan.end_at_seconds}), ${zoompan.x_expression}, ${crop_x})`
-            if (i === zoompans.length - 1) {
-              crop_x = `if(gte(t, ${zoompan.end_at_seconds}), ${zoompan.dest_x}, ${crop_x})`
-            }
+          crop_x = `if(between(t, ${zoompan.start_at_seconds}, ${zoompan.end_at_seconds}), ${zoompan.x_expression}, ${crop_x})`
+          if (i === zoompans.length - 1) {
+            crop_x = `if(gte(t, ${zoompan.end_at_seconds}), ${zoompan.dest_x}, ${crop_x})`
           }
         }
+        if (zoompan.dest_y !== undefined && zoompan.y_expression !== undefined) {
+          crop_y = `if(between(t, ${zoompan.start_at_seconds}, ${zoompan.end_at_seconds}), ${zoompan.y_expression}, ${crop_y})`
+          if (i === zoompans.length - 1) {
+            crop_y = `if(gte(t, ${zoompan.end_at_seconds}), ${zoompan.dest_y}, ${crop_y})`
+          }
+        }
+      }
+      function eval_in_context(t: number, crop_expr: string) {
+        const n = t * info.framerate
+        const eval_expr = crop_expr.replace(/if/g, 'if_eval')
+        const between = (t: number, start: number, stop: number) => t >= start && t <= stop
+        const if_eval = (expr: string, then_ret: string, else_ret: string) => eval(expr) ? then_ret : else_ret
+        const gte = (t: number, start: number) => t >= start
+        return eval(eval_expr)
+      }
+      if (sample_frame !== undefined) {
+        crop_x = eval_in_context(sample_frame, crop_x)
+        crop_y = eval_in_context(sample_frame, crop_y)
       }
 
       video_input_filters.push(
@@ -189,7 +201,7 @@ async function render(
     if (info.type === 'image') {
       ffmpeg_cmd.push('-framerate', framerate, '-loop', 1, '-t', duration, '-i', clip.filepath)
     } else if (info.type === 'video') {
-      if (hw_accel_options) ffmpeg_cmd.push(...hw_accel_options.input_decoder)
+      // if (hw_accel_options) ffmpeg_cmd.push(...hw_accel_options.input_decoder)
 
       if (options?.render_sample_frame) {
         const trim_start_for_preview = trim_start + sample_frame! - start_at
@@ -305,13 +317,15 @@ async function render(
     // ffmpeg_cmd.push('-vcodec', 'libx265')
     // ffmpeg_cmd.push('-x265-params', 'log-level=error')
   }
-  if (hw_accel_options) ffmpeg_cmd.push(...hw_accel_options.filter)
+  // if (hw_accel_options) ffmpeg_cmd.push(...hw_accel_options.filter)
   ffmpeg_cmd.push('-filter_complex', complex_filter.join(';\n'))
   ffmpeg_cmd.push(...map_audio_arg)
   // we may have an output that is just a black screen
   ffmpeg_cmd.push('-map', last_clip)
 
-  if (hw_accel_options) ffmpeg_cmd.push(...hw_accel_options.video_encoder)
+  // TODO find out what framerates/widths/heights it supports. Also find out why some videos get worse quality
+  // using the hardware accelerated codec. Maybe its a crf quality arg problem
+  // if (hw_accel_options && !options?.render_sample_frame) ffmpeg_cmd.push(...hw_accel_options.video_encoder)
 
 
   // TODO double check that this isnt producing non-error logs on other machines

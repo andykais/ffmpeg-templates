@@ -18,6 +18,13 @@ interface TimelineClip {
 function compute_timeline(template: template_parsed.Template, clip_info_map: ClipInfoMap) {
   const { timeline } = template
 
+  function is_variable_duration_clip(clip: template_parsed.Clip) {
+    return (
+      clip.trim?.start === 'fit' ||
+      clip.trim?.end === 'fit' ||
+      Number.isNaN(clip_info_map.get_or_else(clip.id).duration)
+    )
+  }
   const all_clips_trim_to_fit = Object.values(template.timeline).every((layers) =>
     layers.every((layer) =>
       layer
@@ -27,7 +34,7 @@ function compute_timeline(template: template_parsed.Template, clip_info_map: Cli
           if (!clip) throw new InputError(`Clip ${id} does not exist.`)
           return clip
         })
-        .every((clip) => clip.trim?.start === 'fit' || clip.trim?.end === 'fit')
+        .every(is_variable_duration_clip)
     )
   )
 
@@ -105,7 +112,15 @@ function compute_timeline(template: template_parsed.Template, clip_info_map: Cli
   for (const start_position of Object.keys(timeline)) {
     const start_position_seconds = parse_duration(start_position, template)
 
+    let i = 0
     for (const clips of Object.values(timeline[start_position])) {
+      // empty timeline layers should not be counted towards the shortest_duration
+      if (clips.length === 0) continue
+      // layers containing only fonts or images should not count towards the shortest duration
+      if (clips.every(clip_id => Number.isNaN(clip_info_map.get_or_else(clip_id).duration))) continue
+      // if (clips.every(clip_id => is_variable_duration_clip(template.clips.find(c => c.id === clip_id)!))) continue
+
+
       let layer_duration = start_position_seconds
 
       layer_duration += calculate_layer_duration(start_position_seconds, clips, 0, all_clips_trim_to_fit)

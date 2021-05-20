@@ -37,7 +37,7 @@ function compute_zoompans(
     const info = clip_info_map.get_or_else(clip.id)
     clip_zoompan_map.set(clip.id, [])
 
-    let prev_zoompan = { timestamp_seconds: 0, x_offset: 0, y_offset: 0, zoom: 1 }
+    let prev_zoompan = { timestamp_seconds: 0, x_offset: crop?.x ?? 0, y_offset: crop?.x ?? 0, zoom: 1 }
     for (const timestamp of Object.keys(clip.zoompan ?? {})) {
       const zoompan = clip.zoompan![timestamp]
       const zoompan_end_at_seconds = parse_duration(timestamp, template)
@@ -56,8 +56,7 @@ function compute_zoompans(
         // this may change in the future (by adding a pad around images)
         if (!crop) throw new InputError(`Zoompan panning cannot be used without cropping the clip`)
         const max_x_pan_distance = geometry.scale.width - crop.width
-        const x_after_pan =
-          prev_zoompan.x_offset + parse_unit(zoompan.x, { percentage: (n) => n * geometry.scale.width })
+        const x_after_pan = parse_unit(zoompan.x, { percentage: (n) => n * geometry.scale.width })
         computed_zoompan.dest_x = x_after_pan
         if (x_after_pan < 0 || x_after_pan > max_x_pan_distance)
           throw new InputError(
@@ -79,8 +78,7 @@ function compute_zoompans(
         // this may change in the future (by adding a pad around images)
         if (!crop) throw new InputError(`Zoompan panning cannot be used without cropping the clip`)
         const max_y_pan_distance = geometry.scale.height - crop.height
-        const y_after_pan =
-          prev_zoompan.y_offset + parse_unit(zoompan.y, { percentage: (n) => n * geometry.scale.height })
+        const y_after_pan = parse_unit(zoompan.y, { percentage: (n) => n * geometry.scale.height })
         computed_zoompan.dest_y = y_after_pan
         if (y_after_pan < 0 || y_after_pan > max_y_pan_distance)
           throw new InputError(

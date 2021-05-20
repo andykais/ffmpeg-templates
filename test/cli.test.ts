@@ -28,7 +28,7 @@ async function assert_file_md5(path: string, md5checksum: string) {
 Deno.test('zoompan', async () => {
   await rmrf('test/resources/zoompan')
   await ffmpeg_templates('test/resources/zoompan.yml', '--debug', '--quiet')
-  const ffmpeg_cmd = await Deno.readTextFile('test/resources/zoompan/ffmpeg.sh')
+  const ffmpeg_cmd = await Deno.readTextFile('test/resources/ffmpeg-templates-projects/test/resources/zoompan/ffmpeg.sh')
   const ffmpeg_cmd_fixture = await Deno.readTextFile('test/fixtures/zoompan/ffmpeg.sh')
   assertEquals(ffmpeg_cmd, ffmpeg_cmd_fixture)
 })
@@ -36,7 +36,7 @@ Deno.test('zoompan', async () => {
 Deno.test('speed', async () => {
   await rmrf('test/resources/speed')
   await ffmpeg_templates('test/resources/speed.yml', '--debug', '--quiet')
-  const ffmpeg_cmd = await Deno.readTextFile('test/resources/speed/ffmpeg.sh')
+  const ffmpeg_cmd = await Deno.readTextFile('test/resources/ffmpeg-templates-projects/test/resources/speed/ffmpeg.sh')
   const ffmpeg_cmd_fixture = await Deno.readTextFile('test/fixtures/speed/ffmpeg.sh')
   assertEquals(ffmpeg_cmd, ffmpeg_cmd_fixture)
 })
@@ -44,7 +44,7 @@ Deno.test('speed', async () => {
 Deno.test('empty preview', async () => {
   await rmrf('test/resources/empty_preview')
   await ffmpeg_templates('test/resources/empty_preview.yml', '--debug', '--quiet', '--preview')
-  const ffmpeg_cmd = await Deno.readTextFile('test/resources/empty_preview/ffmpeg.sh')
+  const ffmpeg_cmd = await Deno.readTextFile('test/resources/ffmpeg-templates-projects/test/resources/empty_preview/ffmpeg.sh')
   const ffmpeg_cmd_fixture = await Deno.readTextFile('test/fixtures/empty_preview/ffmpeg.sh')
   assertEquals(ffmpeg_cmd, ffmpeg_cmd_fixture)
 })
