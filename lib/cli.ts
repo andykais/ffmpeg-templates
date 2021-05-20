@@ -37,12 +37,6 @@ async function create_loading_placeholder_preview(output_path: string) {
   }
   return proc
 }
-function open(filename: string) {
-  // TODO handle windows & mac platforms
-  // (or wait for the `open` program to be ported to deno https://github.com/sindresorhus/open/issues/212)
-  const proc = Deno.run({ cmd: ['xdg-open', filename] })
-  return proc
-}
 
 function construct_output_folder(args: flags.Args, template_filepath: string) {
   const { dir, name } = path.parse(template_filepath)
