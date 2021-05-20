@@ -3,7 +3,7 @@ import * as fs from 'https://deno.land/std@0.91.0/fs/mod.ts'
 import ffmpeg_templates from '../lib/cli.ts'
 import { render_sample_frame } from '../lib/mod.ts'
 import { createHash } from 'https://deno.land/std@0.91.0/hash/mod.ts'
-import { assertEquals } from "https://deno.land/std@0.91.0/testing/asserts.ts";
+import { assertEquals } from "https://deno.land/std@0.97.0/testing/asserts.ts";
 
 
 async function rmrf(path: string) {
