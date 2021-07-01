@@ -1,14 +1,19 @@
 # ffmpeg-templates
 
+- [Installation](#Installation)
+- [Usage](#Usage)
+- [Getting Started](#Getting-Started)
+  - [Template Syntax](#Template-Syntax)
+  - [Typescript Interface](#Typescript-Interface)
+- [Documentation](https://doc.deno.land/https/raw.githubusercontent.com/andykais/ffmpeg-templates/main/lib/template_input.ts#Template)
 
-## Requirements
-- [ffmpeg](https://ffmpeg.org/download.html)
-- [deno](https://deno.land) >= 1.5.0
 
 ## Installation
+Requires [ffmpeg](https://ffmpeg.org/download.html) and [deno](https://deno.land) >= 1.5.0
 ```bash
 deno install --allow-read --allow-run --unstable -f https://raw.githubusercontent.com/andykais/ffmpeg-templates/main/ffmpeg-templates.ts
 ```
+
 
 ## Usage
 ```
@@ -41,7 +46,7 @@ OPTIONS:
   --help                                    Print this message.
 ```
 
-## Examples
+## Getting Started
 ```bash
 # create a video from a template
 ffmpeg-templates template.yml output.mp4
@@ -51,9 +56,9 @@ ffmpeg-templates template.yml output.mp4
 ffmpeg-templates template.yml output.jpg --render-sample-frame 00:00:03 --watch
 ```
 
-## Template Syntax
+### Template Syntax
 A video project is defined using a template file like this example one below. Think of this like the video
-editor GUI. Full documentation exists [here](https://doc.deno.land/https/raw.githubusercontent.com/andykais/ffmpeg-templates/main/template_input.ts#Template)
+editor GUI. Full documentation exists [here](https://doc.deno.land/https/raw.githubusercontent.com/andykais/ffmpeg-templates/main/lib/template_input.ts#Template)
 ```yaml
 clips:
   # specify clips in an array, the only field necessary is 'file'
@@ -83,7 +88,7 @@ timeline:
 
 ## Javascript Interface
 ```ts
-import { render_video, render_sample_frame } from 'https://raw.githubusercontent.com/andykais/ffmpeg-templates/main/mod.ts'
+import { render_video, render_sample_frame } from 'https://raw.githubusercontent.com/andykais/ffmpeg-templates/main/lib/mod.ts'
 
 
 const template = { clips: [{ file: './input.mp4' }] }
@@ -109,6 +114,7 @@ syntax and schema. Everything that this program can do, is defined in a single [
 complicated tutorials, no hidden settings in a application preferences. Its just a bare bones video editor.
 
 ## Roadmap
+(please ignore this mess)
 - [X] Cache probed clip information in watch mode
 - [ ] Cache trimmed clips in watch mode
 - [ ] Support audio only inputs
