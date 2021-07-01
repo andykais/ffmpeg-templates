@@ -87,6 +87,8 @@ async function render(
   const clip_geometry_map = compute_geometry(template, background_width, background_height, clip_info_map)
   const clip_zoompan_map = compute_zoompans(template, clip_info_map, clip_geometry_map)
   const { timeline, total_duration } = compute_timeline(template, clip_info_map)
+  if (sample_frame === undefined)
+  logger.info(`Rendering ${total_duration}s long output`)
 
   const complex_filter_inputs = [
     `color=s=${background_width}x${background_height}:color=black:duration=${total_duration}[base]`,

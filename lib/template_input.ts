@@ -176,7 +176,7 @@ interface Template {
    * Preview at a position
    * Used with the --preview flag
    */
-  preview: Timestamp
+  preview?: Timestamp
   // TODO add this after the max call stack bug is fixed
   // preview: Timestamp | ReverseTimestamp
 }
