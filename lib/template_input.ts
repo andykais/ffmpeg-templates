@@ -50,6 +50,9 @@ type ClipID = string
  */
 type TimelineEnums = typeof TIMELINE_ENUMS[keyof typeof TIMELINE_ENUMS]
 
+/**
+ * Shared attributes on all clip types
+ */
 interface ClipBase {
   /** Defaults to CLIP_<index> */
   id?: ClipID
@@ -66,10 +69,10 @@ interface ClipBase {
   }
   /** Crop will trim edges of a clip accordingly. layout alignment will respect the crop */
   crop?: {
-    left?: Pixels
-    right?: Pixels
-    top?: Pixels
-    bottom?: Pixels
+    left?: Percentage | Pixels
+    right?: Percentage | Pixels
+    top?: Percentage | Pixels
+    bottom?: Percentage | Pixels
   }
 
   /** Zoom and pan a clip */
@@ -182,4 +185,4 @@ interface Template {
 }
 
 export { TIMELINE_ENUMS }
-export type { Percentage, Pixels, Timestamp, ClipID, TimelineEnums, MediaClip, FontClip, Clip, Template }
+export type { Percentage, Pixels, Timestamp, ClipID, TimelineEnums, ClipBase, MediaClip, FontClip, Clip, Template }
