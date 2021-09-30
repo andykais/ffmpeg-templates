@@ -1,7 +1,3 @@
-const TIMELINE_ENUMS = {
-  PAD: 'PAD',
-} as const
-
 /**
  * A percentage is formatted like so:
  * "50%"
@@ -44,11 +40,6 @@ type ReverseTimestamp = `-${Timestamp}`
  */
 type ClipID = string
 
-/**
- * Specal keys that can be used on the timeline. Currently the only available enum is 'PAD', which will start
- * a clip at the last possible moment so that it finishes with the last played clip.
- */
-type TimelineEnums = typeof TIMELINE_ENUMS[keyof typeof TIMELINE_ENUMS]
 
 /**
  * Shared attributes on all clip types
@@ -173,7 +164,7 @@ interface Template {
    * The default timeline starts all the clips at the same time. E.g.
    * {"00:00:00": [["CLIP_0", "CLIP_1", ...]]}
    */
-  timeline?: { [start_position: string]: (ClipID | TimelineEnums)[][] }
+  timeline?: { [start_position: string]: (ClipID)[][] }
 
   /**
    * Preview at a position
@@ -184,5 +175,4 @@ interface Template {
   // preview: Timestamp | ReverseTimestamp
 }
 
-export { TIMELINE_ENUMS }
-export type { Percentage, Pixels, Timestamp, ClipID, TimelineEnums, ClipBase, MediaClip, FontClip, Clip, Template }
+export type { Percentage, Pixels, Timestamp, ClipID, ClipBase, MediaClip, FontClip, Clip, Template }

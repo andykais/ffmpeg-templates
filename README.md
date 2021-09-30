@@ -11,7 +11,7 @@
 ## Installation
 Requires [ffmpeg](https://ffmpeg.org/download.html) and [deno](https://deno.land) >= 1.5.0
 ```bash
-deno install --allow-read --allow-run --unstable -f https://raw.githubusercontent.com/andykais/ffmpeg-templates/main/ffmpeg-templates.ts
+deno install --allow-read --allow-run=ffmpeg,ffprobe --unstable -f https://raw.githubusercontent.com/andykais/ffmpeg-templates/main/ffmpeg-templates.ts
 ```
 
 
@@ -192,3 +192,15 @@ ffmpeg-music-video <audio_file>
 - audio visualizations to help with previews? https://www.youtube.com/watch?v=M58rc7cxl_s
 - template.layers or template.stack or template.order to separate the vertical ordering from the timeline? Not necessary, but possibly more clear
 - add CI testing (install ffmpeg via apt, or use a cache: https://stackoverflow.com/questions/59269850/caching-apt-packages-in-github-actions-workflow)
+- make timeline a sort of query language, and give the clips a tag array field. timeline can have things like `:DIALOG` to string together a ton of font clips. This might also be solveable by using the "sub template" idea
+- display tiny timeline strip in console reflecting timeline configuration. E.g.
+```
+ ____________________
+| VIDEO_LEFT         |
+ ____________________
+| VIDEO_RIGHT        |
+ __________  ________
+| TEXT_1   || TEXT_2 |
+             ________
+            | TEXT_3 |
+```

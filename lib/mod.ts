@@ -113,15 +113,20 @@ async function render(
     const zoompans = clip_zoompan_map.get_or_else(clip_id)
 
     const video_input_filters = []
-    if (clip.transition?.fade_in) {
-      const transition_duration = parse_duration(clip.transition.fade_in, template)
-      video_input_filters.push(`fade=t=in:st=0:d=${transition_duration}:alpha=1`)
-    }
-    if (clip.transition?.fade_out) {
-      const transition_duration = parse_duration(clip.transition.fade_out, template)
-      video_input_filters.push(
-        `fade=t=out:st=${duration - transition_duration}:d=${transition_duration}:alpha=1`
-      )
+    if (!options?.render_sample_frame) {
+      // TODO we should show a half-transitioned video if we can in the preview. It may require previews
+      // coming from a result rather than shifting everything. Or just adding a psuedo fade filter for
+      // previews
+      if (clip.transition?.fade_in) {
+        const transition_duration = parse_duration(clip.transition.fade_in, template)
+        video_input_filters.push(`fade=t=in:st=0:d=${transition_duration}:alpha=1`)
+      }
+      if (clip.transition?.fade_out) {
+        const transition_duration = parse_duration(clip.transition.fade_out, template)
+        video_input_filters.push(
+          `fade=t=out:st=${duration - transition_duration}:d=${transition_duration}:alpha=1`
+        )
+      }
     }
     const pts_speed = clip.speed ? `${1 / parse_percentage(clip.speed)}*` : ''
     const setpts =
@@ -197,6 +202,14 @@ async function render(
       const atempo = compute_tempo(speed)
       // a.k.a. speed == 1
       if (atempo !== '') audio_filters.push(atempo)
+      if (clip.transition?.fade_in) {
+        const transition_duration = parse_duration(clip.transition.fade_in, template)
+        audio_filters.push(`afade=t=in:st=${start_at}:d=${transition_duration}`)
+      }
+      if (clip.transition?.fade_out) {
+        const transition_duration = parse_duration(clip.transition.fade_out, template)
+        audio_filters.push(`afade=t=out:st=${start_at + (duration - transition_duration)}:d=${transition_duration}`)
+      }
       complex_filter_inputs.push(`[${input_index}:a] ${audio_filters.join(', ')}[a_in_${input_index}]`)
       audio_input_ids.push(`[a_in_${input_index}]`)
     }
