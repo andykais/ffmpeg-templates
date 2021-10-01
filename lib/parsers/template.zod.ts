@@ -24,13 +24,13 @@ const Size = z.object({
 const AlignX = z.union([z.literal('left'), z.literal('right'), z.literal('center')])
 const AlignY = z.union([z.literal('top'), z.literal('bottom'), z.literal('center')])
 const Layout = Size.extend({
-  x: z.union([AlignX, z.object({ offset: z.union([Pixels, Percentage]).optional(), align: AlignX.optional() })]).default('left').transform(val => typeof val === 'object' ?  val : { offset: '0px', align: val }),
-  y: z.union([AlignY, z.object({ offset: z.union([Pixels, Percentage]).optional(), align: AlignY.optional() })]).default('top').transform(val => typeof val === 'object' ?  val : { offset: '0px', align: val }),
+  x: z.union([AlignX, z.object({ offset: z.union([Pixels, Percentage]).default('0px'), align: AlignX.default('left') })]).default('left').transform(val => typeof val === 'object' ?  val : { offset: '0px', align: val }),
+  y: z.union([AlignY, z.object({ offset: z.union([Pixels, Percentage]).default('0px'), align: AlignY.default('top') })]).default('top').transform(val => typeof val === 'object' ?  val : { offset: '0px', align: val }),
 }).strict()
 
 const ClipBase = z.object({
   id: ClipId.optional(),
-  layout: Layout.optional(),
+  layout: Layout.default({}),
   crop: Layout.optional(),
   zoompan: z.object({
     keyframe: Timestamp,
@@ -58,39 +58,47 @@ const ClipBase = z.object({
 const MediaClip = ClipBase.extend({
   file: z.string(),
   volume: Percentage.default('100%'),
-}).strict()
+}).strict().transform(val => ({ ...val, type: 'media' as const }))
 
 const TextClip = ClipBase.extend({
   text: z.string(),
   font: z.object({
     family: z.string().optional(),
-    size: z.number().optional(),
-    color: Color.optional(),
-    border_radius: z.number().min(0).optional(),
-    padding: z.number().min(0).optional(),
-    background_color: Color.optional(),
-    outline_color: Color.optional(),
-    outline_size: z.number().optional(),
+    size: z.number().default(16),
+    color: Color.default('black'),
+    border_radius: z.number().min(0).default(0),
+    padding: z.number().min(0).default(0),
+    background_color: Color.default('black'),
+    outline_color: Color.default('black'),
+    outline_size: z.number().default(0),
   }).strict().optional(),
 
   duration: Timestamp.optional(),
-}).strict()
+}).strict().transform(val => ({ ...val, type: 'text' as const }))
 
 const TimelineClip: z.ZodSchema<t.TimelineClip> = z.lazy(() => z.object({
   id: ClipId.optional(),
   offset: Timestamp.default('0'),
   z_index: z.number().default(0),
   type: z.union([z.literal('parallel'), z.literal('sequence')]).default('parallel'),
-  next: TimelineClip.array().optional(),
+  next: TimelineClip.array().default([]),
 }))
 
 const Template = z.object({
-  size: Size.optional(),
-  clips: MediaClip.array().min(1),
-  captions: TextClip.array().min(1).optional(),
+  size: Size.default({}),
+  clips: MediaClip
+    .array()
+    .min(1)
+    .transform(clips => clips.map((val, i) => ({id: `CLIP_${i}`, ...val})))
+    .refine(clips => new Set(clips.map(c => c.id)).size === clips.length, { message: 'No duplicate clip ids allowed.' }),
+  captions: TextClip.array().default([]),
   timeline: TimelineClip.array().min(1).optional(),
   preview: Timestamp.optional(),
-})
+}).transform(val => ({
+  timeline: val.clips.map(c => TimelineClip.parse({ id: c.id })),
+  ...val,
+  size: { relative_to: val.clips[0].id, ...val.size, },
+}))
 
 // this is a typescript exacty type assertion. It does nothing at runtime
 assert({} as z.input<typeof Template>, {} as t.Template)
