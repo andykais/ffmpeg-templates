@@ -104,3 +104,4 @@ const Template = z.object({
 assert({} as z.input<typeof Template>, {} as t.Template)
 
 export { Template }
+export type TemplateParsed = z.infer<typeof Template>
