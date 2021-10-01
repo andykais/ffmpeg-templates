@@ -7,13 +7,13 @@ export type ClipID = string
  * A percentage is formatted like so:
  * "50%"
  */
-export type Percentage = `${string}%`
+export type Percentage = string //`${string}%`
 
 /**
  * A pixel is formatted like so:
  * "10px"
  */
-export type Pixels = `${string}px`
+export type Pixels = string //`${string}px`
 
 /**
  * A degree is formatted like so:
@@ -39,12 +39,15 @@ export type Timestamp = string
 export interface Size {
  width?: Pixels | Percentage
  height?: Pixels | Percentage
- relative_to: ClipID 
+ relative_to?: ClipID
 }
 
+type AlignX = 'left' | 'right' | 'center'
+type AlignY = 'top' | 'bottom' | 'center'
+
 export interface Layout extends Size {
-  x?: Percentage | Pixels | { offset?: Percentage | Pixels; align?: 'left' | 'right' | 'center' }
-  y?: Percentage | Pixels | { offset?: Percentage | Pixels; align?: 'top' | 'bottom' | 'center' }
+  x?: AlignX | { offset?: Percentage | Pixels; align?: AlignX }
+  y?: AlignY | { offset?: Percentage | Pixels; align?: AlignY }
 }
 
 export interface ClipBase {
@@ -64,13 +67,13 @@ export interface ClipBase {
   crop?: Layout
 
   /** Zoom and pan a clip */
-  zoompan?: {
-    [timestamp: string]: {
-      zoom?: Percentage
-      x?: Percentage | Pixels
-      y?: Percentage | Pixels
-    }
-  }
+  // zoompan?: {
+  //   [timestamp: string]: {
+  //     zoom?: Percentage
+  //     x?: Percentage | Pixels
+  //     y?: Percentage | Pixels
+  //   }
+  // }
 
   /** Angle at which the clip should be rotated */
   rotate?: Degrees
@@ -134,7 +137,7 @@ export interface TimelineClip {
   offset?: Timestamp
 
   /** trim works very similar to clips trim, except that we can specify 'fit' instead of a duration. */
-  trim: { start?: Timestamp | 'fit'; end?: Timestamp | 'fit' }
+  trim_to_fit: 'start' | 'end'
 
   /**
    * specify the vertical height of a clip. Think foreground and background
@@ -177,7 +180,7 @@ export interface Template {
    * The default timeline starts all the clips at the same time. E.g.
    * [{ id: "CLIP_0", offset: "0" }, { id: "CLIP_1", offset: "0" }, ...]
    */
-  timeline?: TimelineItem[]
+  // timeline?: TimelineItem[]
 
   /**
    * Preview the rendered output at a position. Used with the --preview flag.
@@ -186,16 +189,16 @@ export interface Template {
 }
 
 
-const template: Template = {
-  clips: [
-    { id: 'VERTICAL', file: 'phone-video.mp4' },
-    { id: 'SPLIT_L',  file: 'splitscreen.mp4' },
-    { id: 'SPLIT_R',  file: 'splitscreen.mp4' },
-  ],
+// const template: Template = {
+//   clips: [
+//     { id: 'VERTICAL', file: 'phone-video.mp4' },
+//     { id: 'SPLIT_L',  file: 'splitscreen.mp4' },
+//     { id: 'SPLIT_R',  file: 'splitscreen.mp4' },
+//   ],
 
-  timeline: [
-    { id: 'VERTICAL', trim: { end: 'fit' }, z_index: 1 },
-    { id: 'CLIP_L',   trim: { end: 'fit' }, },
-    { id: 'CLIP_R',   trim: { end: 'fit' }, },
-  ]
-}
+//   timeline: [
+//     { id: 'VERTICAL', trim: { end: 'fit' }, z_index: 1 },
+//     { id: 'CLIP_L',   trim: { end: 'fit' }, },
+//     { id: 'CLIP_R',   trim: { end: 'fit' }, },
+//   ]
+// }
