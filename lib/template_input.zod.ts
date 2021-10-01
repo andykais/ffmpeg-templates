@@ -67,16 +67,61 @@ export interface ClipBase {
   crop?: Layout
 
   /** Zoom and pan a clip */
-  // zoompan?: {
-  //   [timestamp: string]: {
-  //     zoom?: Percentage
-  //     x?: Percentage | Pixels
-  //     y?: Percentage | Pixels
-  //   }
-  // }
+  zoompan?: {
+    /** The timstamp when the zoom and pan has settled */
+    keyframe: Timestamp
+
+    /** A percentage that the clip should be zoomed in or zoomed out */
+    zoom?: Percentage
+
+    /** A horizontal pan.
+     *   Percentages are relative to the cropped clip. E.g. 50% puts the left side in the center of the screen.
+     *   If there is a desire, we could add an `origin: 'center' | 'corner'` field to make the origin variable.
+     */
+    x?: Percentage | Pixels
+
+    /** A vertical pan.
+     *   Percentages are relative to the cropped clip. E.g. 50% puts the top side in the center of the screen.
+     */
+    y?: Percentage | Pixels
+  }[]
 
   /** Angle at which the clip should be rotated */
   rotate?: Degrees
+
+  /** Speed at which a clip should be played (200% is 2x speed) */
+  speed?: Percentage
+
+  /** Set the framerate for the clip */
+  framerate?: {
+
+    /** Set the frames per second for the input clip */
+    fps: number
+
+    /** smooth: true will interpolate frames that are missing
+    * _if_ the desired framerate is higher than the input framerate */
+    smooth?: boolean
+  }
+
+  /** Effect to transition a clip in or out of the page */
+  transition?: { fade_in?: Timestamp; fade_out?: Timestamp }
+
+  /** Trim the duration of a clip */
+  trim?: {
+
+    /** Trim time off the start of a clip (similar to -ss argument in ffmpeg) */
+    start?: Timestamp
+
+    /** Trim time off the end of a clip (similar to -to argument in ffmpeg) */
+    stop?: Timestamp
+
+    /**
+     * Auto-trim the clip so that it is not longer than the other longest clip
+     *  If more than one variable_length clip is used in a sequence on the timeline, only the last clip will have variable length.
+     *  If all clips on the timeline have variable length, all clips will share the shortest clip's duration.
+     */
+    variable_length: 'start' | 'stop'
+  }
 }
 
 /**
@@ -114,6 +159,12 @@ export interface TextClip extends ClipBase {
     /** Text outline size (default is zero) */
     outline_size?: number
   }
+
+  /**
+   * Specify the length a caption should be shown in the render
+   *  If not specified, text clip length is essentially the same as `trim: { variable_length: 'end' }`
+   */
+  duration?: Timestamp
 }
 
 /**
@@ -121,23 +172,24 @@ export interface TextClip extends ClipBase {
  * Note that an audio file will not allow visual fields like "layout" or "zoompan"
  */
 export interface MediaClip extends ClipBase {
+
   /** Audio volume of the clip, this number is relative to the other clip's volume values. Defaults to 1. */
-  volume?: number
+  volume?: Percentage
+
   /** File path to the clip. If it is a relative path, it will be relative to the location of the template file */
   file: string
 }
 
 
 export interface TimelineClip {
-  id: string
+  /** Clip id that is being added to the timeline */
+  id?: string
+
   /**
    * offset the clip start position by a specified duration. (Maybe we support negative durations too?)
    * default is "0"
    */
   offset?: Timestamp
-
-  /** trim works very similar to clips trim, except that we can specify 'fit' instead of a duration. */
-  trim_to_fit: 'start' | 'end'
 
   /**
    * specify the vertical height of a clip. Think foreground and background
@@ -145,18 +197,14 @@ export interface TimelineClip {
    */
   z_index?: number
 
+  /** specify whether the next clips will be played one after another or all at the same time
+   * @default 'sequence'
+   */
+  type?: 'parallel' | 'sequence'
+
   /** Specify list of clips that should appear after the specified clip */
-  next?: TimelineItem[]
+  next?: TimelineClip[]
 }
-
-export interface TimelineSequence {
-  /** Specify a list of timeline items that should occur sequentially one after another */
-  sequence: TimelineItem
-  /** specify the vertical height of a clip. Think foreground and background */
-  z_index?: number
-}
-
-export type TimelineItem = TimelineClip | TimelineSequence
 
 
 export interface Template {
@@ -180,7 +228,7 @@ export interface Template {
    * The default timeline starts all the clips at the same time. E.g.
    * [{ id: "CLIP_0", offset: "0" }, { id: "CLIP_1", offset: "0" }, ...]
    */
-  // timeline?: TimelineItem[]
+  timeline?: TimelineClip[]
 
   /**
    * Preview the rendered output at a position. Used with the --preview flag.
