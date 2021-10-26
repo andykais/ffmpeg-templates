@@ -103,5 +103,10 @@ const Template = z.object({
 // this is a typescript exacty type assertion. It does nothing at runtime
 assert({} as z.input<typeof Template>, {} as t.Template)
 
-export { Template }
+function parse_template(template_input: z.input<typeof Template>): z.infer<typeof Template> {
+  const result = Template.parse(template_input)
+  return result
+}
+
+export { parse_template }
 export type TemplateParsed = z.infer<typeof Template>

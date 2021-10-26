@@ -31,3 +31,4 @@ class Logger {
 }
 
 export { Logger }
+export type { LogLevel }
