@@ -1,5 +1,6 @@
 import { z } from 'https://deno.land/x/zod@v3.9.0/mod.ts'
 import * as t from '../template_input.zod.ts'
+import * as errors from '../errors.ts'
 import { assert } from '../type-equality.ts'
 
 
@@ -103,9 +104,24 @@ const Template = z.object({
 // this is a typescript exacty type assertion. It does nothing at runtime
 assert({} as z.input<typeof Template>, {} as t.Template)
 
+
+function pretty_zod_errors(error: z.ZodError) {
+  return error.errors.map(e => {
+    const path = e.path.join('.')
+    return `  ${path}: ${e.message}`
+  }).join('\n')
+}
+
+
 function parse_template(template_input: z.input<typeof Template>): z.infer<typeof Template> {
-  const result = Template.parse(template_input)
-  return result
+  try {
+    const result = Template.parse(template_input)
+    return result
+  } catch (e) {
+    if (e instanceof z.ZodError) throw new errors.InputError(`Invalid template format:\n${pretty_zod_errors(e)}`)
+    else throw e
+  
+  }
 }
 
 export { parse_template }

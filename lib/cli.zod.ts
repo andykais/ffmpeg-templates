@@ -20,7 +20,7 @@ function parse_cli_args(deno_args: string[]) {
   if (args['develop']) args = { ...args, watch: true, preview: true, open: true }
   const positional_args = args._.map((a) => a.toString())
   const template_filepath = positional_args[0]
-  const { dir, name } = path.parse(args.template_filepath)
+  const { dir, name } = path.parse(template_filepath)
   let output_folder = path.join(dir, 'ffmpeg-templates-projects', dir, `${name}`)
   if (positional_args[1]) output_folder
   return {
@@ -69,6 +69,23 @@ async function try_render_video(template_filepath: string, sample_frame: boolean
 }
 
 
+async function watch(filepath: string, fn: () => Promise<void>) {
+  let lock = false
+  for await (const event of Deno.watchFs(filepath)) {
+    if (event.kind === 'modify' && lock === false) {
+      lock = true
+      setTimeout(() => {
+        fn().then(() => {
+          lock = false
+        })
+      }, 50) // assume that all file modifications are completed in 50ms
+    }
+    if (event.kind === 'remove') break
+  }
+  watch(filepath, fn)
+}
+
+
 export default async function (...deno_args: string[]) {
   const args = parse_cli_args(deno_args)
   const { template_filepath } = args
@@ -89,20 +106,10 @@ export default async function (...deno_args: string[]) {
 
   if (args.watch) {
     logger.info(`watching ${template_filepath} for changes`)
-    let lock = false
-    for await (const event of Deno.watchFs(template_filepath)) {
-      console.log({ event, lock})
-      if (event.kind === 'modify' && !lock) {
-        lock = true
-        setTimeout(() => {
-          logger.info(`template ${template_filepath} was changed. Starting render.`)
-          try_render_video(template_filepath, args.preview, context_options).then(() => {
-            lock = false
-            logger.info(`watching ${template_filepath} for changes`)
-          })
-          // assume that all file modifications are completed in 50ms
-        }, 50)
-      }
-    }
+    await watch(template_filepath, async () => {
+      logger.info(`template ${template_filepath} was changed. Starting render.`)
+      await try_render_video(template_filepath, args.preview, context_options)
+      logger.info(`watching ${template_filepath} for changes`)
+    })
   }
 }

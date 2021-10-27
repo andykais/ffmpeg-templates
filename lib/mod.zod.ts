@@ -6,16 +6,6 @@ import type { Logger } from './logger.ts'
 import type { OnProgress, FfmpegProgress } from './bindings/ffmpeg.ts'
 
 
-interface RenderOptions {
-  ffmpeg_verbosity?: 'quiet' | 'error' | 'warning' | 'info' | 'debug'
-  debug_logs?: boolean
-  progress_callback?: OnProgress
-  cwd?: string
-}
-interface RenderOptionsInternal extends RenderOptions {
-  render_sample_frame?: boolean
-}
-
 async function render(context: Context, render_sample_frame: boolean) {
   return {
     template: '',
