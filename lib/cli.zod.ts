@@ -7,14 +7,10 @@ import { open } from 'https://deno.land/x/open@v0.0.2/index.ts'
 import * as errors from './errors.ts'
 import { render_video, render_sample_frame } from './mod.zod.ts'
 import { Logger } from './logger.ts'
-import { parse_template } from './parsers/template.zod.ts'
 import type * as inputs from './template_input.zod.ts'
 import type { ContextOptions } from './context.ts'
-import type { TemplateParsed } from './parsers/template.zod.ts'
-import type { RenderOptions } from './mod.ts'
 
 
-type CliArgs = ReturnType<typeof parse_cli_args>
 function parse_cli_args(deno_args: string[]) {
   let args = flags.parse(deno_args)
   if (args['develop']) args = { ...args, watch: true, preview: true, open: true }
