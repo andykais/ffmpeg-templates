@@ -1,4 +1,5 @@
 import { Logger } from './logger.ts'
+import { ClipInfoMap } from './probe.zod.ts'
 import type { LogLevel } from './logger.ts'
 import type { TemplateParsed } from './parsers/template.zod.ts'
 
@@ -12,6 +13,7 @@ interface ContextOptions {
 
 class Context {
   public logger: Logger
+  public clip_info_map
   public output_folder: string
   public cwd: string
   public ffmpeg_log_cmd: boolean
@@ -24,6 +26,7 @@ class Context {
     this.logger = new Logger(options.log_level)
     this.cwd = options.cwd
     this.ffmpeg_log_cmd = options.ffmpeg_log_cmd
+    this.clip_info_map = new ClipInfoMap(this)
   }
 
   public execution_time() {

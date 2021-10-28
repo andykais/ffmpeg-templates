@@ -1,7 +1,9 @@
+import * as path from 'https://deno.land/std@0.91.0/path/mod.ts'
 import { z } from 'https://deno.land/x/zod@v3.9.0/mod.ts'
 import * as t from '../template_input.zod.ts'
 import * as errors from '../errors.ts'
 import { assert } from '../type-equality.ts'
+import type { ContextOptions } from '../context.ts'
 
 
 const ClipId = z.string().regex(/[a-zA-Z0-9-_]/)
@@ -113,9 +115,12 @@ function pretty_zod_errors(error: z.ZodError) {
 }
 
 
-function parse_template(template_input: z.input<typeof Template>): z.infer<typeof Template> {
+function parse_template(template_input: z.input<typeof Template>, options: ContextOptions): z.infer<typeof Template> {
   try {
     const result = Template.parse(template_input)
+    result.clips.map(c => {
+      c.file = path.resolve(options.cwd, c.file)
+    })
     return result
   } catch (e) {
     if (e instanceof z.ZodError) throw new errors.InputError(`Invalid template format:\n${pretty_zod_errors(e)}`)
@@ -126,3 +131,4 @@ function parse_template(template_input: z.input<typeof Template>): z.infer<typeo
 
 export { parse_template }
 export type TemplateParsed = z.infer<typeof Template>
+export type MediaClipParsed = TemplateParsed['clips'][0]
