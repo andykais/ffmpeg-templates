@@ -70,11 +70,11 @@ const TextClip = ClipBase.extend({
     size: z.number().default(16),
     color: Color.default('black'),
     border_radius: z.number().min(0).default(0),
-    padding: z.number().min(0).default(0),
+    border_size: z.number().min(0).default(0),
     background_color: Color.default('black'),
     outline_color: Color.default('black'),
     outline_size: z.number().default(0),
-  }).strict().optional(),
+  }).strict().default({}),
 
   duration: Timestamp.optional(),
 }).strict().transform(val => ({ ...val, type: 'text' as const }))
@@ -92,9 +92,12 @@ const Template = z.object({
   clips: MediaClip
     .array()
     .min(1)
-    .transform(clips => clips.map((val, i) => ({id: `CLIP_${i}`, ...val})))
+    .transform(clips => clips.map((val, i) => ({ id: `CLIP_${i}`, ...val })))
     .refine(clips => new Set(clips.map(c => c.id)).size === clips.length, { message: 'No duplicate clip ids allowed.' }),
-  captions: TextClip.array().default([]),
+  captions: TextClip
+    .array()
+    .transform(clips => clips.map((val, i) => ({ id: `TEXT_${i}`, ...val })))
+    .default([]),
   timeline: TimelineClip.array().min(1).optional(),
   preview: Timestamp.optional(),
 }).transform(val => ({
@@ -133,3 +136,4 @@ function parse_template(template_input: z.input<typeof Template>, options: Conte
 export { parse_template }
 export type TemplateParsed = z.infer<typeof Template>
 export type MediaClipParsed = TemplateParsed['clips'][0]
+export type TextClipParsed = TemplateParsed['captions'][0]

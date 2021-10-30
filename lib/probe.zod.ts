@@ -47,25 +47,23 @@ async function exec(cmd: string[], readline_cb?: OnReadLine) {
 }
 
 
-// The cache key is the filename only
-// That means if the file is overwritten, the cache will not pick up that change
-// So for now, if you edit a file, you restart the watcher
-// This is fair enough since its how most video editors function (and how often are people manipulating source files?)
-// cache keys are filenames, public keys are ids
-const clip_info_map_cache: { [file: string]: ClipInfo } = {}
-
-
 class ClipInfoMap extends AbstractClipMap<ClipInfo> {
+  // The cache key is the filename only
+  // That means if the file is overwritten, the cache will not pick up that change
+  // So for now, if you edit a file, you restart the watcher
+  // This is fair enough since its how most video editors function (and how often are people manipulating source files?)
+  // cache keys are filenames, public keys are ids
+  private clip_info_cache_map: { [file: string]: ClipInfo } = {}
   private in_flight_info_map: { [file: string]: Promise<ClipInfo> } = {}
   private initialized = false
   private probe_info_filepath
 
   public constructor(private context: Context) {
     super()
-    this.probe_info_filepath = path.resolve(context.cwd, CLIP_INFO_FILENAME)
+    this.probe_info_filepath = path.resolve(context.output_folder, CLIP_INFO_FILENAME)
   }
 
-  async init(context: Context) {
+  async init() {
     try {
       // we initialize early so we dont accidentally double initialize (especially on startup)
       this.initialized = true
@@ -73,7 +71,8 @@ class ClipInfoMap extends AbstractClipMap<ClipInfo> {
       type ClipInfoObject = { [file: string]: ClipInfo }
       const clip_info_object: ClipInfoObject = JSON.parse(json_str)
       for (const file of Object.keys(clip_info_object)) {
-        this.set(file, clip_info_object[file])
+        this.clip_info_cache_map[file] = clip_info_object[file]
+        // this.set(file, clip_info_object[file])
       }
     } catch (e) {
       if (e instanceof Deno.errors.NotFound === false) throw e
@@ -81,20 +80,25 @@ class ClipInfoMap extends AbstractClipMap<ClipInfo> {
   }
 
   public async probe(clip: MediaClipParsed) {
+    if (!this.initialized) await this.init()
     const { id, file } = clip
     const stats = await Deno.stat(file)
     // some platforms dont set mtime. We can cross that bridge when we get to it
     if (stats.mtime === null) throw new Error('unexpected null mtime. Cannot infer when files have updated.')
-    if (clip_info_map_cache[file]) {
-      const cached_timestamp = clip_info_map_cache[file].timestamp
-      if (cached_timestamp === stats.mtime.toString()) return clip_info_map_cache[file]
+    if (this.clip_info_cache_map[file]) {
+      const cached_timestamp = this.clip_info_cache_map[file].timestamp
+      if (cached_timestamp === stats.mtime.toString()) {
+        this.set(id, this.clip_info_cache_map[file])
+        return this.get_or_throw(id)
+      }
     }
     if (Object.hasOwn(this.in_flight_info_map, file)) return this.in_flight_info_map[file]
     this.in_flight_info_map[file] = probe(this.context, clip, stats)
     const clip_info = await this.in_flight_info_map[file]
     this.set(id, clip_info)
+    this.clip_info_cache_map[file] = clip_info
     delete this.in_flight_info_map[file]
-    await Deno.writeTextFile(this.probe_info_filepath, JSON.stringify(clip_info_map_cache))
+    await Deno.writeTextFile(this.probe_info_filepath, JSON.stringify(this.clip_info_cache_map))
     return clip_info
   }
 }

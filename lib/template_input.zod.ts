@@ -144,13 +144,13 @@ export interface TextClip extends ClipBase {
     /** Hex color code for text (default is #00000) */
     color?: Color
 
-    /** Round the background shape (defaults to zero, no rounding) */
+    /** Round the border shape (defaults to zero, no rounding) */
     border_radius?: number
 
-    /** Add extra width and height to the background color. Text will be centered inside it */
-    padding?: number
+    /** Thickness of the border (defaults to zero, not shown) */
+    border_size?: number
 
-    /** Text background color (default is none) */
+    /** Text background color, filling the space inside the border (default is none) */
     background_color?: Color
 
     /** Hex color code for text outline (default is #000000) */
