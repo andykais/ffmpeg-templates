@@ -17,7 +17,7 @@ function parse_cli_args(deno_args: string[]) {
   const positional_args = args._.map((a) => a.toString())
   const template_filepath = positional_args[0]
   const { dir, name } = path.parse(template_filepath)
-  let output_folder = path.join(dir, 'ffmpeg-templates-projects', `${name}`)
+  let output_folder = path.join(Deno.cwd(), 'ffmpeg-templates-projects', `${name}`)
   if (positional_args[1]) output_folder = positional_args[1]
   return {
      template_filepath,
