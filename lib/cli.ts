@@ -164,19 +164,23 @@ export default async function (...deno_args: string[]) {
 
   if (args.watch) {
     logger.info(`watching ${template_filepath} for changes`)
-    let lock = false
-    for await (const event of Deno.watchFs(template_filepath)) {
-      if (event.kind === 'modify' && !lock) {
-        lock = true
-        setTimeout(() => {
-          logger.info(`template ${template_filepath} was changed. Starting render.`)
-          try_render_video(args, logger, template_filepath, output_folder, options).then(() => {
-            lock = false
-            logger.info(`watching ${template_filepath} for changes`)
-          })
-          // assume that all file modifications are completed in 50ms
-        }, 50)
+    const watch = async () => {
+      let lock = false
+      for await (const event of Deno.watchFs(template_filepath)) {
+        if (event.kind === 'remove') watch()
+        if (event.kind === 'modify' && !lock) {
+          lock = true
+          setTimeout(() => {
+            logger.info(`template ${template_filepath} was changed. Starting render.`)
+            try_render_video(args, logger, template_filepath, output_folder, options).then(() => {
+              lock = false
+              logger.info(`watching ${template_filepath} for changes`)
+            })
+            // assume that all file modifications are completed in 50ms
+          }, 50)
+        }
       }
     }
+    await watch()
   }
 }

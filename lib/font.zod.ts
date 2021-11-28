@@ -89,9 +89,9 @@ async function create_text_image_backup(
   await Deno.writeFile(text_image_asset, canvas.toBuffer())
 
   // debug only
-  await Deno.run({ cmd: ['./imgcat.sh', text_image_asset] }).status()
-  console.log('done')
-  console.log({ family, metrics })
+  // await Deno.run({ cmd: ['./imgcat.sh', text_image_asset] }).status()
+  // console.log('done')
+  // console.log({ family, metrics })
 }
 
 async function create_text_image(
@@ -103,8 +103,11 @@ async function create_text_image(
   await Deno.mkdir(text_assets_folder, { recursive: true })
   const x = 0
   const y = 0
+  const implicit_width = text_clip.layout.relative_to === text_clip.id && parse_unit(text_clip.layout.width, { pixels: () => false, percentage: () => true })
+  const implicit_height = text_clip.layout.relative_to === text_clip.id && parse_unit(text_clip.layout.height, { pixels: () => false, percentage: () => true })
+
   const max_width = parse_unit(text_clip.layout.width, { percentage: (p) => p * size.background_width })
-  const height = parse_unit(text_clip.layout.height, { percentage: (p) => p * size.background_height })
+  const max_height = parse_unit(text_clip.layout.height, { percentage: (p) => p * size.background_height })
   // TODO canvas width/height should be smarter.
   // width & height should be determined by the actual text size.
   // max_width & max_height should come from layout
@@ -141,10 +144,11 @@ async function create_text_image(
   }
   ;(ctx.canvas as any).drawParagraph(metrics.paragraph, 0, 0)
   const text_image_asset = path.resolve(text_assets_folder, text_clip.id + '.png')
+  console.log({ text_image_asset})
   await Deno.writeFile(text_image_asset, canvas.toBuffer())
 
   // debug only
-  await Deno.run({ cmd: ['./imgcat.sh', text_image_asset] }).status()
+  // await Deno.run({ cmd: ['./imgcat.sh', text_image_asset] }).status()
   paragraph.delete()
   font_mgr.delete()
 }
