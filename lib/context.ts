@@ -2,6 +2,7 @@ import { Logger } from './logger.ts'
 import { ClipInfoMap } from './probe.zod.ts'
 import { AbstractClipMap } from './util.ts'
 import type { LogLevel } from './logger.ts'
+import type * as inputs from './template_input.zod.ts'
 import type { TemplateParsed, MediaClipParsed } from './parsers/template.zod.ts'
 
 interface ContextOptions {
@@ -23,7 +24,7 @@ class Context {
   public ffmpeg_verbosity = 'error'
   private execution_start_time: number
 
-  constructor(public template: TemplateParsed, options: ContextOptions) {
+  constructor(public template_input: inputs.Template, public template: TemplateParsed, options: ContextOptions) {
     this.execution_start_time = performance.now()
     this.output_folder = options.output_folder
     this.logger = new Logger(options.log_level)

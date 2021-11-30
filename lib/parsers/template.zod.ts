@@ -71,8 +71,8 @@ const TextClip = ClipBase.extend({
     color: Color.default('black'),
     border_radius: z.number().min(0).default(0),
     border_size: z.number().min(0).default(0),
-    background_color: Color.default('black'),
-    outline_color: Color.default('black'),
+    background_color: Color.optional(),
+    outline_color: Color.default('white'),
     outline_size: z.number().default(0),
   }).strict().default({}),
 

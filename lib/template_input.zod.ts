@@ -116,7 +116,7 @@ export interface ClipBase {
     stop?: Timestamp
 
     /** Trim the video to last until a particular moment of output (TBD if this is the best way to specify a sequence of images going until a certain point) */
-    stop_relative_to_output?: Timestamp
+    // stop_relative_to_output?: Timestamp
 
     /**
      * Auto-trim the clip so that it is not longer than the other longest clip

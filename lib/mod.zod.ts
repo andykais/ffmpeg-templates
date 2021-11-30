@@ -1,7 +1,7 @@
 import { parse_template } from './parsers/template.zod.ts'
 import { Context } from './context.ts'
 import { compute_geometry, compute_background_size, compute_rotated_size } from './geometry.zod.ts'
-import { create_text_image } from './font.zod.ts'
+import { create_text_image } from './canvas/font.zod.ts'
 import type * as inputs from './template_input.zod.ts'
 import type { ContextOptions } from './context.ts'
 import type { OnProgress, FfmpegProgress } from './bindings/ffmpeg.ts'
@@ -33,7 +33,7 @@ async function render(context: Context, render_sample_frame: boolean) {
 
 async function render_video(template: inputs.Template, options: ContextOptions) {
   const template_parsed = parse_template(template, options)
-  const context = new Context(template_parsed, options)
+  const context = new Context(template, template_parsed, options)
   const result = await render(context, true)
   const { stats, outputted_files } = result
   context.logger.info(`created "${outputted_files.preview}" at ${template_parsed.preview} out of ${stats.clips_count} clips in ${stats.execution_time.toFixed(1)} seconds.`)
@@ -42,7 +42,7 @@ async function render_video(template: inputs.Template, options: ContextOptions) 
 
 async function render_sample_frame(template: inputs.Template, options: ContextOptions) {
   const template_parsed = parse_template(template, options)
-  const context = new Context(template_parsed, options)
+  const context = new Context(template, template_parsed, options)
   const result = await render(context, false)
   const { stats, outputted_files } = result
   context.logger.info(`created "${outputted_files.video}" out of ${stats.clips_count} clips in ${stats.execution_time.toFixed(1)} seconds.`)

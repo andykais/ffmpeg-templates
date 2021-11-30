@@ -1,9 +1,10 @@
 import * as path from 'https://deno.land/std@0.91.0/path/mod.ts'
 import CanvasKit, { createCanvas } from "https://deno.land/x/canvas@v1.3.0/mod.ts"
 import type { Paragraph } from "https://deno.land/x/canvas@v1.3.0/mod.ts"
-import { parse_unit } from './parsers/unit.ts'
-import type { Context } from './context.ts'
-import type { TextClipParsed } from './parsers/template.zod.ts'
+import { parse_unit } from '../parsers/unit.ts'
+import type { Context } from '../context.ts'
+import type { TextClipParsed } from '../parsers/template.zod.ts'
+import { ContextExtended } from './round-rect.ts'
 
 function measure_text(text_clip: TextClipParsed, font_buffer?: Uint8Array) {
   const fontMgr = font_buffer ? CanvasKit.FontMgr.FromData(font_buffer) : CanvasKit.FontMgr.RefDefault()
@@ -108,13 +109,15 @@ async function create_text_image(
 
   const max_width = parse_unit(text_clip.layout.width, { percentage: (p) => p * size.background_width })
   const max_height = parse_unit(text_clip.layout.height, { percentage: (p) => p * size.background_height })
+  const text_clip_input = context.template_input.captions?.find((c, i)=> c.id ?? `TEXT_${i}` === text_clip.id)
+  if (text_clip_input === undefined) throw new Error(`unexpected code path. Input clip ${text_clip.id} does not exist`)
+  const explicitly_set_width = text_clip_input.layout?.width !== undefined
+  const explicitly_set_height = text_clip_input?.layout?.height !== undefined
   // TODO canvas width/height should be smarter.
   // width & height should be determined by the actual text size.
   // max_width & max_height should come from layout
   // text overflowing max_width should be wrapped
   // text overflowing max_height should be cropped (possibly with a real crop, which would allow panning text up)
-  const canvas = createCanvas(max_width, height)
-  const ctx = canvas.getContext('2d')
   let font_mgr = CanvasKit.FontMgr.RefDefault()
   const { font } = text_clip
   if (font.family) {
@@ -138,13 +141,19 @@ async function create_text_image(
   paragraph.layout(max_width)
   const metrics  = get_metrics(paragraph)
 
+  const width = explicitly_set_width ? max_width : metrics.width
+  const height = explicitly_set_height ? max_height : metrics.height
+  console.log({ width, height })
+  const canvas = createCanvas(Math.floor(width), Math.floor(height))
+  const ctx = canvas.getContext('2d')
+
   if (font.background_color) {
+    console.log('background color')
     ctx.fillStyle = font.background_color
     ctx.fillRect(0, 0, metrics.width, metrics.height)
   }
   ;(ctx.canvas as any).drawParagraph(metrics.paragraph, 0, 0)
   const text_image_asset = path.resolve(text_assets_folder, text_clip.id + '.png')
-  console.log({ text_image_asset})
   await Deno.writeFile(text_image_asset, canvas.toBuffer())
 
   // debug only
