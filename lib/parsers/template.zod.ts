@@ -63,6 +63,7 @@ const MediaClip = ClipBase.extend({
   volume: Percentage.default('100%'),
 }).strict().transform(val => ({ ...val, type: 'media' as const }))
 
+const CssNumber = z.union([z.number(), z.tuple([z.number(), z.number()])])
 const TextClip = ClipBase.extend({
   text: z.string(),
   font: z.object({
@@ -71,6 +72,7 @@ const TextClip = ClipBase.extend({
     color: Color.default('black'),
     border_radius: z.number().min(0).default(0),
     border_size: z.number().min(0).default(0),
+    padding: CssNumber.default(0),
     background_color: Color.optional(),
     outline_color: Color.default('white'),
     outline_size: z.number().default(0),

@@ -146,11 +146,33 @@ async function create_text_image(
   console.log({ width, height })
   const canvas = createCanvas(Math.floor(width), Math.floor(height))
   const ctx = canvas.getContext('2d')
+  const ctx_extended = new ContextExtended(ctx)
 
   if (font.background_color) {
     console.log('background color')
-    ctx.fillStyle = font.background_color
-    ctx.fillRect(0, 0, metrics.width, metrics.height)
+    if (font.border_radius) {
+      console.log('radius')
+      ctx.save()
+      // context.strokeStyle = 'red'
+      // context.fillRect(0, 0, metrics.width, metrics.fontBoundingBoxAscent + metrics.actualBoundingBoxDescent)
+      ctx.fillStyle = font.background_color
+      const x = 0
+      const y = 0
+      const padding = 0
+      ctx_extended.roundRect(
+        x,
+        y,
+        metrics.width + x + padding * 2,
+        metrics.height + padding * 2,
+        [font.border_radius]
+      )
+     ctx.fill()
+     ctx.restore()
+    } else {
+      console.log('no radius')
+      ctx.fillStyle = font.background_color
+      ctx.fillRect(0, 0, metrics.width, metrics.height)
+    }
   }
   ;(ctx.canvas as any).drawParagraph(metrics.paragraph, 0, 0)
   const text_image_asset = path.resolve(text_assets_folder, text_clip.id + '.png')

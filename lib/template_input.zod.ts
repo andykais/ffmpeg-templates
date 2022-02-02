@@ -153,6 +153,9 @@ export interface TextClip extends ClipBase {
     /** Thickness of the border (defaults to zero, not shown) */
     border_size?: number
 
+    /** Padding along the top, bottom, left and right. Syntax is similar to css padding ([all] | [leftright] [topbottom] | [left, right, top, bottom]) */
+    padding: number | [number, number]
+
     /** Text background color, filling the space inside the border (default is none) */
     background_color?: Color
 
