@@ -36,8 +36,8 @@ async function create_text_image(
   const padding_horizontal = padding.left + padding.right
   const padding_vertical = padding.top + padding.bottom
 
-  const max_width = parse_unit(text_clip.layout.width, { percentage: (p) => p * size.background_width }) + padding_horizontal
-  const max_height = parse_unit(text_clip.layout.height, { percentage: (p) => p * size.background_height }) + padding_vertical
+  const max_width = parse_unit(text_clip.layout.width, { percentage: (p) => p * size.background_width })
+  const max_height = parse_unit(text_clip.layout.height, { percentage: (p) => p * size.background_height })
   const text_clip_input = context.template_input.captions?.find((c, i)=> c.id ?? `TEXT_${i}` === text_clip.id)
   if (text_clip_input === undefined) throw new Error(`unexpected code path. Input clip ${text_clip.id} does not exist`)
   const explicitly_set_width = text_clip_input.layout?.width !== undefined
@@ -78,10 +78,14 @@ async function create_text_image(
   const builder = CanvasKit.ParagraphBuilder.Make(paraStyle, font_mgr)
   builder.addText(text_clip.text)
   const paragraph = builder.build()
-  paragraph.layout(max_width)
+  paragraph.layout(max_width - padding_horizontal)
   const metrics  = get_metrics(paragraph)
 
-  const width = (explicitly_set_width ? max_width : metrics.width) + padding_horizontal
+  // unless I find a good reason not to, were using the layout width rather than the calculated text width
+  // otherwise text align center/right dont  do anything special on single lines of  text
+  // for posterity, heres how we used to grab it:
+  /* const width = (explicitly_set_width ? max_width : metrics.width) + padding_horizontal */
+  const width = max_width
   const height = (explicitly_set_height ? max_height : metrics.height) + padding_vertical
   const canvas = createCanvas(Math.floor(width), Math.floor(height * 2))
   const ctx = canvas.getContext('2d')
@@ -128,6 +132,7 @@ async function create_text_image(
     }
     ctx.fill()
   }
+  console.log('padding', padding, { padding_horizontal})
   ;(ctx.canvas as any).drawParagraph(metrics.paragraph, padding.left, padding.top)
 
   // Welp. This works, but strokeText has different letter spacing than the paragrpah api.
@@ -149,6 +154,27 @@ async function create_text_image(
       ctx.strokeText(line_text, x, y, line_metrics.width + padding_horizontal)
     }
   }
+  /*
+  // DEBUG_START
+  // ctx.fillStyle = 'gray'
+  // ctx.fillRect(0,0,width, height)
+  for (let i = 0; i < width; i+=20) {
+    // ctx.beginPath()
+    ctx.beginPath()
+    ctx.moveTo(i, 0)
+    ctx.lineTo(i, height)
+    const color = `hsl(${Math.floor(300*(i/width))}, ${100}%, ${50}%)`
+    ctx.closePath()
+    ctx.strokeStyle = color
+    // console.log(`hsl(60, ${100}%, ${90}%)`)
+    ctx.stroke()
+    // ctx.closePath()
+    // for (let j = 0; j < height; j+=10) {
+    // }
+  }
+  // DEBUG_END
+  */
+
   const text_image_asset = path.resolve(text_assets_folder, text_clip.id + '.png')
   await Deno.writeFile(text_image_asset, canvas.toBuffer())
 
