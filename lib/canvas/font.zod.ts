@@ -4,7 +4,7 @@ import type { Paragraph } from "https://deno.land/x/canvas@v1.3.0/mod.ts"
 import * as culori from 'https://deno.land/x/culori@v2.0.3/index.js'
 import { parse_unit } from '../parsers/unit.ts'
 import type { Context } from '../context.ts'
-import type { TextClipParsed } from '../parsers/template.zod.ts'
+import type { TextClipParsed, MediaClipParsed } from '../parsers/template.zod.ts'
 import { ContextExtended } from './round-rect.ts'
 
 function get_metrics(paragraph: Paragraph) {
@@ -22,7 +22,7 @@ async function create_text_image(
   context: Context,
   size: {background_width: number, background_height: number},
   text_clip: TextClipParsed
-) {
+): Promise<MediaClipParsed> {
   const text_assets_folder = path.join(context.output_folder, 'text_assets')
   await Deno.mkdir(text_assets_folder, { recursive: true })
   // TODO figure these out in terms of relativity
@@ -154,6 +154,16 @@ async function create_text_image(
 
   paragraph.delete()
   font_mgr.delete()
+
+  return {
+    type: 'media',
+    // TODO, internally prefix media clips w/ "clip:" to ensure there are no overwrites with the id here
+    id: `text:${text_clip.id}`,
+    file: text_image_asset,
+    layout: text_clip.layout,
+    volume: '100%',
+    speed: '100%',
+  }
 }
 
 export { create_text_image }
