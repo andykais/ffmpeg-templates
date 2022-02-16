@@ -53,7 +53,8 @@ class ContextExtended {
 
     fixOverlappingCorners(corners);
 
-    console.log({ x, y, w, h })
+    // this.context.beginPath()
+    // console.log({ x, y, w, h })
     if (w < 0 && h < 0) {
       this.context.moveTo(x - upperLeft.x, y);
       this.context.ellipse(x + w + upperRight.x, y - upperRight.y, upperRight.x, upperRight.y, 0, -Math.PI * 1.5, -Math.PI);
@@ -83,7 +84,7 @@ class ContextExtended {
       this.context.ellipse(x + upperLeft.x, y + upperLeft.y, upperLeft.x, upperLeft.y, 0, Math.PI, Math.PI * 1.5);
     }
 
-    this.context.closePath();
+    // this.context.closePath();
     this.context.moveTo(x, y);
 
     function toCornerPoint(value: Radii): { x: number; y: number } {

@@ -153,17 +153,26 @@ export interface TextClip extends ClipBase {
     /** Thickness of the border (defaults to zero, not shown) */
     border_size?: number
 
-    /** Padding along the top, bottom, left and right. Syntax is similar to css padding ([all] | [leftright] [topbottom] | [left, right, top, bottom]) */
-    padding: number | [number, number]
+    /** Hex color code for text outline (default is #000000) */
+    border_color?: Color
+
+    /** Whether the border/background should contour to the text, or be rectangular (default is block) */
+    border_style?: 'contour' | 'block'
+
+    /** Outline text color **/
+    outline_color?: Color
+
+    /** Outline text size **/
+    outline_size?: number
+
+    /** Padding along the top, bottom, left and right. Syntax is similar to css padding ([all] | [topbottom, leftright] | [top, rightleft, bottom] | [top, right, bottom, left]) */
+    padding?: number | [number, number] | [number, number, number] | [number, number, number, number]
 
     /** Text background color, filling the space inside the border (default is none) */
     background_color?: Color
 
-    /** Hex color code for text outline (default is #000000) */
-    outline_color?: Color
-
-    /** Text outline size (default is zero) */
-    outline_size?: number
+    /** Align text **/
+    align?: 'left' | 'center' | 'right'
   }
 
   /**

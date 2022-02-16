@@ -63,7 +63,18 @@ const MediaClip = ClipBase.extend({
   volume: Percentage.default('100%'),
 }).strict().transform(val => ({ ...val, type: 'media' as const }))
 
-const CssNumber = z.union([z.number(), z.tuple([z.number(), z.number()])])
+const CssNumber = z.union([
+  z.number(),
+  z.tuple([z.number(), z.number()]),
+  z.tuple([z.number(), z.number(), z.number()]),
+  z.tuple([z.number(), z.number(), z.number(), z.number()]),
+]).transform(v => {
+  if (typeof v === 'number') return {left:v, right: v, top: v, bottom: v}
+  else if (v.length === 2) return {top: v[0], bottom: v[0], left: v[1], right: v[1]}
+  else if (v.length === 3) return {top: v[0], left: v[1], right: v[1], bottom: v[2]}
+  else if (v.length === 4) return {top: v[0], right: v[1], left: v[2], bottom: v[3]}
+  else throw new Error(`unexpected css values ${v}`)
+})
 const TextClip = ClipBase.extend({
   text: z.string(),
   font: z.object({
@@ -74,8 +85,11 @@ const TextClip = ClipBase.extend({
     border_size: z.number().min(0).default(0),
     padding: CssNumber.default(0),
     background_color: Color.optional(),
-    outline_color: Color.default('white'),
-    outline_size: z.number().default(0),
+    border_color: Color.default('white'),
+    border_style: z.enum(['contour', 'block']).default('block'),
+    outline_color: Color.default('gray'),
+    outline_size: z.number().min(0).default(0),
+    align: z.enum(['left', 'right', 'center']).default('center'),
   }).strict().default({}),
 
   duration: Timestamp.optional(),
@@ -110,7 +124,7 @@ const Template = z.object({
 }))
 
 // this is a typescript exacty type assertion. It does nothing at runtime
-// it ensures thst our zod validator and our typescript spec stay in sync
+// it ensures that our zod validator and our typescript spec stay in sync
 exactly({} as z.input<typeof Template>, {} as t.Template)
 
 
