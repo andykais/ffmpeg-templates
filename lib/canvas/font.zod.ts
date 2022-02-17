@@ -23,6 +23,7 @@ async function create_text_image(
   size: {background_width: number, background_height: number},
   text_clip: TextClipParsed
 ): Promise<MediaClipParsed> {
+  console.log('creating text image')
   const text_assets_folder = path.join(context.output_folder, 'text_assets')
   await Deno.mkdir(text_assets_folder, { recursive: true })
   // TODO figure these out in terms of relativity
@@ -90,6 +91,7 @@ async function create_text_image(
   const canvas = createCanvas(Math.floor(width), Math.floor(height * 2))
   const ctx = canvas.getContext('2d')
   const ctx_extended = new ContextExtended(ctx)
+  console.log('created canvas')
 
   // To implement a _proper_ border background, we need to reimplement rounded-rect to build one giant single path around the border of all the lines of text.
   // This path will make all the rounding decisions per each corner.
@@ -132,8 +134,8 @@ async function create_text_image(
     }
     ctx.fill()
   }
-  console.log('padding', padding, { padding_horizontal})
   ;(ctx.canvas as any).drawParagraph(metrics.paragraph, padding.left, padding.top)
+  console.log('drew paragraph')
 
   // Welp. This works, but strokeText has different letter spacing than the paragrpah api.
   // What that means is in reality, it looks like shit for most fonts.
@@ -177,9 +179,11 @@ async function create_text_image(
 
   const text_image_asset = path.resolve(text_assets_folder, text_clip.id + '.png')
   await Deno.writeFile(text_image_asset, canvas.toBuffer())
+  console.log('wrote buffer to file')
 
   paragraph.delete()
   font_mgr.delete()
+  console.log('deleted stuff')
 
   return {
     type: 'media',

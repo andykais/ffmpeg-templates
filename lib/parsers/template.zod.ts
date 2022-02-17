@@ -113,7 +113,7 @@ const Template = z.object({
     .refine(clips => new Set(clips.map(c => c.id)).size === clips.length, { message: 'No duplicate clip ids allowed.' }),
   captions: TextClip
     .array()
-    .transform(clips => clips.map((val, i) => ({ id: `TEXT_${i}`, ...val })).map(val => (console.log('caption'),{ ...val, layout: { relative_to: val.id, ...val.layout }})))
+    .transform(clips => clips.map((val, i) => ({ id: `TEXT_${i}`, ...val })).map(val => ({ ...val, layout: { relative_to: val.id, ...val.layout }})))
     .default([]),
   timeline: TimelineClip.array().min(1).optional(),
   preview: Timestamp.optional(),

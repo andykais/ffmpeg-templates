@@ -3,19 +3,11 @@ import { parse_template } from './parsers/template.zod.ts'
 import { Context } from './context.ts'
 import { compute_geometry, compute_background_size, compute_rotated_size } from './geometry.zod.ts'
 import { create_text_image } from './canvas/font.zod.ts'
+import { relative_path } from './util.ts'
 import type * as inputs from './template_input.zod.ts'
 import type { ContextOptions } from './context.ts'
 import { ffmpeg } from './bindings/ffmpeg.zod.ts'
 import type { OnProgress, FfmpegProgress } from './bindings/ffmpeg.ts'
-
-async function write_cmd_to_file(context: Context, ffmpeg_cmd: string[], filepath: string) {
-  const cmd_str = ffmpeg_cmd
-    .map((c) => c.toString())
-    .map((c) => (/[ \/]/.test(c) ? `"${c}"` : c))
-    .join(' \\\n  ')
-  await Deno.writeTextFile(filepath, cmd_str, { mode: 0o777 })
-  context.logger.info(`Saved ffmpeg command to ${filepath}`)
-}
 
 abstract class FfmpegBuilderBase {
   protected complex_filter_inputs: string[] = []
@@ -73,6 +65,16 @@ abstract class FfmpegBuilderBase {
       '-y'
     ]
   }
+
+  async write_ffmpeg_cmd(filepath: string) {
+    const ffmpeg_cmd = this.build()
+    const cmd_str = ffmpeg_cmd
+      .map((c) => c.toString())
+      .map((c) => (/[ \/]/.test(c) ? `"${c}"` : c))
+      .join(' \\\n  ')
+    await Deno.writeTextFile(filepath, cmd_str, { mode: 0o777 })
+    this.context.logger.info(`Saved ffmpeg command to ${relative_path(filepath)}`)
+  }
 }
 
 class FfmpegVideoBuilder extends FfmpegBuilderBase {
@@ -99,8 +101,7 @@ async function render(context: Context, ffmpeg_builder: FfmpegBuilderBase) {
   }
 
   await Deno.mkdir(context.output_folder, { recursive: true })
-  const promises = context.template.clips.map(clip => context.clip_info_map.probe(clip))
-  await Promise.all(promises)
+  await Promise.all(context.template.clips.map(clip => context.clip_info_map.probe(clip)))
   const size = compute_background_size(context)
   const text_promises = context.template.captions.map(caption => create_text_image(context, size, caption))
   const text_image_clips = await Promise.all(text_promises)
@@ -124,8 +125,9 @@ async function render(context: Context, ffmpeg_builder: FfmpegBuilderBase) {
   const ffmpeg_cmd = ffmpeg_builder.build()
   console.log(ffmpeg_cmd)
   // if (context.ffmpeg_log_cmd) write_cmd_to_file(context, ffmpeg_cmd, output.ffmpeg_cmd)
-  if (true) write_cmd_to_file(context, ffmpeg_cmd, output.ffmpeg_cmd)
+  if (true) ffmpeg_builder.write_ffmpeg_cmd(output.ffmpeg_cmd)
 
+  context.logger.info(`Rendering ${total_duration}s long output`)
   await ffmpeg(context, ffmpeg_cmd, total_duration)
 
   return {
@@ -144,7 +146,7 @@ async function render_video(template: inputs.Template, options: ContextOptions) 
   const ffmpeg_builder = new FfmpegVideoBuilder(context)
   const result = await render(context, ffmpeg_builder)
   const { stats, output } = result
-  context.logger.info(`created "${output.video}" at ${template_parsed.preview} out of ${stats.clips_count} clips in ${stats.execution_time.toFixed(1)} seconds.`)
+  context.logger.info(`created "${relative_path(output.video)}" out of ${stats.clips_count} clips in ${stats.execution_time.toFixed(1)} seconds.`)
 
   return result
 }
@@ -155,10 +157,10 @@ async function render_sample_frame(template: inputs.Template, options: ContextOp
   const ffmpeg_builder = new FfmpegSampleBuilder(context)
   const result = await render(context, ffmpeg_builder)
   const { stats, output } = result
-  context.logger.info(`created "${output.preview}" out of ${stats.clips_count} clips in ${stats.execution_time.toFixed(1)} seconds.`)
+  context.logger.info(`created "${relative_path(output.preview)}" at ${template_parsed.preview} out of ${stats.clips_count} clips in ${stats.execution_time.toFixed(1)} seconds.`)
   // // DEBUG_START
   // await Deno.run({cmd: ['./imgcat.sh', 'ffmpeg-templates-projects/template.zod/text_assets/TEXT_0.png'], })
-  await Deno.run({cmd: ['./imgcat.sh', 'ffmpeg-templates-projects/template.zod/preview.jpg'], })
+  // await Deno.run({cmd: ['./imgcat.sh', 'ffmpeg-templates-projects/template.zod/preview.jpg'], })
   // // DEBUG_END
 
   return result
