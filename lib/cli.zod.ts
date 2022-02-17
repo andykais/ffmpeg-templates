@@ -55,9 +55,11 @@ async function try_render_video(template_filepath: string, sample_frame: boolean
   // create context here, w/ execution time. Move progress callback to logger
   try {
     const template_input = await read_template(template_filepath)
-    return sample_frame
+    const result = sample_frame
       ? await render_sample_frame(template_input, context_options)
       : await render_video(template_input, context_options)
+    if (await fs.exists(result.output.current) === false) throw new Error('output file not produced')
+    return result
   } catch(e) {
     if (e instanceof errors.InputError) console.error(e)
     else throw e
@@ -93,12 +95,16 @@ export default async function (...deno_args: string[]) {
   // const output_locations = get_output_locations(output_folder)
   if (!(await fs.exists(template_filepath)))
     throw new errors.InputError(`Template file ${template_filepath} does not exist`)
-  if (args.preview && args.open) {
-    const placeholder_template = { clips: [], captions: [{ text: 'Loading Preview...' }] }
-    const result = await render_sample_frame(placeholder_template, context_options)
-    open(result.outputted_files.preview)
-  }
-  await try_render_video(template_filepath, args.preview, context_options)
+  // if (args.preview && args.open) {
+  //   try {
+  //     // open a preview early if we already ran --develop
+  //     // open(result.output.preview)
+  //   }catch(e) {}
+  //   // const placeholder_template = { clips: [], captions: [{ text: 'Loading Preview...' }] }
+  //   // const result = await render_sample_frame(placeholder_template, context_options)
+  // }
+  const result = await try_render_video(template_filepath, args.preview, context_options)
+  if (args.open && result !== undefined) open(result.output.preview)
 
   if (args.watch) {
     logger.info(`watching ${template_filepath} for changes`)

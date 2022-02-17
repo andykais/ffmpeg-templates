@@ -1,3 +1,4 @@
+import * as path from 'https://deno.land/std@0.91.0/path/mod.ts'
 import { Logger } from './logger.ts'
 import { ClipInfoMap } from './probe.zod.ts'
 import { AbstractClipMap } from './util.ts'
@@ -19,6 +20,11 @@ class Context {
   public clip_info_map: ClipInfoMap
   public clip_map: ClipMap
   public output_folder: string
+  public output_files: {
+    ffmpeg_cmd: string
+    preview: string
+    video: string
+  }
   public cwd: string
   public ffmpeg_log_cmd: boolean
   public ffmpeg_verbosity = 'error'
@@ -33,6 +39,11 @@ class Context {
     this.clip_map = new ClipMap()
     for (const clip of template.clips) this.clip_map.set(clip.id, clip)
     this.clip_info_map = new ClipInfoMap(this)
+    this.output_files = {
+      ffmpeg_cmd: path.join(this.output_folder, 'ffmpeg.sh'),
+      preview: path.join(this.output_folder, 'preview.jpg'),
+      video: path.join(this.output_folder, 'output.mp4'),
+    }
   }
 
   public execution_time() {

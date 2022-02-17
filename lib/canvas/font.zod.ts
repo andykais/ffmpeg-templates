@@ -184,7 +184,7 @@ async function create_text_image(
   return {
     type: 'media',
     // TODO, internally prefix media clips w/ "clip:" to ensure there are no overwrites with the id here
-    id: `text:${text_clip.id}`,
+    id: text_clip.id,
     file: text_image_asset,
     layout: text_clip.layout,
     volume: '100%',
