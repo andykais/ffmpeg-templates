@@ -135,6 +135,8 @@ async function probe(context: Context, clip: MediaClipParsed, stats: Deno.FileIn
     aspect_ratio = parse_aspect_ratio(video_stream.display_aspect_ratio, rotation)
   }
 
+  console.log('probe data', { aspect_ratio, width, height })
+
   if (['mjpeg', 'jpeg', 'jpg', 'png'].includes(video_stream.codec_name)) {
     const duration = NaN
     const framerate = 60

@@ -130,7 +130,6 @@ abstract class ClipBuilderBase {
 
   public crop(crop: ComputedGeometry['crop']) {
     if (crop === undefined) return this
-    console.log('crop', crop)
     // TODO support zoompan
     const crop_x = crop.x
     const crop_y = crop.y
@@ -208,7 +207,6 @@ async function render(context: Context, ffmpeg_builder: FfmpegBuilderBase) {
 
 
   const ffmpeg_cmd = ffmpeg_builder.build()
-  console.log(ffmpeg_cmd)
   if (context.ffmpeg_log_cmd) ffmpeg_builder.write_ffmpeg_cmd(output.ffmpeg_cmd)
 
   context.logger.info(`Rendering ${total_duration}s long output`)
