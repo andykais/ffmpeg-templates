@@ -8,8 +8,6 @@ import type { ClipInfoMap } from './probe.ts'
 interface ComputedGeometry {
   x: number | string
   y: number | string
-  width: number
-  height: number
   scale: { width: number; height: number }
   rotate?: { degrees: number; width: number; height: number }
   crop?: {
@@ -156,7 +154,7 @@ function compute_geometry(
         y = background_height / 2 - height / 2 + y
         break
     }
-    clip_geometry_map.set(clip.id, { x, y, width, height, scale, rotate, crop })
+    clip_geometry_map.set(clip.id, { x, y, scale, rotate, crop })
   }
   return clip_geometry_map
 }

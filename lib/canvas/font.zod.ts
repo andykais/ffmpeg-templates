@@ -3,6 +3,7 @@ import CanvasKit, { createCanvas } from "https://deno.land/x/canvas@v1.3.0/mod.t
 import type { Paragraph } from "https://deno.land/x/canvas@v1.3.0/mod.ts"
 import * as culori from 'https://deno.land/x/culori@v2.0.3/index.js'
 import { parse_unit } from '../parsers/unit.ts'
+import { compute_size } from '../geometry.zod.ts'
 import type { Context } from '../context.ts'
 import type { TextClipParsed, MediaClipParsed } from '../parsers/template.zod.ts'
 import { ContextExtended } from './round-rect.ts'
@@ -20,29 +21,26 @@ function get_metrics(paragraph: Paragraph) {
 
 async function create_text_image(
   context: Context,
-  size: {background_width: number, background_height: number},
   text_clip: TextClipParsed
 ): Promise<MediaClipParsed> {
-  console.log('creating text image')
   const text_assets_folder = path.join(context.output_folder, 'text_assets')
   await Deno.mkdir(text_assets_folder, { recursive: true })
   // TODO figure these out in terms of relativity
-  const x = 0
-  const y = 0
-  const implicit_width = text_clip.layout.relative_to === text_clip.id && parse_unit(text_clip.layout.width, { pixels: () => false, percentage: () => true })
-  const implicit_height = text_clip.layout.relative_to === text_clip.id && parse_unit(text_clip.layout.height, { pixels: () => false, percentage: () => true })
+  // const x = 0
+  // const y = 0
+  // const implicit_width = text_clip.layout.relative_to === text_clip.id && parse_unit(text_clip.layout.width, { pixels: () => false, percentage: () => true })
+  // const implicit_height = text_clip.layout.relative_to === text_clip.id && parse_unit(text_clip.layout.height, { pixels: () => false, percentage: () => true })
 
   const { font } = text_clip
   const { background_color, border_radius, padding } = font
   const padding_horizontal = padding.left + padding.right
   const padding_vertical = padding.top + padding.bottom
 
-  const max_width = parse_unit(text_clip.layout.width, { percentage: (p) => p * size.background_width })
-  const max_height = parse_unit(text_clip.layout.height, { percentage: (p) => p * size.background_height })
+  const {width: max_width, height: max_height} = compute_size(context, text_clip.layout)
+  // const max_width = parse_unit(text_clip.layout.width ?? '100%', { percentage: (p) => p * size.background_width })
+  // const max_height = parse_unit(text_clip.layout.height, { percentage: (p) => p * size.background_height })
   const text_clip_input = context.template_input.captions?.find((c, i)=> c.id ?? `TEXT_${i}` === text_clip.id)
   if (text_clip_input === undefined) throw new Error(`unexpected code path. Input clip ${text_clip.id} does not exist`)
-  const explicitly_set_width = text_clip_input.layout?.width !== undefined
-  const explicitly_set_height = text_clip_input?.layout?.height !== undefined
   // TODO canvas width/height should be smarter.
   // [X] width & height should be determined by the actual text size.
   // [X] max_width & max_height should come from layout
@@ -87,11 +85,11 @@ async function create_text_image(
   // for posterity, heres how we used to grab it:
   /* const width = (explicitly_set_width ? max_width : metrics.width) + padding_horizontal */
   const width = max_width
+  const explicitly_set_height = text_clip_input?.layout?.height !== undefined
   const height = (explicitly_set_height ? max_height : metrics.height) + padding_vertical
   const canvas = createCanvas(Math.floor(width), Math.floor(height * 2))
   const ctx = canvas.getContext('2d')
   const ctx_extended = new ContextExtended(ctx)
-  console.log('created canvas')
 
   // To implement a _proper_ border background, we need to reimplement rounded-rect to build one giant single path around the border of all the lines of text.
   // This path will make all the rounding decisions per each corner.
@@ -135,7 +133,6 @@ async function create_text_image(
     ctx.fill()
   }
   ;(ctx.canvas as any).drawParagraph(metrics.paragraph, padding.left, padding.top)
-  console.log('drew paragraph')
 
   // Welp. This works, but strokeText has different letter spacing than the paragrpah api.
   // What that means is in reality, it looks like shit for most fonts.
@@ -179,18 +176,19 @@ async function create_text_image(
 
   const text_image_asset = path.resolve(text_assets_folder, text_clip.id + '.png')
   await Deno.writeFile(text_image_asset, canvas.toBuffer())
-  console.log('wrote buffer to file')
 
   paragraph.delete()
   font_mgr.delete()
-  console.log('deleted stuff')
 
   return {
     type: 'media',
     // TODO, internally prefix media clips w/ "clip:" to ensure there are no overwrites with the id here
     id: text_clip.id,
     file: text_image_asset,
-    layout: text_clip.layout,
+    layout: {
+      ...text_clip.layout,
+      relative_to: text_clip.id,
+    },
     volume: '100%',
     speed: '100%',
   }

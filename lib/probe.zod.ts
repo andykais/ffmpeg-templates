@@ -96,7 +96,6 @@ class ClipInfoMap extends AbstractClipMap<ClipInfo> {
     this.in_flight_info_map[file] = probe(this.context, clip, stats)
     const clip_info = await this.in_flight_info_map[file]
     this.set(id, clip_info)
-    console.log(id, clip_info)
     this.clip_info_cache_map[file] = clip_info
     delete this.in_flight_info_map[file]
     await Deno.writeTextFile(this.probe_info_filepath, JSON.stringify(this.clip_info_cache_map))

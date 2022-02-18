@@ -6,7 +6,7 @@ import {exactly} from 'http://esm.sh/@detachhead/ts-helpers@9.0.0-9b4a478c3a63af
 import type { ContextOptions } from '../context.ts'
 
 
-const ClipId = z.string().regex(/[a-zA-Z0-9-_]/)
+const ClipId = z.string().regex(/[a-zA-Z0-9-_]/).refine(v => v !== 'BACKGROUND', { message: '"BACKGROUND" is a reserved id.'})
 
 const Pixels = z.string().regex(/\d+px/)
 
@@ -19,8 +19,8 @@ const Color = z.string()
 const Timestamp = z.string() // I think we will delay parsing this till after we probe files because we need access to full file durations to resolve variables
 
 const Size = z.object({
-  width: z.union([Pixels, Percentage]).default('100%'),
-  height: z.union([Pixels, Percentage]).default('100%'),
+  width: z.union([Pixels, Percentage]).optional(),
+  height: z.union([Pixels, Percentage]).optional(),
   relative_to: ClipId.optional(),
 }).strict()
 
@@ -31,10 +31,15 @@ const Layout = Size.extend({
   y: z.union([AlignY, z.object({ offset: z.union([Pixels, Percentage]).default('0px'), align: AlignY.default('top') })]).default('top').transform(val => typeof val === 'object' ?  val : { offset: '0px', align: val }),
 }).strict()
 
+const ClipLayout = Layout.transform(val => ({
+  relative_to: 'BACKGROUND',
+  ...val,
+}))
+
 const ClipBase = z.object({
   id: ClipId.optional(),
-  layout: Layout.default({}),
-  crop: Layout.optional(),
+  layout: ClipLayout.default({}),
+  crop: ClipLayout.optional(),
   zoompan: z.object({
     keyframe: Timestamp,
     zoom: Percentage.optional(),
@@ -62,6 +67,11 @@ const MediaClip = ClipBase.extend({
   file: z.string(),
   volume: Percentage.default('100%'),
 }).strict().transform(val => ({ ...val, type: 'media' as const }))
+  // .transform(val => ({
+  //   ...val,
+  //   layout: { relative_to: 'BACKGROUND', ...val.layout },
+  //   crop: val.crop ? { relative_to: 'BACKGROUND', ...val.crop } : undefined,
+  // }))
 
 const CssNumber = z.union([
   z.number(),
@@ -94,6 +104,11 @@ const TextClip = ClipBase.extend({
 
   duration: Timestamp.optional(),
 }).strict().transform(val => ({ ...val, type: 'text' as const }))
+  // .transform(val => ({
+  //   ...val,
+  //   layout: { relative_to: 'BACKGROUND', ...val.layout },
+  //   crop: val.crop ? { relative_to: 'BACKGROUND', ...val.crop } : undefined,
+  // }))
 
 const TimelineClip: z.ZodSchema<t.TimelineClip> = z.lazy(() => z.object({
   id: ClipId.optional(),
@@ -108,12 +123,11 @@ const Template = z.object({
   clips: MediaClip
     .array()
     .min(1)
-    .transform(clips => clips.map((val, i) => ({ id: `CLIP_${i}`, ...val })).map(val => ({ ...val, layout: { relative_to: val.id, ...val.layout }})))
-
+    .transform(clips => clips.map((val, i) => ({ id: `CLIP_${i}`, ...val })))
     .refine(clips => new Set(clips.map(c => c.id)).size === clips.length, { message: 'No duplicate clip ids allowed.' }),
   captions: TextClip
     .array()
-    .transform(clips => clips.map((val, i) => ({ id: `TEXT_${i}`, ...val })).map(val => ({ ...val, layout: { relative_to: val.id, ...val.layout }})))
+    .transform(clips => clips.map((val, i) => ({ id: `TEXT_${i}`, ...val })))
     .default([]),
   timeline: TimelineClip.array().min(1).optional(),
   preview: Timestamp.optional(),
@@ -154,3 +168,5 @@ export { parse_template }
 export type TemplateParsed = z.infer<typeof Template>
 export type MediaClipParsed = TemplateParsed['clips'][0]
 export type TextClipParsed = TemplateParsed['captions'][0]
+export type SizeParsed = TemplateParsed['size']
+export type LayoutParsed = TemplateParsed['clips'][0]['layout']

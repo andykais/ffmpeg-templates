@@ -28,6 +28,7 @@ class Context {
   public cwd: string
   public ffmpeg_log_cmd: boolean
   public ffmpeg_verbosity = 'error'
+  public background_size: { width: number; height: number; aspect_ratio: number; rotation: number } | undefined
   private execution_start_time: number
 
   constructor(public template_input: inputs.Template, public template: TemplateParsed, options: ContextOptions) {
@@ -44,6 +45,27 @@ class Context {
       preview: path.join(this.output_folder, 'preview.jpg'),
       video: path.join(this.output_folder, 'output.mp4'),
     }
+  }
+
+  public get_clip_dimensions(clip_id: string) {
+    if (clip_id === 'BACKGROUND') return this.get_background_size()
+    else {
+      const info = this.clip_info_map.get_or_throw(clip_id)
+      const clip = this.get_clip(clip_id)
+      return {...info, rotation: clip.rotate}
+    }
+  }
+
+  public set_background_size(size: { width: number; height: number }) {
+    this.background_size = {
+      ...size,
+      aspect_ratio: size.width / size.height,
+      rotation: 0,
+    }
+  }
+  public get_background_size() {
+    if (this.background_size) return this.background_size
+    else throw new Error('invalid use of background size. background_size is unset.')
   }
 
   public execution_time() {

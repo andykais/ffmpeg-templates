@@ -1,10 +1,12 @@
 import * as path from 'https://deno.land/std@0.91.0/path/mod.ts'
 import { parse_template } from './parsers/template.zod.ts'
+import { parse_percentage } from './parsers/unit.ts'
 import { Context } from './context.ts'
-import { compute_geometry, compute_background_size, compute_rotated_size } from './geometry.zod.ts'
+import { compute_geometry, compute_size, compute_rotated_size } from './geometry.zod.ts'
 import { create_text_image } from './canvas/font.zod.ts'
 import { relative_path } from './util.ts'
 import type * as inputs from './template_input.zod.ts'
+import type { ComputedGeometry } from './geometry.zod.ts'
 import type { ContextOptions } from './context.ts'
 import { ffmpeg } from './bindings/ffmpeg.zod.ts'
 import type { OnProgress, FfmpegProgress } from './bindings/ffmpeg.ts'
@@ -20,6 +22,7 @@ abstract class FfmpegBuilderBase {
 
   public abstract get_output_file(): string
   protected abstract get_vframe_flags(): string[]
+  public abstract clip_builder(clip: inputs.MediaClip): ClipBuilderBase
 
   public constructor(protected context: Context) {
     this.verbosity_flag = this.context.ffmpeg_log_cmd ? 'info' : 'error'
@@ -32,21 +35,15 @@ abstract class FfmpegBuilderBase {
     this.last_link = link
   }
 
-  public clip(clip: inputs.MediaClip, video_input_filters: string[]) {
-    const overlay_filter = `overlay=x=${0}:y=${0}:eof_action=pass`
-    this.ffmpeg_inputs.push(clip.file)
-    const current_link = `[v_out_${clip.id}]`
-    this.complex_filter_inputs.push(`[${this.input_index}:v] ${video_input_filters.join(', ')} [v_in_${clip.id}]`)
-    this.complex_filter_overlays.push(`${this.last_link}[v_in_${clip.id}] ${overlay_filter} ${current_link}`)
+  public clip(clip_builder: ClipBuilderBase) {
+    const data = clip_builder.build()
+    this.ffmpeg_inputs.push(data.file)
+    const current_link = `[v_out_${data.id}]`
+    this.complex_filter_inputs.push(`[${this.input_index}:v] ${data.video_input_filters.join(', ')} [v_in_${data.id}]`)
+    this.complex_filter_overlays.push(`${this.last_link}[v_in_${data.id}] ${data.overlay_filter} ${current_link}`)
     this.last_link = current_link
     this.input_index++
   }
-
-  // protected insert_input(filter_input: string, link: string) {
-  //   this.complex_filter_inputs.push(`${filter_input}[${link}]`)
-  //   this.last_link = link
-  // }
-
   build() {
     if (this.last_link === undefined) throw new Error('at least one filter must be specified')
     const complex_filter = [...this.complex_filter_inputs, ...this.complex_filter_overlays]
@@ -79,6 +76,8 @@ abstract class FfmpegBuilderBase {
 
 class FfmpegVideoBuilder extends FfmpegBuilderBase {
   protected get_vframe_flags() { return [] }
+  public clip_builder(clip: inputs.MediaClip) { return new ClipVideoBuilder(clip) }
+
   public get_output_file() {
     return path.join(this.context.output_folder, 'output.mp4')
   }
@@ -86,8 +85,85 @@ class FfmpegVideoBuilder extends FfmpegBuilderBase {
 
 class FfmpegSampleBuilder extends FfmpegBuilderBase {
   protected get_vframe_flags() { return ['-vframes', '1'] }
+  public clip_builder(clip: inputs.MediaClip) { return new ClipSampleBuilder(clip) }
+
   public get_output_file() {
     return path.join(this.context.output_folder, 'preview.jpg')
+  }
+}
+
+abstract class ClipBuilderBase {
+  protected pts_speed = ''
+  protected start_at = 0
+  private x = 0
+  private y = 0
+  private video_input_filters: string[] = []
+
+  protected abstract setpts_filter(): string
+
+  public constructor(private clip: inputs.MediaClip) {}
+
+  public speed(percentage: string) {
+    this.pts_speed = `${1 / parse_percentage(percentage)}*`
+    return this
+  }
+  public start_time(start_at_seconds: number) {
+    this.start_at = start_at_seconds
+    return this
+  }
+  public coordinates(x: number, y: number) {
+    this.x = x
+    this.y = y
+    return this
+  }
+  public scale(scale: { width: number; height: number }) {
+    this.video_input_filters.push(`scale=${scale.width}:${scale.height}`)
+    return this
+  }
+
+  public rotate(rotate: ComputedGeometry['rotate']) {
+    if (rotate === undefined) return this
+    const { degrees, width, height } = rotate
+    this.video_input_filters.push(`rotate=${degrees}*PI/180:fillcolor=black@0:out_w=${width}:out_h=${height}`)
+    return this
+  }
+
+  public crop(crop: ComputedGeometry['crop']) {
+    if (crop === undefined) return this
+    console.log('crop', crop)
+    // TODO support zoompan
+    const crop_x = crop.x
+    const crop_y = crop.y
+    this.video_input_filters.push(
+      `crop=w=${crop.width}:h=${crop.height}:x='${crop_x}':y='${crop_y}':keep_aspect=1`
+    )
+    return this
+  }
+
+  public build()  {
+    const video_input_filters = [
+      this.setpts_filter(),
+      ...this.video_input_filters,
+    ]
+    return {
+      id: this.clip.id,
+      file: this.clip.file,
+      video_input_filters,
+      overlay_filter: `overlay=x=${this.x}:y=${this.y}:eof_action=pass`,
+    }
+  }
+}
+
+class ClipVideoBuilder extends ClipBuilderBase {
+  protected setpts_filter() {
+    if (this.start_at === 0) return `setpts=${this.pts_speed}PTS-STARTPTS`
+    else return `setpts=${this.pts_speed}PTS-STARTPTS+${this.start_at}/TB`
+  }
+}
+
+class ClipSampleBuilder extends ClipBuilderBase {
+  protected setpts_filter() {
+    return `setpts=${this.pts_speed}PTS-STARTPTS`
   }
 }
 
@@ -102,30 +178,38 @@ async function render(context: Context, ffmpeg_builder: FfmpegBuilderBase) {
 
   await Deno.mkdir(context.output_folder, { recursive: true })
   await Promise.all(context.template.clips.map(clip => context.clip_info_map.probe(clip)))
-  const size = compute_background_size(context)
-  const text_promises = context.template.captions.map(caption => create_text_image(context, size, caption))
-  const text_image_clips = await Promise.all(text_promises)
+  const background_size = compute_size(context, context.template.size)
+  context.set_background_size(background_size)
+  const text_image_clips = await Promise.all(context.template.captions.map(caption => create_text_image(context, caption)))
+  for (const text_clip of text_image_clips) context.clip_map.set(text_clip.id, text_clip)
+  await Promise.all(text_image_clips.map(clip => context.clip_info_map.probe(clip)))
+
   const clips = context.template.clips.concat(text_image_clips)
-  const { background_width, background_height } = size
-  const geometry_info_map = compute_geometry(context, background_width, background_height, clips)
+  const geometry_info_map = compute_geometry(context, clips)
   // const {total_duration, timeline} = compute_timeline(context, clips)
   const total_duration = 1
 
   // TODO can we reuse a clip_builder here?
-  ffmpeg_builder.background_cmd(background_width, background_width, total_duration)
+  ffmpeg_builder.background_cmd(background_size.width, background_size.height, total_duration)
 
   for (const clip of clips) {
-    ffmpeg_builder.clip(
-      clip,
-      ['crop=w=100'],
-    )
+    const geometry = geometry_info_map.get_or_throw(clip.id)
+    const clip_builder = ffmpeg_builder.clip_builder(clip)
+    clip_builder
+      .coordinates(geometry.x, geometry.y)
+      .scale(geometry.scale)
+      .speed(clip.speed)
+      .start_time(0)
+      .rotate(geometry.rotate)
+      .crop(geometry.crop)
+
+    ffmpeg_builder.clip(clip_builder)
   }
 
 
   const ffmpeg_cmd = ffmpeg_builder.build()
   console.log(ffmpeg_cmd)
-  // if (context.ffmpeg_log_cmd) write_cmd_to_file(context, ffmpeg_cmd, output.ffmpeg_cmd)
-  if (true) ffmpeg_builder.write_ffmpeg_cmd(output.ffmpeg_cmd)
+  if (context.ffmpeg_log_cmd) ffmpeg_builder.write_ffmpeg_cmd(output.ffmpeg_cmd)
 
   context.logger.info(`Rendering ${total_duration}s long output`)
   await ffmpeg(context, ffmpeg_cmd, total_duration)
