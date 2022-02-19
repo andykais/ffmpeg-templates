@@ -1,12 +1,16 @@
 import * as path from 'https://deno.land/std@0.91.0/path/mod.ts'
 import { parse_template } from './parsers/template.zod.ts'
 import { parse_percentage } from './parsers/unit.ts'
+import { parse_duration } from './parsers/duration.zod.ts'
 import { Context } from './context.ts'
 import { compute_geometry, compute_size, compute_rotated_size } from './geometry.zod.ts'
+import { compute_timeline } from './timeline.zod.ts'
 import { create_text_image } from './canvas/font.zod.ts'
 import { relative_path } from './util.ts'
 import type * as inputs from './template_input.zod.ts'
+import type { TimelineClip } from './timeline.zod.ts'
 import type { ComputedGeometry } from './geometry.zod.ts'
+import type { ClipInfo } from './probe.zod.ts'
 import type { ContextOptions } from './context.ts'
 import { ffmpeg } from './bindings/ffmpeg.zod.ts'
 import type { OnProgress, FfmpegProgress } from './bindings/ffmpeg.ts'
@@ -22,7 +26,7 @@ abstract class FfmpegBuilderBase {
 
   public abstract get_output_file(): string
   protected abstract get_vframe_flags(): string[]
-  public abstract clip_builder(clip: inputs.MediaClip): ClipBuilderBase
+  public abstract clip_builder(clip: inputs.MediaClip, info: ClipInfo): ClipBuilderBase
 
   public constructor(protected context: Context) {
     this.verbosity_flag = this.context.ffmpeg_log_cmd ? 'info' : 'error'
@@ -37,7 +41,11 @@ abstract class FfmpegBuilderBase {
 
   public clip(clip_builder: ClipBuilderBase) {
     const data = clip_builder.build()
-    this.ffmpeg_inputs.push(data.file)
+    this.ffmpeg_inputs.push(
+      '-ss', data.trim_start.toString(),
+      '-t', data.duration.toString(),
+      '-i', data.file,
+    )
     const current_link = `[v_out_${data.id}]`
     this.complex_filter_inputs.push(`[${this.input_index}:v] ${data.video_input_filters.join(', ')} [v_in_${data.id}]`)
     this.complex_filter_overlays.push(`${this.last_link}[v_in_${data.id}] ${data.overlay_filter} ${current_link}`)
@@ -50,14 +58,10 @@ abstract class FfmpegBuilderBase {
     return [
       'ffmpeg',
       '-v', this.verbosity_flag,
-      // '-ss', '0','-t','0',
-      // '-i', this.ffmpeg_inputs[0],
-      ...this.ffmpeg_inputs.map(file => ['-i', file]).flat(),
+      ...this.ffmpeg_inputs,
       ...this.get_vframe_flags(),
       '-filter_complex', complex_filter.join(';\n'),
       '-map', this.last_link,
-      // '-filter_complex', '[0]',
-      // '-map', '[v_out]',
       this.get_output_file(),
       '-y'
     ]
@@ -76,7 +80,7 @@ abstract class FfmpegBuilderBase {
 
 class FfmpegVideoBuilder extends FfmpegBuilderBase {
   protected get_vframe_flags() { return [] }
-  public clip_builder(clip: inputs.MediaClip) { return new ClipVideoBuilder(clip) }
+  public clip_builder(clip: inputs.MediaClip, info: ClipInfo) { return new ClipVideoBuilder(clip, info) }
 
   public get_output_file() {
     return path.join(this.context.output_folder, 'output.mp4')
@@ -85,7 +89,20 @@ class FfmpegVideoBuilder extends FfmpegBuilderBase {
 
 class FfmpegSampleBuilder extends FfmpegBuilderBase {
   protected get_vframe_flags() { return ['-vframes', '1'] }
-  public clip_builder(clip: inputs.MediaClip) { return new ClipSampleBuilder(clip) }
+  protected sample_frame: number
+
+  public constructor(context: Context) {
+    super(context)
+    this.sample_frame = parse_duration(context.template.preview)
+  }
+  public clip_builder(clip: inputs.MediaClip, info: ClipInfo) { return new ClipSampleBuilder(clip, info, this.sample_frame) }
+
+  public clip(clip_builder: ClipBuilderBase) {
+    const data = clip_builder.build()
+    // ignore clips that start after the preview frame
+    if (data.start_at > this.sample_frame) return
+    return super.clip(clip_builder)
+  }
 
   public get_output_file() {
     return path.join(this.context.output_folder, 'preview.jpg')
@@ -93,24 +110,28 @@ class FfmpegSampleBuilder extends FfmpegBuilderBase {
 }
 
 abstract class ClipBuilderBase {
-  protected pts_speed = ''
+  protected pts_speed = '1*'
+  protected setpts_filter = ''
   protected start_at = 0
+  protected clip_trim_start = 0
+  protected clip_duration = NaN
   private x = 0
   private y = 0
   private video_input_filters: string[] = []
 
-  protected abstract setpts_filter(): string
+  public constructor(private clip: inputs.MediaClip, protected info: ClipInfo) {}
 
-  public constructor(private clip: inputs.MediaClip) {}
+  public timing(timeline_data: TimelineClip) {
+    this.start_at = timeline_data.start_at
+    this.clip_trim_start = timeline_data.trim_start
+    this.clip_duration = timeline_data.duration
+    this.pts_speed = `${1 / timeline_data.speed}*`
 
-  public speed(percentage: string) {
-    this.pts_speed = `${1 / parse_percentage(percentage)}*`
+    if (this.start_at === 0) this.setpts_filter = `setpts=${this.pts_speed}PTS-STARTPTS`
+    else this.setpts_filter = `setpts=${this.pts_speed}PTS-STARTPTS+${this.start_at}/TB`
     return this
   }
-  public start_time(start_at_seconds: number) {
-    this.start_at = start_at_seconds
-    return this
-  }
+
   public coordinates(x: number, y: number) {
     this.x = x
     this.y = y
@@ -141,28 +162,35 @@ abstract class ClipBuilderBase {
 
   public build()  {
     const video_input_filters = [
-      this.setpts_filter(),
+      this.setpts_filter,
       ...this.video_input_filters,
     ]
     return {
       id: this.clip.id,
       file: this.clip.file,
+      start_at: this.start_at,
+      trim_start: this.clip_trim_start,
+      duration: this.clip_duration,
       video_input_filters,
       overlay_filter: `overlay=x=${this.x}:y=${this.y}:eof_action=pass`,
+      probe_info: this.info,
     }
   }
 }
 
-class ClipVideoBuilder extends ClipBuilderBase {
-  protected setpts_filter() {
-    if (this.start_at === 0) return `setpts=${this.pts_speed}PTS-STARTPTS`
-    else return `setpts=${this.pts_speed}PTS-STARTPTS+${this.start_at}/TB`
-  }
-}
+class ClipVideoBuilder extends ClipBuilderBase {}
 
 class ClipSampleBuilder extends ClipBuilderBase {
-  protected setpts_filter() {
-    return `setpts=${this.pts_speed}PTS-STARTPTS`
+  public constructor(clip: inputs.MediaClip, info: ClipInfo, public sample_frame: number) {
+    super(clip, info)
+  }
+
+  public timing(timeline_data: TimelineClip) {
+    return super.timing({
+      ...timeline_data,
+      trim_start: timeline_data.trim_start + timeline_data.start_at,
+      start_at: 0,
+    })
   }
 }
 
@@ -185,20 +213,21 @@ async function render(context: Context, ffmpeg_builder: FfmpegBuilderBase) {
 
   const clips = context.template.clips.concat(text_image_clips)
   const geometry_info_map = compute_geometry(context, clips)
-  // const {total_duration, timeline} = compute_timeline(context, clips)
-  const total_duration = 1
+  const {total_duration, timeline} = compute_timeline(context)
 
   // TODO can we reuse a clip_builder here?
   ffmpeg_builder.background_cmd(background_size.width, background_size.height, total_duration)
 
-  for (const clip of clips) {
+  for (const timeline_clip of timeline) {
+    const clip = context.get_clip(timeline_clip.clip_id)
+    const info = context.clip_info_map.get_or_throw(timeline_clip.clip_id)
     const geometry = geometry_info_map.get_or_throw(clip.id)
-    const clip_builder = ffmpeg_builder.clip_builder(clip)
+
+    const clip_builder = ffmpeg_builder.clip_builder(clip, info)
     clip_builder
       .coordinates(geometry.x, geometry.y)
       .scale(geometry.scale)
-      .speed(clip.speed)
-      .start_time(0)
+      .timing(timeline_clip)
       .rotate(geometry.rotate)
       .crop(geometry.crop)
 
@@ -207,6 +236,7 @@ async function render(context: Context, ffmpeg_builder: FfmpegBuilderBase) {
 
 
   const ffmpeg_cmd = ffmpeg_builder.build()
+  console.log(ffmpeg_cmd)
   if (context.ffmpeg_log_cmd) ffmpeg_builder.write_ffmpeg_cmd(output.ffmpeg_cmd)
 
   context.logger.info(`Rendering ${total_duration}s long output`)
@@ -215,7 +245,8 @@ async function render(context: Context, ffmpeg_builder: FfmpegBuilderBase) {
   return {
     template: context.template,
     stats: {
-      clips_count: 0,
+      input_clips_count: clips.length,
+      timeline_clips_count: timeline.length,
       execution_time: context.execution_time(),
     },
     output,
@@ -228,7 +259,7 @@ async function render_video(template: inputs.Template, options: ContextOptions) 
   const ffmpeg_builder = new FfmpegVideoBuilder(context)
   const result = await render(context, ffmpeg_builder)
   const { stats, output } = result
-  context.logger.info(`created "${relative_path(output.video)}" out of ${stats.clips_count} clips in ${stats.execution_time.toFixed(1)} seconds.`)
+  context.logger.info(`created "${relative_path(output.video)}" out of ${stats.timeline_clips_count} clips in ${stats.execution_time.toFixed(1)} seconds.`)
 
   return result
 }
@@ -239,10 +270,10 @@ async function render_sample_frame(template: inputs.Template, options: ContextOp
   const ffmpeg_builder = new FfmpegSampleBuilder(context)
   const result = await render(context, ffmpeg_builder)
   const { stats, output } = result
-  context.logger.info(`created "${relative_path(output.preview)}" at ${template_parsed.preview} out of ${stats.clips_count} clips in ${stats.execution_time.toFixed(1)} seconds.`)
+  context.logger.info(`created "${relative_path(output.preview)}" at ${template_parsed.preview} out of ${stats.timeline_clips_count} clips in ${stats.execution_time.toFixed(1)} seconds.`)
   // // DEBUG_START
   // await Deno.run({cmd: ['./imgcat.sh', 'ffmpeg-templates-projects/template.zod/text_assets/TEXT_0.png'], })
-  // await Deno.run({cmd: ['./imgcat.sh', 'ffmpeg-templates-projects/template.zod/preview.jpg'], })
+  await Deno.run({cmd: ['./imgcat.sh', 'ffmpeg-templates-projects/template.zod/preview.jpg'], })
   // // DEBUG_END
 
   return result

@@ -181,3 +181,4 @@ async function probe(context: Context, clip: MediaClipParsed, stats: Deno.FileIn
 }
 
 export { ClipInfoMap }
+export type { ClipInfo }

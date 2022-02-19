@@ -56,10 +56,14 @@ const ClipBase = z.object({
     fade_in: Timestamp.optional(),
     fade_out: Timestamp.optional(),
   }).strict().optional(),
+  keypoints: z.object({
+    name: z.string(),
+    timestamp: Timestamp,
+  }).strict().array().default([]),
   trim: z.object({
     start: Timestamp.optional(),
     stop: Timestamp.optional(),
-    variable_length: z.union([z.literal('start'), z.literal('stop')]),
+    variable_length: z.union([z.literal('start'), z.literal('stop')]).optional(),
   }).strict().optional(),
 }).strict()
 
@@ -67,11 +71,6 @@ const MediaClip = ClipBase.extend({
   file: z.string(),
   volume: Percentage.default('100%'),
 }).strict().transform(val => ({ ...val, type: 'media' as const }))
-  // .transform(val => ({
-  //   ...val,
-  //   layout: { relative_to: 'BACKGROUND', ...val.layout },
-  //   crop: val.crop ? { relative_to: 'BACKGROUND', ...val.crop } : undefined,
-  // }))
 
 const CssNumber = z.union([
   z.number(),
@@ -104,17 +103,18 @@ const TextClip = ClipBase.extend({
 
   duration: Timestamp.optional(),
 }).strict().transform(val => ({ ...val, type: 'text' as const }))
-  // .transform(val => ({
-  //   ...val,
-  //   layout: { relative_to: 'BACKGROUND', ...val.layout },
-  //   crop: val.crop ? { relative_to: 'BACKGROUND', ...val.crop } : undefined,
-  // }))
 
-const TimelineClip: z.ZodSchema<t.TimelineClip> = z.lazy(() => z.object({
-  id: ClipId.optional(),
+interface TimelineClipParsed extends Required<Omit<t.TimelineClip, 'next' | 'id'>> {
+  id?: t.ClipID
+  next: TimelineClipParsed[]
+}
+// note that we dont appear to have type assertion for lazy types.
+// we just have to be certain these types match!
+const TimelineClip: z.ZodSchema<TimelineClipParsed, z.ZodTypeDef, t.TimelineClip> = z.lazy(() => z.object({
+  id: ClipId,
   offset: Timestamp.default('0'),
   z_index: z.number().default(0),
-  type: z.union([z.literal('parallel'), z.literal('sequence')]).default('parallel'),
+  next_order: z.union([z.literal('parallel'), z.literal('sequence')]).default('parallel'),
   next: TimelineClip.array().default([]),
 }))
 
@@ -130,7 +130,7 @@ const Template = z.object({
     .transform(clips => clips.map((val, i) => ({ id: `TEXT_${i}`, ...val })))
     .default([]),
   timeline: TimelineClip.array().min(1).optional(),
-  preview: Timestamp.optional(),
+  preview: Timestamp.default('0'),
 }).transform(val => ({
   timeline: val.clips.map(c => TimelineClip.parse({ id: c.id })),
   ...val,
@@ -170,3 +170,4 @@ export type MediaClipParsed = TemplateParsed['clips'][0]
 export type TextClipParsed = TemplateParsed['captions'][0]
 export type SizeParsed = TemplateParsed['size']
 export type LayoutParsed = TemplateParsed['clips'][0]['layout']
+export type TimelineParsed = TemplateParsed['timeline']

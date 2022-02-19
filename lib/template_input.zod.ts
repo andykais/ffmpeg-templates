@@ -106,6 +106,18 @@ export interface ClipBase {
   /** Effect to transition a clip in or out of the page */
   transition?: { fade_in?: Timestamp; fade_out?: Timestamp }
 
+  /**
+    * Keypoints are important points in a clip. They are used specifically to offset multiple clips
+    * in the timeline so their keypoints happen at the same moment.
+    */
+  keypoints?: {
+    /** Identifying name of a keypoint. Share names between clips that you want to align. */
+    name: string
+
+    /** Point in time from the input clip. Timestamp should ignore trim.start */
+    timestamp: Timestamp
+  }[]
+
   /** Trim the duration of a clip */
   trim?: {
 
@@ -123,7 +135,7 @@ export interface ClipBase {
      *  If more than one variable_length clip is used in a sequence on the timeline, only the last clip will have variable length.
      *  If all clips on the timeline have variable length, all clips will share the shortest clip's duration.
      */
-    variable_length: 'start' | 'stop'
+    variable_length?: 'start' | 'stop'
   }
 }
 
@@ -202,20 +214,20 @@ export interface TimelineClip {
 
   /**
    * offset the clip start position by a specified duration. (Maybe we support negative durations too?)
-   * default is "0"
+   * @default "0"
    */
   offset?: Timestamp
 
   /**
    * specify the vertical height of a clip. Think foreground and background
-   * default is 0
+   * @default 0
    */
   z_index?: number
 
   /** specify whether the next clips will be played one after another or all at the same time
    * @default 'sequence'
    */
-  type?: 'parallel' | 'sequence'
+  next_order?: 'parallel' | 'sequence'
 
   /** Specify list of clips that should appear after the specified clip */
   next?: TimelineClip[]
