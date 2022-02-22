@@ -1,4 +1,5 @@
 import * as path from 'https://deno.land/std@0.91.0/path/mod.ts'
+import * as errors from './errors.ts'
 import { parse_template } from './parsers/template.zod.ts'
 import { parse_percentage } from './parsers/unit.ts'
 import { parse_duration } from './parsers/duration.zod.ts'
@@ -41,11 +42,27 @@ abstract class FfmpegBuilderBase {
 
   public clip(clip_builder: ClipBuilderBase) {
     const data = clip_builder.build()
-    this.ffmpeg_inputs.push(
-      '-ss', data.trim_start.toString(),
-      '-t', data.duration.toString(),
-      '-i', data.file,
-    )
+    switch(data.probe_info.type) {
+      case 'video':
+        this.ffmpeg_inputs.push(
+          '-ss', data.trim_start.toString(),
+          '-t', data.duration.toString(),
+          '-i', data.file,
+        )
+        break
+      case 'image':
+        this.ffmpeg_inputs.push(
+          '-framerate', data.framerate.toString(),
+          '-loop', '1',
+          '-t', data.duration.toString(),
+          '-i', data.file
+        )
+        break
+      case 'audio':
+        throw new errors.InputError('audio file type unsupported')
+      default:
+        throw new Error(`unknown clip type ${data.probe_info.type}`)
+    }
     const current_link = `[v_out_${data.id}]`
     this.complex_filter_inputs.push(`[${this.input_index}:v] ${data.video_input_filters.join(', ')} [v_in_${data.id}]`)
     this.complex_filter_overlays.push(`${this.last_link}[v_in_${data.id}] ${data.overlay_filter} ${current_link}`)
@@ -119,7 +136,7 @@ abstract class ClipBuilderBase {
   private y = 0
   private video_input_filters: string[] = []
 
-  public constructor(private clip: inputs.MediaClip, protected info: ClipInfo) {}
+  public constructor(protected clip: inputs.MediaClip, protected probe_info: ClipInfo) {}
 
   public timing(timeline_data: TimelineClip) {
     this.start_at = timeline_data.start_at
@@ -170,16 +187,18 @@ abstract class ClipBuilderBase {
       file: this.clip.file,
       start_at: this.start_at,
       trim_start: this.clip_trim_start,
+      framerate: this.clip.framerate ?? this.probe_info.framerate,
       duration: this.clip_duration,
       video_input_filters,
       overlay_filter: `overlay=x=${this.x}:y=${this.y}:eof_action=pass`,
-      probe_info: this.info,
+      probe_info: this.probe_info,
     }
   }
 }
 
+// we _may_ decide to refactor these into ClipVideoBuilder, ClipImageBuilder, ClipAudioBuilder
+// and push the sample vs full output logic into the cmd builders above
 class ClipVideoBuilder extends ClipBuilderBase {}
-
 class ClipSampleBuilder extends ClipBuilderBase {
   public constructor(clip: inputs.MediaClip, info: ClipInfo, public sample_frame: number) {
     super(clip, info)
@@ -236,7 +255,7 @@ async function render(context: Context, ffmpeg_builder: FfmpegBuilderBase) {
 
 
   const ffmpeg_cmd = ffmpeg_builder.build()
-  console.log(ffmpeg_cmd)
+  // console.log(ffmpeg_cmd)
   if (context.ffmpeg_log_cmd) ffmpeg_builder.write_ffmpeg_cmd(output.ffmpeg_cmd)
 
   context.logger.info(`Rendering ${total_duration}s long output`)
@@ -273,7 +292,7 @@ async function render_sample_frame(template: inputs.Template, options: ContextOp
   context.logger.info(`created "${relative_path(output.preview)}" at ${template_parsed.preview} out of ${stats.timeline_clips_count} clips in ${stats.execution_time.toFixed(1)} seconds.`)
   // // DEBUG_START
   // await Deno.run({cmd: ['./imgcat.sh', 'ffmpeg-templates-projects/template.zod/text_assets/TEXT_0.png'], })
-  await Deno.run({cmd: ['./imgcat.sh', 'ffmpeg-templates-projects/template.zod/preview.jpg'], })
+  // await Deno.run({cmd: ['./imgcat.sh', 'ffmpeg-templates-projects/template.zod/preview.jpg'], })
   // // DEBUG_END
 
   return result

@@ -35,7 +35,7 @@ function parse_timeline_clips(
     let clip_start_at = start_at + offset
     let clip_end_at = clip_start_at
 
-    console.log(timeline_clip)
+    // console.log(timeline_clip)
     if (timeline_clip.id !== undefined) {
       const clip = context.get_clip(timeline_clip.id)
       const clip_info = context.clip_info_map.get_or_throw(clip.id)
@@ -43,7 +43,7 @@ function parse_timeline_clips(
       // TODO NaN durations (e.g. images) should default to total duration
       // TODO support text_clip.durations
       if (Number.isNaN(clip_duration)) clip_duration = 1
-      console.log('clip_info duration', clip_info.duration)
+      // console.log('clip_info duration', clip_info.duration)
 
       const trim = clip.trim ?? {}
       let trim_start = 0
@@ -100,7 +100,7 @@ function compute_timeline(context: Context) {
   const { total_duration, timeline } = parse_timeline_clips(context, context.template.timeline, keypoints, 'parallel', 0)
 
   timeline.sort((a, b) => a.z_index - b.z_index)
-  console.log(timeline)
+  // console.log(timeline)
   return { total_duration, timeline }
 }
 

@@ -126,7 +126,13 @@ function compute_geometry(
       // NOTE crop x & y are only  relative themselves. It doesnt make a ton of sense to make these relative to anything else,
       // even though it makes sense to let width/height be relative to other things
       // let crop_size = compute_size(context, clip.crop, clip_info.aspect_ratio)
-      const relative_size = context.get_clip_dimensions(clip.crop.relative_to)
+
+      // NOTE relative size is _correct_ for relative to itself,
+      // but it will be wrong if it is relative to another clip whose scale has changed.
+      // to fix this, geometry will need to keep a stateful dimensions map similar to how timeline variable_length clips work
+      const relative_size = clip.crop.relative_to === clip.id
+        ? {width, height}
+        : context.get_clip_dimensions(clip.crop.relative_to)
 
       const parse_dimension = (relative_side: number, default_side: number, side?: string) => parse_unit(side, {
         percentage: (p) => Math.floor(p * relative_side),
@@ -136,8 +142,9 @@ function compute_geometry(
         width: parse_dimension(relative_size.width, width, clip.crop.width),
         height: parse_dimension(relative_size.height, height, clip.crop.height),
       }
-      if (width < crop_size.width) throw new InputError(`Invalid clip on clip ${clip.id}. Cannot specify a layout width smaller than a crop width`)
-      if (height < crop_size.height) throw new InputError(`Invalid clip on clip ${clip.id}. Cannot specify a layout height smaller than a crop height`)
+      // if (width > crop_size.width) 
+      // if (width < crop_size.width) throw new InputError(`Invalid clip on clip ${clip.id}. Cannot specify a layout width (${width}) smaller than a crop width (${crop_size.width})`)
+      // if (height < crop_size.height) throw new InputError(`Invalid clip on clip ${clip.id}. Cannot specify a layout height (${height}) smaller than a crop height (${crop_size.height})`)
 
       let x = parse_offset(crop_size.width, clip.crop.x.offset)
       let y = parse_offset(crop_size.height, clip.crop.y.offset)
@@ -145,23 +152,25 @@ function compute_geometry(
         case 'left':
           break
         case 'right':
-          x = crop_size.width + x
+          x = width - crop_size.width + x
           // x = relative_to.width - scale.width + x
           break
         case 'center':
-          x = crop_size.width / 2 + x
+          x = width / 2 - crop_size.width / 2 + x
           break
       }
       switch (clip.crop.y.align) {
         case 'top':
           break
         case 'bottom':
-          y = crop_size.height + y
+          y = height - crop_size.height + y
           break
         case 'center':
-          y = crop_size.height / 2 + y
+          y = height / 2 - crop_size.height / 2 + y
           break
       }
+      if ((x + crop_size.width) > width) throw new InputError(`Invalid crop offset. Crop x position (${x}) cannot exceed crop width (${crop_size.width}) - max scale (${width})`)
+      if ((y + crop_size.height) > height) throw new InputError(`Invalid crop offset. Crop x position (${y}) cannot exceed crop height (${crop_size.height}) - max scale (${height})`)
       crop = {
         x,
         y,
@@ -196,6 +205,8 @@ function compute_geometry(
         break
     }
 
+    if (crop && crop.width > width) throw new InputError(`Invalid crop for clip ${clip.id}. Crop width (${crop.width}) cannot exceed layout width (${width})`)
+    if (crop && crop.height > height) throw new InputError(`Invalid crop for clip ${clip.id}. Crop height (${crop.height}) cannot exceed layout height (${height})`)
     const geometry = {
       x,
       y,
