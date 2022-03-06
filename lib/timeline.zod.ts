@@ -19,12 +19,75 @@ interface Keypoints {
   [name: string]: number
 }
 
+interface TimelineTree {
+  start_at: number
+  node?: {
+    duration: number
+    variable_duration: boolean
+  }
+  branches: TimelineTree[]
+}
+
+function build_tree(
+  context: Context,
+  timeline_clip: parsed.TimelineParsed[0],
+  keypoints: Keypoints,
+  start_at: number,
+) {
+  let total_duration = start_at
+  const offset = parse_duration(timeline_clip.offset)
+  let clip_start_at = start_at + offset
+  let clip_end_at = clip_start_at
+
+  const timeline_tree: TimelineTree = {
+    start_at: start_at + parse_duration(timeline_clip.offset),
+    node: undefined,
+    branches: []
+  }
+
+  // skip branches with no nodes
+  if (timeline_clip.id !== undefined) {
+    const clip = context.get_clip(timeline_clip.id)
+    const clip_info = context.clip_info_map.get_or_throw(clip.id)
+
+    const variable_length = clip.trim?.variable_length ?? clip_info.type === 'image' ? 'end' : undefined
+    let clip_duration = clip_info.duration
+
+    const trim = clip.trim ?? {}
+    let trim_start = 0
+    if (trim.start) trim_start += parse_duration(trim.start)
+    clip_duration -= trim_start
+    if (trim.stop) clip_duration -= parse_duration(trim.stop)
+    clip_end_at += clip_duration
+    if (clip_duration < 0) throw new errors.InputError(`Invalid trim on clip ${clip.id}. Clip is not long enough`)
+
+    for (const keypoint of clip.keypoints) {
+      const anchored_keypoint = keypoints[keypoint.name]
+      if (anchored_keypoint !== undefined) {
+        if (anchored_keypoint > clip_start_at) {
+          const inc_start_at = (anchored_keypoint - clip_start_at)
+          clip_duration -= inc_start_at
+          clip_start_at += inc_start_at
+          if (clip_duration < 0) throw new errors.InputError(`Invalid keypoint ${keypoint.name} on clip ${clip.id}. Keypoint at ${anchored_keypoint} exceeds clip length of ${clip_duration}`)
+        } else {
+          throw new errors.InputError(`Invalid keypoint ${keypoint.name} on clip ${clip.id}. Keypoint occurs at ${anchored_keypoint}, clip starts at ${clip_start_at}`)
+        }
+      }
+    }
+  }
+
+  // let start_next_at = timeline_tree.start_at + timeline_tree.;queueMicrotask
+  for (const branch of timeline_clip.next) {
+    const child = build_tree(context, branch, keypoints, start_at)
+  }
+}
+
 function parse_timeline_clips(
   context: Context,
   timeline_clips: parsed.TimelineParsed,
   keypoints: Keypoints,
   order_type: 'parallel' | 'sequence',
-  start_at: number
+  start_at: number,
 ) {
   let timeline: TimelineClip[] = []
   let total_duration = start_at

@@ -136,7 +136,7 @@ async function probe(context: Context, clip: MediaClipParsed, stats: Deno.FileIn
   }
 
   if (['mjpeg', 'jpeg', 'jpg', 'png'].includes(video_stream.codec_name)) {
-    const duration = NaN
+    const duration = Infinity
     const framerate = 60
     return {
       type: 'image' as const,
