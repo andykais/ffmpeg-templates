@@ -55,35 +55,39 @@ class ClipInfoMap extends AbstractClipMap<ClipInfo> {
   // cache keys are filenames, public keys are ids
   private clip_info_cache_map: { [file: string]: ClipInfo } = {}
   private in_flight_info_map: { [file: string]: Promise<ClipInfo> } = {}
-  private initialized = false
   private probe_info_filepath
+  private init_cache: Promise<void> | null
 
   public constructor(private instance: InstanceContext) {
     super()
     this.probe_info_filepath = path.resolve(instance.output_folder, CLIP_INFO_FILENAME)
+    this.init_cache = null
   }
 
-  async init() {
-    try {
-      // we initialize early so we dont accidentally double initialize (especially on startup)
-      this.initialized = true
-      const json_str = await Deno.readTextFile(this.probe_info_filepath)
-      type ClipInfoObject = { [file: string]: ClipInfo }
-      const clip_info_object: ClipInfoObject = JSON.parse(json_str)
-      for (const file of Object.keys(clip_info_object)) {
-        this.clip_info_cache_map[file] = clip_info_object[file]
-        // this.set(file, clip_info_object[file])
-      }
-    } catch (e) {
-      if (e instanceof Deno.errors.NotFound === false) throw e
+  async lazy_init() {
+    if (this.init_cache) {
+      return this.init_cache
+    } else {
+      return (async () => {
+        try {
+          const json_str = await Deno.readTextFile(this.probe_info_filepath)
+          type ClipInfoObject = { [file: string]: ClipInfo }
+          const clip_info_object: ClipInfoObject = JSON.parse(json_str)
+          for (const file of Object.keys(clip_info_object)) {
+            this.clip_info_cache_map[file] = clip_info_object[file]
+          }
+        } catch (e) {
+          if (e instanceof Deno.errors.NotFound === false) throw e
+        }
+      })()
     }
   }
 
   public async probe(clip: MediaClipParsed) {
-    if (!this.initialized) await this.init()
+    await this.lazy_init()
     const { id, file } = clip
     const stats = await Deno.stat(file)
-    // some platforms dont set mtime. We can cross that bridge when we get to it
+    // some platforms dont set mtime (like windows). We can cross that bridge when we get to it
     if (stats.mtime === null) throw new Error('unexpected null mtime. Cannot infer when files have updated.')
     if (this.clip_info_cache_map[file]) {
       const cached_timestamp = this.clip_info_cache_map[file].timestamp

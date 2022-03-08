@@ -63,13 +63,14 @@ function build_tree(
 
     const trim = clip.trim ?? {}
 
+    let trim_stop = 0
+    if (trim.stop) clip_duration = parse_duration(trim.stop)
+    clip_end_at += clip_duration
+
     let trim_start = 0
     if (trim.start) trim_start += parse_duration(trim.start)
     clip_duration -= trim_start
 
-    let trim_stop = 0
-    if (trim.stop) clip_duration -= parse_duration(trim.stop)
-    clip_end_at += clip_duration
     if (clip_duration < 0) throw new errors.InputError(`Invalid trim on clip ${clip.id}. Clip is not long enough`)
 
     if (clip.speed !== '100%') {
@@ -172,7 +173,6 @@ function calculate_timeline_clips(timeline_tree: TimelineTree, total_duration: n
       const min_duration = Math.max(0, ...timeline_tree.branches.map(calculate_min_duration))
       const possible_duration = total_duration - (timeline_tree.start_at + min_duration)
       duration = Math.min(possible_duration, node.duration)
-      // console.log({possible_duration, duration})
     }
 
     timeline_clips.push({
@@ -198,10 +198,10 @@ function compute_timeline(context: Context) {
   const timeline_tree = build_tree(context, initial_tree_node, keypoints, 0)
   // console.log('timeline_tree', timeline_tree)
   const total_duration = calculate_min_duration(timeline_tree)
-  console.log('total_duration', total_duration)
+  // console.log('total_duration', total_duration)
 
   const timeline = calculate_timeline_clips(timeline_tree, total_duration)
-  console.log('timeline', timeline)
+  // console.log('timeline', timeline)
 
   // const { total_duration: old_total_duration, timeline } = parse_timeline_clips(context, context.template.timeline, keypoints, 'parallel', 0)
 

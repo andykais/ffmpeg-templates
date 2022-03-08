@@ -34,8 +34,8 @@ async function ffmpeg(
 ) {
   const ffmpeg_safe_cmd = ffmpeg_cmd.map((a) => a.toString())
   if (context.logger.can_log('info')) {
+    console.log('test me')
     ffmpeg_safe_cmd.push('-progress', 'pipe:1')
-
   }
   // if (context.log_progress) {
   //   ffmpeg_safe_cmd.push('-progress', 'pipe:1')

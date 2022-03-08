@@ -2,7 +2,7 @@ import * as path from 'https://deno.land/std@0.91.0/path/mod.ts'
 import * as errors from './errors.ts'
 import { parse_template } from './parsers/template.zod.ts'
 import { parse_percentage } from './parsers/unit.ts'
-import { parse_duration } from './parsers/duration.zod.ts'
+import { parse_duration, fmt_human_readable_duration } from './parsers/duration.zod.ts'
 import { InstanceContext, Context } from './context.ts'
 import { compute_geometry, compute_size, compute_rotated_size } from './geometry.zod.ts'
 import { compute_timeline } from './timeline.zod.ts'
@@ -234,6 +234,7 @@ async function render(context: Context, ffmpeg_builder: FfmpegBuilderBase) {
   const geometry_info_map = compute_geometry(context, clips)
   const {total_duration, timeline} = compute_timeline(context)
   // console.log('timeline', timeline)
+  // console.log('total_duration', total_duration)
 
   // TODO can we reuse a clip_builder here?
   ffmpeg_builder.background_cmd(background_size.width, background_size.height, total_duration)
@@ -259,7 +260,8 @@ async function render(context: Context, ffmpeg_builder: FfmpegBuilderBase) {
   // console.log(ffmpeg_cmd)
   if (context.ffmpeg_log_cmd) ffmpeg_builder.write_ffmpeg_cmd(output.ffmpeg_cmd)
 
-  context.logger.info(`Rendering ${total_duration}s long output`)
+  const pretty_duration = fmt_human_readable_duration(total_duration)
+  context.logger.info(`Rendering ${pretty_duration} long output`)
   await ffmpeg(context, ffmpeg_cmd, total_duration)
 
   return {
