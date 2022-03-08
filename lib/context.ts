@@ -15,10 +15,9 @@ interface ContextOptions {
 
 class ClipMap extends AbstractClipMap<MediaClipParsed> {}
 
-class Context {
+class InstanceContext {
   public logger: Logger
   public clip_info_map: ClipInfoMap
-  public clip_map: ClipMap
   public output_folder: string
   public output_files: {
     ffmpeg_cmd: string
@@ -28,24 +27,39 @@ class Context {
   public cwd: string
   public ffmpeg_log_cmd: boolean
   public ffmpeg_verbosity = 'error'
-  public background_size: { width: number; height: number; aspect_ratio: number; rotation: number } | undefined
-  private execution_start_time: number
 
-  constructor(public template_input: inputs.Template, public template: TemplateParsed, options: ContextOptions) {
-    this.execution_start_time = performance.now()
-    this.output_folder = options.output_folder
+  public constructor(options: ContextOptions) {
     this.logger = new Logger(options.log_level)
     this.cwd = options.cwd
     this.ffmpeg_log_cmd = options.ffmpeg_log_cmd
+    this.output_folder = options.output_folder
+    this.output_files = {
+      ffmpeg_cmd: path.join(options.output_folder, 'ffmpeg.sh'),
+      preview: path.join(options.output_folder, 'preview.jpg'),
+      video: path.join(options.output_folder, 'output.mp4'),
+    }
+    this.clip_info_map = new ClipInfoMap(this)
+  }
+}
+
+class Context {
+  public clip_map: ClipMap
+  public background_size: { width: number; height: number; aspect_ratio: number; rotation: number } | undefined
+  private execution_start_time: number
+
+  constructor(private instance: InstanceContext, public template_input: inputs.Template, public template: TemplateParsed, options: ContextOptions) {
+    this.execution_start_time = performance.now()
     this.clip_map = new ClipMap()
     for (const clip of template.clips) this.clip_map.set(clip.id, clip)
-    this.clip_info_map = new ClipInfoMap(this)
-    this.output_files = {
-      ffmpeg_cmd: path.join(this.output_folder, 'ffmpeg.sh'),
-      preview: path.join(this.output_folder, 'preview.jpg'),
-      video: path.join(this.output_folder, 'output.mp4'),
-    }
   }
+
+  get logger() { return this.instance.logger }
+  get clip_info_map() { return this.instance.clip_info_map }
+  get output_folder() { return this.instance.output_folder }
+  get output_files() { return this.instance.output_files }
+  get cwd() { return this.instance.cwd }
+  get ffmpeg_log_cmd() { return this.instance.ffmpeg_log_cmd }
+  get ffmpeg_verbosity() { return this.instance.ffmpeg_verbosity }
 
   public get_clip_dimensions(clip_id: string) {
     if (clip_id === 'BACKGROUND') return this.get_background_size()
@@ -78,5 +92,5 @@ class Context {
   }
 }
 
-export { Context }
+export { InstanceContext, Context }
 export type { ContextOptions }

@@ -4,7 +4,7 @@ import { ProbeError, CommandError } from './errors.ts'
 import { AbstractClipMap } from './util.ts'
 import { parse_aspect_ratio, parse_ffmpeg_packet } from './parsers/ffmpeg_output.ts'
 import { compute_rotated_size } from './geometry.ts'
-import type { Context } from './context.ts'
+import type { InstanceContext } from './context.ts'
 import type * as template from './template_input.zod.ts'
 import type { MediaClipParsed } from './parsers/template.zod.ts'
 import type { Seconds } from './parsers/duration.ts'
@@ -58,9 +58,9 @@ class ClipInfoMap extends AbstractClipMap<ClipInfo> {
   private initialized = false
   private probe_info_filepath
 
-  public constructor(private context: Context) {
+  public constructor(private instance: InstanceContext) {
     super()
-    this.probe_info_filepath = path.resolve(context.output_folder, CLIP_INFO_FILENAME)
+    this.probe_info_filepath = path.resolve(instance.output_folder, CLIP_INFO_FILENAME)
   }
 
   async init() {
@@ -93,7 +93,7 @@ class ClipInfoMap extends AbstractClipMap<ClipInfo> {
       }
     }
     if (Object.hasOwn(this.in_flight_info_map, file)) return this.in_flight_info_map[file]
-    this.in_flight_info_map[file] = probe(this.context, clip, stats)
+    this.in_flight_info_map[file] = probe(this.instance, clip, stats)
     const clip_info = await this.in_flight_info_map[file]
     this.set(id, clip_info)
     this.clip_info_cache_map[file] = clip_info
@@ -103,8 +103,8 @@ class ClipInfoMap extends AbstractClipMap<ClipInfo> {
   }
 }
 
-async function probe(context: Context, clip: MediaClipParsed, stats: Deno.FileInfo): Promise<ClipInfo> {
-  context.logger.info(`Probing asset ${path.relative(Deno.cwd(), clip.file)}`)
+async function probe(instance: InstanceContext, clip: MediaClipParsed, stats: Deno.FileInfo): Promise<ClipInfo> {
+  instance.logger.info(`Probing asset ${path.relative(Deno.cwd(), clip.file)}`)
   const { id, file } = clip
   const timestamp = stats.mtime!.toString()
 
@@ -126,7 +126,8 @@ async function probe(context: Context, clip: MediaClipParsed, stats: Deno.FileIn
 
   if (!video_stream) throw new ProbeError(`Input "${file}" has no video stream`)
   const has_audio = audio_stream !== undefined
-  let rotation = video_stream.tags?.rotate ? (parseInt(video_stream.tags?.rotate) * Math.PI) / 180.0 : 0
+  let rotation = video_stream.tags?.rotate ? parseInt(video_stream.tags?.rotate) : 0
+  // let rotation = video_stream.tags?.rotate ? (parseInt(video_stream.tags?.rotate) * Math.PI) / 180.0 : 0
   let { width, height } = video_stream
   ;({ width, height } = compute_rotated_size({ width, height }, rotation))
 

@@ -3,7 +3,7 @@ import * as errors from './errors.ts'
 import { parse_template } from './parsers/template.zod.ts'
 import { parse_percentage } from './parsers/unit.ts'
 import { parse_duration } from './parsers/duration.zod.ts'
-import { Context } from './context.ts'
+import { InstanceContext, Context } from './context.ts'
 import { compute_geometry, compute_size, compute_rotated_size } from './geometry.zod.ts'
 import { compute_timeline } from './timeline.zod.ts'
 import { create_text_image } from './canvas/font.zod.ts'
@@ -207,8 +207,8 @@ class ClipSampleBuilder extends ClipBuilderBase {
   public timing(timeline_data: TimelineClip) {
     return super.timing({
       ...timeline_data,
-      trim_start: timeline_data.trim_start + timeline_data.start_at,
-      start_at: 0,
+      trim_start: timeline_data.trim_start,
+      start_at: timeline_data.start_at,
     })
   }
 }
@@ -233,6 +233,7 @@ async function render(context: Context, ffmpeg_builder: FfmpegBuilderBase) {
   const clips = context.template.clips.concat(text_image_clips)
   const geometry_info_map = compute_geometry(context, clips)
   const {total_duration, timeline} = compute_timeline(context)
+  // console.log('timeline', timeline)
 
   // TODO can we reuse a clip_builder here?
   ffmpeg_builder.background_cmd(background_size.width, background_size.height, total_duration)
@@ -272,9 +273,9 @@ async function render(context: Context, ffmpeg_builder: FfmpegBuilderBase) {
   }
 }
 
-async function render_video(template: inputs.Template, options: ContextOptions) {
+async function render_video(instance: InstanceContext, template: inputs.Template, options: ContextOptions) {
   const template_parsed = parse_template(template, options)
-  const context = new Context(template, template_parsed, options)
+  const context = new Context(instance, template, template_parsed, options)
   const ffmpeg_builder = new FfmpegVideoBuilder(context)
   const result = await render(context, ffmpeg_builder)
   const { stats, output } = result
@@ -283,9 +284,9 @@ async function render_video(template: inputs.Template, options: ContextOptions) 
   return result
 }
 
-async function render_sample_frame(template: inputs.Template, options: ContextOptions) {
+async function render_sample_frame(instance: InstanceContext, template: inputs.Template, options: ContextOptions) {
   const template_parsed = parse_template(template, options)
-  const context = new Context(template, template_parsed, options)
+  const context = new Context(instance, template, template_parsed, options)
   const ffmpeg_builder = new FfmpegSampleBuilder(context)
   const result = await render(context, ffmpeg_builder)
   const { stats, output } = result

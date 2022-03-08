@@ -5,8 +5,10 @@ import * as yaml from 'https://deno.land/std@0.91.0/encoding/yaml.ts'
 import { YAMLError } from 'https://deno.land/std@0.91.0/encoding/_yaml/error.ts'
 import { open } from 'https://deno.land/x/open@v0.0.2/index.ts'
 import * as errors from './errors.ts'
+import { parse_template } from './parsers/template.zod.ts'
 import { render_video, render_sample_frame } from './mod.zod.ts'
 import { Logger } from './logger.ts'
+import { InstanceContext } from './context.ts'
 import type * as inputs from './template_input.zod.ts'
 import type { ContextOptions } from './context.ts'
 
@@ -51,13 +53,13 @@ async function read_template(template_filepath: string): Promise<inputs.Template
 }
 
 
-async function try_render_video(template_filepath: string, sample_frame: boolean, context_options: ContextOptions) {
+async function try_render_video(instance: InstanceContext, template_filepath: string, sample_frame: boolean, context_options: ContextOptions) {
   // create context here, w/ execution time. Move progress callback to logger
   try {
     const template_input = await read_template(template_filepath)
     const result = sample_frame
-      ? await render_sample_frame(template_input, context_options)
-      : await render_video(template_input, context_options)
+      ? await render_sample_frame(instance, template_input, context_options)
+      : await render_video(instance, template_input, context_options)
     if (await fs.exists(result.output.current) === false) throw new Error('output file not produced')
     return result
   } catch(e) {
@@ -90,28 +92,40 @@ export default async function (...deno_args: string[]) {
   const cwd = path.resolve(path.dirname(template_filepath))
   const log_level = args.quiet ? 'error' : 'info'
   const context_options: ContextOptions = { output_folder: args.output_folder, cwd, ffmpeg_log_cmd: args.debug, log_level }
-  const logger = new Logger(log_level)
+  const instance = new InstanceContext(context_options)
+
+
   await Deno.mkdir(args.output_folder, { recursive: true })
-  // const output_locations = get_output_locations(output_folder)
-  if (!(await fs.exists(template_filepath)))
+
+  if (!(await fs.exists(template_filepath))) {
     throw new errors.InputError(`Template file ${template_filepath} does not exist`)
-  // if (args.preview && args.open) {
-  //   try {
-  //     // open a preview early if we already ran --develop
-  //     // open(result.output.preview)
-  //   }catch(e) {}
-  //   // const placeholder_template = { clips: [], captions: [{ text: 'Loading Preview...' }] }
-  //   // const result = await render_sample_frame(placeholder_template, context_options)
-  // }
-  const result = await try_render_video(template_filepath, args.preview, context_options)
-  if (args.open && result !== undefined) open(result.output.preview)
+  }
+
+  /*
+  if (args.preview && args.open) {
+    const output = Context.output_locations(context_options)
+    // TODO canvaskit can only produce png's. Our best bet is a emptyish ffmpeg-template.
+    // we should probs come up with a way to do that more cheaply than rendering a caption
+    if (!(await fs.exists(output.preview))) await create_placeholder_image(output.preview)
+
+    if (!(await fs.exists(output.preview))) {
+      // TODO we need at least one clip defined right now
+      const placeholder_template = { clips: [], captions: [{ text: 'Loading Preview...' }] }
+      const result = await render_sample_frame(placeholder_template, context_options)
+    }
+    await open(output.preview)
+  }
+  */
+
+  const result = await try_render_video(instance, template_filepath, args.preview, context_options)
+  if (result && args.open) open(result.output.preview)
 
   if (args.watch) {
-    logger.info(`watching ${template_filepath} for changes`)
+    instance.logger.info(`watching ${template_filepath} for changes`)
     await watch(template_filepath, async () => {
-      logger.info(`template ${template_filepath} was changed. Starting render.`)
-      await try_render_video(template_filepath, args.preview, context_options)
-      logger.info(`watching ${template_filepath} for changes`)
+      instance.logger.info(`template ${template_filepath} was changed. Starting render.`)
+      await try_render_video(instance, template_filepath, args.preview, context_options)
+      instance.logger.info(`watching ${template_filepath} for changes`)
     })
   }
 }
