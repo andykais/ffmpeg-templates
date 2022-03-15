@@ -146,7 +146,7 @@ export interface ClipBase {
     start?: Timestamp
 
     /** Trim time off the end of a clip (similar to -to argument in ffmpeg) */
-    stop?: Timestamp
+    stop?: Timestamp | KeypointReference
 
     /** Trim the video to last until a particular moment of output (TBD if this is the best way to specify a sequence of images going until a certain point) */
     // stop_relative_to_output?: Timestamp
@@ -237,7 +237,7 @@ export interface TimelineClip {
    * offset the clip start position by a specified duration. (Maybe we support negative durations too?)
    * @default "0"
    */
-  offset?: Timestamp
+  offset?: Timestamp | KeypointReference
 
   /**
    * specify the vertical height of a clip. Think foreground and background

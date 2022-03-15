@@ -121,8 +121,11 @@ class FfmpegSampleBuilder extends FfmpegBuilderBase {
   public clip(clip_builder: ClipBuilderBase) {
     const data = clip_builder.build()
     // ignore clips that start after or finish before the preview frame
-    if (data.start_at > this.sample_frame || data.start_at + data.duration < this.sample_frame) return
-    return super.clip(clip_builder)
+    if (data.start_at > this.sample_frame || data.start_at + data.duration < this.sample_frame) {
+      return
+    } else {
+      return super.clip(clip_builder)
+    }
   }
 
   public get_output_file() {

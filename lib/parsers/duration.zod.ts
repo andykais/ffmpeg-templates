@@ -1,4 +1,5 @@
 import { InputError } from '../errors.ts'
+import type * as inputs from '../template_input.zod.ts'
 import type { Context } from '../context.ts'
 
 type Seconds = number
@@ -12,7 +13,10 @@ type Seconds = number
 // "00:00:03.0000 + {CLIP_0.trim.start}"
 const duration_var_regex = /\{([a-zA-Z0-9._-]+)\}/
 const parens_regex = /^\(.*\)/
-function parse_duration(context: Context, duration_expr: string): Seconds {
+function parse_duration(context: Context, duration_expr: string | inputs.KeypointReference): Seconds {
+  if (typeof duration_expr === 'object') {
+    return context.get_keypoint(duration_expr.keypoint) + parse_duration(context, duration_expr.offset ?? '0')
+  }
   try {
     let current_duration_expr = duration_expr.trim()
     const [parens_expr] = current_duration_expr.match(parens_regex) ?? [null]

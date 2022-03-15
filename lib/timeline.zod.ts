@@ -65,7 +65,9 @@ function build_tree(
 
     let trim_stop = 0
     // TODO: we should support {type: "keypoint", name: "MY_KEYPOINT", offset: "00:00:01"} schema
-    if (trim.stop) clip_duration = parse_duration(context, trim.stop)
+    if (trim.stop) {
+      clip_duration = parse_duration(context, trim.stop)
+    }
     clip_end_at += clip_duration
 
     let trim_start = 0
@@ -80,7 +82,7 @@ function build_tree(
 
     for (const keypoint of clip.keypoints) {
       const anchored_keypoint = keypoints[keypoint.name]
-      const new_keypoint = clip_start_at + (parse_duration(context, keypoint.timestamp) - clip_start_at)
+      const new_keypoint = clip_start_at + (parse_duration(context, keypoint.timestamp) - clip_start_at - trim_start)
       // console.log('anchored_keypoint:', anchored_keypoint, 'new_keypoint:', new_keypoint)
 
       if (anchored_keypoint === undefined) {

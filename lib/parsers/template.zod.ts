@@ -69,7 +69,7 @@ const ClipBase = z.object({
   }).strict().array().default([]),
   trim: z.object({
     start: Timestamp.optional(),
-    stop: Timestamp.optional(),
+    stop: z.union([Timestamp, KeypointReference]).optional(),
     variable_length: z.union([z.literal('start'), z.literal('stop')]).optional(),
   }).strict().optional(),
 }).strict()
@@ -119,7 +119,7 @@ interface TimelineClipParsed extends Required<Omit<t.TimelineClip, 'next' | 'id'
 // we just have to be certain these types match!
 const TimelineClip: z.ZodSchema<TimelineClipParsed, z.ZodTypeDef, t.TimelineClip> = z.lazy(() => z.object({
   id: ClipId,
-  offset: Timestamp.default('0'),
+  offset: z.union([Timestamp, KeypointReference]).default('0'),
   z_index: z.number().default(0),
   next_order: z.union([z.literal('parallel'), z.literal('sequence')]).default('parallel'),
   next: TimelineClip.array().default([]),
