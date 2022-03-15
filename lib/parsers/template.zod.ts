@@ -18,6 +18,11 @@ const Color = z.string()
 
 const Timestamp = z.string() // I think we will delay parsing this till after we probe files because we need access to full file durations to resolve variables
 
+const KeypointReference = z.object({
+  keypoint: z.string(),
+  offset: Timestamp.optional(),
+})
+
 const Size = z.object({
   width: z.union([Pixels, Percentage]).optional(),
   height: z.union([Pixels, Percentage]).optional(),
@@ -59,6 +64,8 @@ const ClipBase = z.object({
   keypoints: z.object({
     name: z.string(),
     timestamp: Timestamp,
+    allow_trim_start: z.boolean().default(true),
+    allow_offset_start: z.boolean().default(true),
   }).strict().array().default([]),
   trim: z.object({
     start: Timestamp.optional(),
@@ -101,7 +108,7 @@ const TextClip = ClipBase.extend({
     align: z.enum(['left', 'right', 'center']).default('center'),
   }).strict().default({}),
 
-  duration: Timestamp.optional(),
+  duration: z.union([Timestamp, KeypointReference]).optional(),
 }).strict().transform(val => ({ ...val, type: 'text' as const }))
 
 interface TimelineClipParsed extends Required<Omit<t.TimelineClip, 'next' | 'id'>> {

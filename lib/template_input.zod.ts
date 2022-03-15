@@ -36,6 +36,21 @@ export type Color = string
  */
 export type Timestamp = string
 
+/**
+  * A identifying name of an important point in a clip.
+  */
+export type Keypoint = string
+
+/**
+  * A reference to a keypoint. References cannot be used before keypoints are defined.
+  */
+export interface KeypointReference {
+  /** The name of the keypoint being referenced */
+  keypoint: string
+  /** Add an offset to a particular keypoint timestamp */
+  offset?: Timestamp
+}
+
 export interface Size {
  width?: Pixels | Percentage
  height?: Pixels | Percentage
@@ -112,10 +127,16 @@ export interface ClipBase {
     */
   keypoints?: {
     /** Identifying name of a keypoint. Share names between clips that you want to align. */
-    name: string
+    name: Keypoint
 
     /** Point in time from the input clip. Timestamp should ignore trim.start */
     timestamp: Timestamp
+
+    /** To align a clip keypoint, ffmpeg-templates is allowed to trim the start of a clip. (default is true) */
+    allow_trim_start?: boolean
+
+    /** To align a clip keypoint, ffmpeg-templates is allowed to increase the start time a clip. (default is true) */
+    allow_offset_start?: boolean
   }[]
 
   /** Trim the duration of a clip */
@@ -191,7 +212,7 @@ export interface TextClip extends ClipBase {
    * Specify the length a caption should be shown in the render
    *  If not specified, text clip length is essentially the same as `trim: { variable_length: 'end' }`
    */
-  duration?: Timestamp
+  duration?: Timestamp | KeypointReference
 }
 
 /**

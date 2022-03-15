@@ -56,6 +56,7 @@ async function read_template(template_filepath: string): Promise<inputs.Template
 async function try_render_video(instance: InstanceContext, template_filepath: string, sample_frame: boolean, context_options: ContextOptions) {
   // create context here, w/ execution time. Move progress callback to logger
   try {
+    instance.logger.info(`Reading template file ${template_filepath}`)
     const template_input = await read_template(template_filepath)
     const result = sample_frame
       ? await render_sample_frame(instance, template_input, context_options)

@@ -24,6 +24,7 @@ abstract class FfmpegBuilderBase {
   private audio_links: string[] = []
   private verbosity_flag = 'error'
   private input_index = 0
+  private clip_data: object[] = []
 
   public abstract get_output_file(): string
   protected abstract get_vframe_flags(): string[]
@@ -32,6 +33,8 @@ abstract class FfmpegBuilderBase {
   public constructor(protected context: Context) {
     this.verbosity_flag = this.context.ffmpeg_log_cmd ? 'info' : 'error'
   }
+
+  public clip_count() { return this.clip_data.length }
 
   public background_cmd(background_width: number, background_height: number, total_duration: number) {
     const link = '[base]'
@@ -42,6 +45,7 @@ abstract class FfmpegBuilderBase {
 
   public clip(clip_builder: ClipBuilderBase) {
     const data = clip_builder.build()
+    this.clip_data.push(data)
     switch(data.probe_info.type) {
       case 'video':
         this.ffmpeg_inputs.push(
@@ -110,14 +114,14 @@ class FfmpegSampleBuilder extends FfmpegBuilderBase {
 
   public constructor(context: Context) {
     super(context)
-    this.sample_frame = parse_duration(context.template.preview)
+    this.sample_frame = parse_duration(context, context.template.preview)
   }
   public clip_builder(clip: inputs.MediaClip, info: ClipInfo) { return new ClipSampleBuilder(clip, info, this.sample_frame) }
 
   public clip(clip_builder: ClipBuilderBase) {
     const data = clip_builder.build()
-    // ignore clips that start after the preview frame
-    if (data.start_at > this.sample_frame) return
+    // ignore clips that start after or finish before the preview frame
+    if (data.start_at > this.sample_frame || data.start_at + data.duration < this.sample_frame) return
     return super.clip(clip_builder)
   }
 
@@ -207,8 +211,8 @@ class ClipSampleBuilder extends ClipBuilderBase {
   public timing(timeline_data: TimelineClip) {
     return super.timing({
       ...timeline_data,
-      trim_start: timeline_data.trim_start,
-      start_at: timeline_data.start_at,
+      trim_start: timeline_data.trim_start + this.sample_frame - timeline_data.start_at,
+      start_at: 0,
     })
   }
 }
@@ -261,7 +265,13 @@ async function render(context: Context, ffmpeg_builder: FfmpegBuilderBase) {
   if (context.ffmpeg_log_cmd) ffmpeg_builder.write_ffmpeg_cmd(output.ffmpeg_cmd)
 
   const pretty_duration = fmt_human_readable_duration(total_duration)
-  context.logger.info(`Rendering ${pretty_duration} long output`)
+  if (ffmpeg_builder instanceof FfmpegSampleBuilder) {
+    const skipped_clips = timeline.length - ffmpeg_builder.clip_count()
+    if (skipped_clips) context.logger.info(`Rendering ${pretty_duration} long preview image out of ${ffmpeg_builder.clip_count()} clip(s). Skipping ${timeline.length - ffmpeg_builder.clip_count()} clip(s) not visible in preview timestamp`)
+    else context.logger.info(`Rendering ${pretty_duration} long preview image out of ${ffmpeg_builder.clip_count()} clip(s).`)
+  } else {
+    context.logger.info(`Rendering ${pretty_duration} long video out of ${ffmpeg_builder.clip_count()} clip(s).`)
+  }
   await ffmpeg(context, ffmpeg_cmd, total_duration)
 
   return {
@@ -281,7 +291,7 @@ async function render_video(instance: InstanceContext, template: inputs.Template
   const ffmpeg_builder = new FfmpegVideoBuilder(context)
   const result = await render(context, ffmpeg_builder)
   const { stats, output } = result
-  context.logger.info(`created "${relative_path(output.video)}" out of ${stats.timeline_clips_count} clips in ${stats.execution_time.toFixed(1)} seconds.`)
+  context.logger.info(`created "${relative_path(output.video)}" in ${stats.execution_time.toFixed(1)} seconds.`)
 
   return result
 }
@@ -292,7 +302,7 @@ async function render_sample_frame(instance: InstanceContext, template: inputs.T
   const ffmpeg_builder = new FfmpegSampleBuilder(context)
   const result = await render(context, ffmpeg_builder)
   const { stats, output } = result
-  context.logger.info(`created "${relative_path(output.preview)}" at ${template_parsed.preview} out of ${stats.timeline_clips_count} clips in ${stats.execution_time.toFixed(1)} seconds.`)
+  context.logger.info(`created "${relative_path(output.preview)}" at timestamp ${template_parsed.preview} clips in ${stats.execution_time.toFixed(1)} seconds.`)
   // // DEBUG_START
   // await Deno.run({cmd: ['./imgcat.sh', 'ffmpeg-templates-projects/template.zod/text_assets/TEXT_0.png'], })
   // await Deno.run({cmd: ['./imgcat.sh', 'ffmpeg-templates-projects/template.zod/preview.jpg'], })

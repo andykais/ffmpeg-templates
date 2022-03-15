@@ -1,10 +1,12 @@
 import * as path from 'https://deno.land/std@0.91.0/path/mod.ts'
+import * as errors from './errors.ts'
 import { Logger } from './logger.ts'
 import { ClipInfoMap } from './probe.zod.ts'
 import { AbstractClipMap } from './util.ts'
 import type { LogLevel } from './logger.ts'
 import type * as inputs from './template_input.zod.ts'
 import type { TemplateParsed, MediaClipParsed } from './parsers/template.zod.ts'
+import type { Keypoints } from './timeline.zod.ts'
 
 interface ContextOptions {
   output_folder: string
@@ -28,6 +30,7 @@ class InstanceContext {
   public ffmpeg_log_cmd: boolean
   public ffmpeg_verbosity = 'error'
 
+
   public constructor(options: ContextOptions) {
     this.logger = new Logger(options.log_level)
     this.cwd = options.cwd
@@ -45,11 +48,13 @@ class InstanceContext {
 class Context {
   public clip_map: ClipMap
   public background_size: { width: number; height: number; aspect_ratio: number; rotation: number } | undefined
-  private execution_start_time: number
+  public execution_start_time: number
+  private keypoints: Keypoints
 
   constructor(private instance: InstanceContext, public template_input: inputs.Template, public template: TemplateParsed, options: ContextOptions) {
     this.execution_start_time = performance.now()
     this.clip_map = new ClipMap()
+    this.keypoints = {}
     for (const clip of template.clips) this.clip_map.set(clip.id, clip)
   }
 
@@ -60,6 +65,15 @@ class Context {
   get cwd() { return this.instance.cwd }
   get ffmpeg_log_cmd() { return this.instance.ffmpeg_log_cmd }
   get ffmpeg_verbosity() { return this.instance.ffmpeg_verbosity }
+
+  get_keypoint(name: string) {
+    const timestamp = this.keypoints[name]
+    if (timestamp === undefined) throw new errors.InputError(`Keypoint ${name} does not exist. Clip keypoints must be defined before they are referenced.`)
+    return timestamp
+  }
+  set_keypoint(name: string, timestamp: number) {
+    this.keypoints[name] = timestamp
+  }
 
   public get_clip_dimensions(clip_id: string) {
     if (clip_id === 'BACKGROUND') return this.get_background_size()

@@ -38,7 +38,7 @@ function build_tree(
   start_at: number,
 ) {
   let total_duration = start_at
-  const offset = parse_duration(timeline_clip.offset)
+  const offset = parse_duration(context, timeline_clip.offset)
   let clip_start_at = start_at + offset
   let clip_end_at = clip_start_at
 
@@ -64,11 +64,12 @@ function build_tree(
     const trim = clip.trim ?? {}
 
     let trim_stop = 0
-    if (trim.stop) clip_duration = parse_duration(trim.stop)
+    // TODO: we should support {type: "keypoint", name: "MY_KEYPOINT", offset: "00:00:01"} schema
+    if (trim.stop) clip_duration = parse_duration(context, trim.stop)
     clip_end_at += clip_duration
 
     let trim_start = 0
-    if (trim.start) trim_start += parse_duration(trim.start)
+    if (trim.start) trim_start += parse_duration(context, trim.start)
     clip_duration -= trim_start
 
     if (clip_duration < 0) throw new errors.InputError(`Invalid trim on clip ${clip.id}. Clip is not long enough`)
@@ -79,11 +80,25 @@ function build_tree(
 
     for (const keypoint of clip.keypoints) {
       const anchored_keypoint = keypoints[keypoint.name]
-      if (anchored_keypoint !== undefined) {
+      const new_keypoint = clip_start_at + (parse_duration(context, keypoint.timestamp) - clip_start_at)
+      // console.log('anchored_keypoint:', anchored_keypoint, 'new_keypoint:', new_keypoint)
+
+      if (anchored_keypoint === undefined) {
+        keypoints[keypoint.name] = new_keypoint
+        context.set_keypoint(keypoint.name, new_keypoint)
+      } else {
         if (anchored_keypoint > clip_start_at) {
-          const inc_start_at = (anchored_keypoint - clip_start_at)
-          clip_duration -= inc_start_at
-          clip_start_at += inc_start_at
+          const keypoint_adjustment = anchored_keypoint - new_keypoint
+          if (keypoint_adjustment < 0) {
+            if (keypoint.allow_trim_start === false) throw new errors.InputError(`Cannot align clip ${clip.id} to keypoint ${keypoint.name}. Keypoint does not allow trimming the beginning of this clip.`)
+            // console.log('  new keypoint is further out, Im going to trim the start', keypoint_adjustment, 'from', trim_start)
+            trim_start -= keypoint_adjustment
+            clip_duration += keypoint_adjustment
+          } else {
+            if (keypoint.allow_offset_start === false) throw new errors.InputError(`Cannot align clip ${clip.id} to keypoint ${keypoint.name}. Keypoint does not allow offsetting the clip's start time.`)
+            // console.log('  new keypoint is further back, Im going to start the clip later by', keypoint_adjustment, 'from', clip_start_at)
+            clip_start_at += keypoint_adjustment
+          }
           if (clip_duration < 0) throw new errors.InputError(`Invalid keypoint ${keypoint.name} on clip ${clip.id}. Keypoint at ${anchored_keypoint} exceeds clip length of ${clip_duration}`)
         } else {
           // TODO trim a clip's start time that occurs here
@@ -144,6 +159,7 @@ function calculate_min_duration(timeline_tree: TimelineTree) {
   let node_duration = timeline_tree.start_at
   if (timeline_tree.node !== undefined) {
     // skip these for now
+    // TODO support all clips having variable_length
     if (timeline_tree.node.variable_length === undefined) {
      node_duration += timeline_tree.node.duration
     }
@@ -206,8 +222,13 @@ function compute_timeline(context: Context) {
   // const { total_duration: old_total_duration, timeline } = parse_timeline_clips(context, context.template.timeline, keypoints, 'parallel', 0)
 
   timeline.sort((a, b) => a.z_index - b.z_index)
+  console.log()
+  console.log('timeline:')
+  for (const timeline_clip of timeline) {
+    console.log(`  ${timeline_clip.clip_id} start_at:`, timeline_clip.start_at, 'trim_start:', timeline_clip.trim_start, 'duration:', timeline_clip.duration, 'out of duration:', context.clip_info_map.get_or_else(timeline_clip.clip_id).duration)
+  }
   return { total_duration, timeline }
 }
 
 export { compute_timeline }
-export type { TimelineClip }
+export type { TimelineClip, Keypoints }
