@@ -1,5 +1,6 @@
 import * as path from 'https://deno.land/std@0.91.0/path/mod.ts'
 import * as errors from './errors.ts'
+import { parse_unit } from './parsers/unit.ts'
 import { parse_template } from './parsers/template.zod.ts'
 import { parse_percentage } from './parsers/unit.ts'
 import { parse_duration, fmt_human_readable_duration } from './parsers/duration.zod.ts'
@@ -9,6 +10,7 @@ import { compute_timeline } from './timeline.zod.ts'
 import { create_text_image } from './canvas/font.zod.ts'
 import { relative_path } from './util.ts'
 import type * as inputs from './template_input.zod.ts'
+import type * as parsed from './parsers/template.zod.ts'
 import type { TimelineClip } from './timeline.zod.ts'
 import type { ComputedGeometry } from './geometry.zod.ts'
 import type { ClipInfo } from './probe.zod.ts'
@@ -16,18 +18,38 @@ import type { ContextOptions } from './context.ts'
 import { ffmpeg } from './bindings/ffmpeg.zod.ts'
 import type { OnProgress, FfmpegProgress } from './bindings/ffmpeg.ts'
 
+
+interface ClipBuilderData {
+  id: string
+  file: string
+  start_at: number
+  trim_start: number
+  framerate: number
+  duration: number
+  video_input_filters: string[]
+  audio_input_filters: string[]
+  overlay_filter: string
+  probe_info: ClipInfo
+}
+
 abstract class FfmpegBuilderBase {
   protected complex_filter_inputs: string[] = []
   protected complex_filter_overlays: string[] = []
+  protected audio_links: string[] = []
   private ffmpeg_inputs: string[] = []
   private last_link: string | undefined = undefined
-  private audio_links: string[] = []
   private verbosity_flag = 'error'
   private input_index = 0
   private clip_data: object[] = []
 
   public abstract get_output_file(): string
+
   protected abstract get_vframe_flags(): string[]
+
+  protected abstract input_audio(data: ClipBuilderData, complex_filter_inputs: string[], audio_links: string[], input_index: number): void
+
+  protected abstract map_audio(complex_filter: string[]): string[]
+
   public abstract clip_builder(clip: inputs.MediaClip, info: ClipInfo): ClipBuilderBase
 
   public constructor(protected context: Context) {
@@ -45,6 +67,7 @@ abstract class FfmpegBuilderBase {
 
   public clip(clip_builder: ClipBuilderBase) {
     const data = clip_builder.build()
+    console.log(data.audio_input_filters)
     this.clip_data.push(data)
     switch(data.probe_info.type) {
       case 'video':
@@ -71,11 +94,18 @@ abstract class FfmpegBuilderBase {
     this.complex_filter_inputs.push(`[${this.input_index}:v] ${data.video_input_filters.join(', ')} [v_in_${data.id}]`)
     this.complex_filter_overlays.push(`${this.last_link}[v_in_${data.id}] ${data.overlay_filter} ${current_link}`)
     this.last_link = current_link
+
+    this.input_audio(data, this.complex_filter_inputs, this.audio_links, this.input_index)
+
     this.input_index++
   }
+
   build() {
     if (this.last_link === undefined) throw new Error('at least one filter must be specified')
     const complex_filter = [...this.complex_filter_inputs, ...this.complex_filter_overlays]
+
+    const map_audio_flags = this.map_audio(complex_filter)
+
     return [
       'ffmpeg',
       '-v', this.verbosity_flag,
@@ -83,6 +113,7 @@ abstract class FfmpegBuilderBase {
       ...this.get_vframe_flags(),
       '-filter_complex', complex_filter.join(';\n'),
       '-map', this.last_link,
+      ...map_audio_flags,
       this.get_output_file(),
       '-y'
     ]
@@ -101,7 +132,28 @@ abstract class FfmpegBuilderBase {
 
 class FfmpegVideoBuilder extends FfmpegBuilderBase {
   protected get_vframe_flags() { return [] }
-  public clip_builder(clip: inputs.MediaClip, info: ClipInfo) { return new ClipVideoBuilder(clip, info) }
+  public clip_builder(clip: parsed.MediaClipParsed, info: ClipInfo) { return new ClipVideoBuilder(clip, info) }
+
+  protected input_audio(data: ClipBuilderData, complex_filter_inputs: string[], audio_links: string[], input_index: number) {
+    if (data.probe_info.has_audio) {
+      complex_filter_inputs.push(`[${input_index}:a] ${data.audio_input_filters.join(', ')} [a_in_${data.id}]`)
+      audio_links.push(`[a_in_${data.id}]`)
+    }
+  }
+
+  protected map_audio(complex_filter: string[]) {
+    const map_audio_flags = []
+    if (this.audio_links.length === 0) {
+      // do not include audio
+    } else if (this.audio_links.length === 1) {
+      map_audio_flags.push('-map', this.audio_links[0]) 
+    } else {
+      complex_filter.push(`${this.audio_links.join('')} amix=inputs=${this.audio_links.length} [audio]`)
+      map_audio_flags.push('-map', '[audio]')
+    }
+
+    return map_audio_flags
+  }
 
   public get_output_file() {
     return path.join(this.context.output_folder, 'output.mp4')
@@ -116,7 +168,10 @@ class FfmpegSampleBuilder extends FfmpegBuilderBase {
     super(context)
     this.sample_frame = parse_duration(context, context.template.preview)
   }
-  public clip_builder(clip: inputs.MediaClip, info: ClipInfo) { return new ClipSampleBuilder(clip, info, this.sample_frame) }
+  public clip_builder(clip: parsed.MediaClipParsed, info: ClipInfo) { return new ClipSampleBuilder(clip, info, this.sample_frame) }
+
+  protected input_audio(data: ClipBuilderData, complex_filter_inputs: string[], audio_links: string[], input_index: number) {}
+  protected map_audio(complex_filter: string[]) { return [] }
 
   public clip(clip_builder: ClipBuilderBase) {
     const data = clip_builder.build()
@@ -142,8 +197,27 @@ abstract class ClipBuilderBase {
   private x = 0
   private y = 0
   private video_input_filters: string[] = []
+  private audio_input_filters: string[] = []
 
-  public constructor(protected clip: inputs.MediaClip, protected probe_info: ClipInfo) {}
+  private compute_tempo(val: number) {
+    const numMultipliers =
+      val > 1 ? Math.ceil(Math.log(val) / Math.log(2)) : Math.ceil(Math.log(val) / Math.log(0.5))
+    const multVal = Math.pow(Math.E, Math.log(val) / numMultipliers)
+    return Array(numMultipliers).fill(`atempo=${multVal}`).join(',')
+  }
+
+  public constructor(protected clip: parsed.MediaClipParsed, protected probe_info: ClipInfo) {
+    const volume = parse_unit(clip.volume, {
+      percentage: v => v,
+      undefined: () => 1,
+    })
+    this.audio_input_filters.push(
+      `asetpts=PTS-STARTPTS`,
+      // `atrim=0:${duration * speed}`,
+      // `adelay=${start_at * 1000}:all=1`,
+      `volume=${volume}`, // TODO use anullsink for audio_volume === 0 to avoid extra processing
+    )
+  }
 
   public timing(timeline_data: TimelineClip) {
     this.start_at = timeline_data.start_at
@@ -153,6 +227,12 @@ abstract class ClipBuilderBase {
 
     if (this.start_at === 0) this.setpts_filter = `setpts=${this.pts_speed}PTS-STARTPTS`
     else this.setpts_filter = `setpts=${this.pts_speed}PTS-STARTPTS+${this.start_at}/TB`
+
+    this.audio_input_filters.push(`adelay=${this.start_at}`)
+    const atempo = this.compute_tempo(timeline_data.speed)
+    // a.k.a. speed == 1
+    // TODO it seems like theres some weird floating point math happening in some cases
+    if (atempo !== '') this.audio_input_filters.push(atempo)
     return this
   }
 
@@ -184,7 +264,7 @@ abstract class ClipBuilderBase {
     return this
   }
 
-  public build()  {
+  public build(): ClipBuilderData  {
     const video_input_filters = [
       this.setpts_filter,
       ...this.video_input_filters,
@@ -194,9 +274,12 @@ abstract class ClipBuilderBase {
       file: this.clip.file,
       start_at: this.start_at,
       trim_start: this.clip_trim_start,
-      framerate: this.clip.framerate ?? this.probe_info.framerate,
+      // TODO parse framerate
+      // framerate: this.clip.framerate ?? this.probe_info.framerate,
+      framerate: this.probe_info.framerate,
       duration: this.clip_duration,
       video_input_filters,
+      audio_input_filters: this.audio_input_filters,
       overlay_filter: `overlay=x=${this.x}:y=${this.y}:eof_action=pass`,
       probe_info: this.probe_info,
     }
@@ -207,7 +290,7 @@ abstract class ClipBuilderBase {
 // and push the sample vs full output logic into the cmd builders above
 class ClipVideoBuilder extends ClipBuilderBase {}
 class ClipSampleBuilder extends ClipBuilderBase {
-  public constructor(clip: inputs.MediaClip, info: ClipInfo, public sample_frame: number) {
+  public constructor(clip: parsed.MediaClipParsed, info: ClipInfo, public sample_frame: number) {
     super(clip, info)
   }
 
