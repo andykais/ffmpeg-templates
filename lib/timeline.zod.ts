@@ -55,11 +55,19 @@ function build_tree(
 
     const variable_length = clip.trim?.variable_length === undefined
       ? clip_info.type === 'image'
-        ? 'stop'
+        ? clip.duration
+          ? undefined
+          : 'stop'
         : undefined
       : clip.trim.variable_length
 
     let clip_duration = clip_info.duration
+    if (clip.duration) {
+      clip_duration = parse_duration(context, clip.duration)
+      if (clip_info.type !== 'image' && clip_duration > clip_info.duration) {
+        throw new errors.InputError(`Invalid duration on clip ${clip.id}. Clip is not long enough.`)
+      }
+    }
 
     const trim = clip.trim ?? {}
 
@@ -74,7 +82,7 @@ function build_tree(
     if (trim.start) trim_start += parse_duration(context, trim.start)
     clip_duration -= trim_start
 
-    if (clip_duration < 0) throw new errors.InputError(`Invalid trim on clip ${clip.id}. Clip is not long enough`)
+    if (clip_duration < 0) throw new errors.InputError(`Invalid trim on clip ${clip.id}. Clip is not long enough.`)
 
     if (clip.speed !== '100%') {
       throw new Error('unimplemented')
@@ -83,7 +91,6 @@ function build_tree(
     for (const keypoint of clip.keypoints) {
       const anchored_keypoint = keypoints[keypoint.name]
       const new_keypoint = clip_start_at + (parse_duration(context, keypoint.timestamp) - clip_start_at - trim_start)
-      // console.log('anchored_keypoint:', anchored_keypoint, 'new_keypoint:', new_keypoint)
 
       if (anchored_keypoint === undefined) {
         keypoints[keypoint.name] = new_keypoint
@@ -93,12 +100,10 @@ function build_tree(
           const keypoint_adjustment = anchored_keypoint - new_keypoint
           if (keypoint_adjustment < 0) {
             if (keypoint.allow_trim_start === false) throw new errors.InputError(`Cannot align clip ${clip.id} to keypoint ${keypoint.name}. Keypoint does not allow trimming the beginning of this clip.`)
-            // console.log('  new keypoint is further out, Im going to trim the start', keypoint_adjustment, 'from', trim_start)
             trim_start -= keypoint_adjustment
             clip_duration += keypoint_adjustment
           } else {
             if (keypoint.allow_offset_start === false) throw new errors.InputError(`Cannot align clip ${clip.id} to keypoint ${keypoint.name}. Keypoint does not allow offsetting the clip's start time.`)
-            // console.log('  new keypoint is further back, Im going to start the clip later by', keypoint_adjustment, 'from', clip_start_at)
             clip_start_at += keypoint_adjustment
           }
           if (clip_duration < 0) throw new errors.InputError(`Invalid keypoint ${keypoint.name} on clip ${clip.id}. Keypoint at ${anchored_keypoint} exceeds clip length of ${clip_duration}`)
@@ -112,6 +117,7 @@ function build_tree(
 
     timeline_tree.start_at = clip_start_at
     clip_end_at = clip_start_at + clip_duration
+    console.log(`node ${clip.id} duration:`, clip_duration)
     timeline_tree.node = {
       clip_id: clip.id,
       z_index: timeline_clip.z_index,
@@ -214,16 +220,13 @@ function compute_timeline(context: Context) {
   const keypoints: Keypoints = {}
   const initial_tree_node = {offset:'0', z_index: 0, next_order: 'parallel', next: context.template.timeline} as const
   const timeline_tree = build_tree(context, initial_tree_node, keypoints, 0)
-  // console.log('timeline_tree', timeline_tree)
   const total_duration = calculate_min_duration(timeline_tree)
-  // console.log('total_duration', total_duration)
 
   const timeline = calculate_timeline_clips(timeline_tree, total_duration)
-  // console.log('timeline', timeline)
-
-  // const { total_duration: old_total_duration, timeline } = parse_timeline_clips(context, context.template.timeline, keypoints, 'parallel', 0)
 
   timeline.sort((a, b) => a.z_index - b.z_index)
+  console.log('keypoints:', context.get_keypoint('first_fist'))
+
   console.log()
   console.log('timeline:')
   for (const timeline_clip of timeline) {

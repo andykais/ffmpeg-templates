@@ -16,7 +16,6 @@ import type { ComputedGeometry } from './geometry.zod.ts'
 import type { ClipInfo } from './probe.zod.ts'
 import type { ContextOptions } from './context.ts'
 import { ffmpeg } from './bindings/ffmpeg.zod.ts'
-import type { OnProgress, FfmpegProgress } from './bindings/ffmpeg.ts'
 
 
 interface ClipBuilderData {
@@ -24,8 +23,9 @@ interface ClipBuilderData {
   file: string
   start_at: number
   trim_start: number
-  framerate: number
   duration: number
+  timeline_data: TimelineClip
+  framerate: number
   video_input_filters: string[]
   audio_input_filters: string[]
   overlay_filter: string
@@ -41,6 +41,8 @@ abstract class FfmpegBuilderBase {
   private verbosity_flag = 'error'
   private input_index = 0
   private clip_data: object[] = []
+
+  private output_framerate = 0
 
   public abstract get_output_file(): string
 
@@ -67,7 +69,6 @@ abstract class FfmpegBuilderBase {
 
   public clip(clip_builder: ClipBuilderBase) {
     const data = clip_builder.build()
-    console.log(data.audio_input_filters)
     this.clip_data.push(data)
     switch(data.probe_info.type) {
       case 'video':
@@ -97,6 +98,8 @@ abstract class FfmpegBuilderBase {
 
     this.input_audio(data, this.complex_filter_inputs, this.audio_links, this.input_index)
 
+    this.output_framerate = Math.max(this.output_framerate, data.framerate)
+
     this.input_index++
   }
 
@@ -112,6 +115,7 @@ abstract class FfmpegBuilderBase {
       ...this.ffmpeg_inputs,
       ...this.get_vframe_flags(),
       '-filter_complex', complex_filter.join(';\n'),
+      '-r', this.output_framerate.toString(),
       '-map', this.last_link,
       ...map_audio_flags,
       this.get_output_file(),
@@ -176,7 +180,10 @@ class FfmpegSampleBuilder extends FfmpegBuilderBase {
   public clip(clip_builder: ClipBuilderBase) {
     const data = clip_builder.build()
     // ignore clips that start after or finish before the preview frame
-    if (data.start_at > this.sample_frame || data.start_at + data.duration < this.sample_frame) {
+    console.log(data.id)
+    console.log('  data.start_at > this.sample_frame', data.start_at > this.sample_frame )
+    console.log('  data.start_at + data.duration < this.sample_frame', data.timeline_data.start_at, data.timeline_data.start_at + data.duration, '<', this.sample_frame, (data.timeline_data.start_at + data.duration) < this.sample_frame)
+    if (data.timeline_data.start_at > this.sample_frame || (data.timeline_data.start_at + data.duration) < this.sample_frame) {
       return
     } else {
       return super.clip(clip_builder)
@@ -194,6 +201,14 @@ abstract class ClipBuilderBase {
   protected start_at = 0
   protected clip_trim_start = 0
   protected clip_duration = NaN
+  protected timeline_data: TimelineClip = {
+    clip_id: '',
+    z_index: 0,
+    start_at: 0,
+    speed: 1,
+    trim_start: 0,
+    duration: NaN,
+  }
   private x = 0
   private y = 0
   private video_input_filters: string[] = []
@@ -219,9 +234,17 @@ abstract class ClipBuilderBase {
     )
   }
 
+  protected get_timing_start_at(timeline_data: TimelineClip) {
+    return timeline_data.start_at
+  }
+  protected get_timing_trim_start(timeline_data: TimelineClip) {
+    return timeline_data.trim_start
+  }
+
   public timing(timeline_data: TimelineClip) {
-    this.start_at = timeline_data.start_at
-    this.clip_trim_start = timeline_data.trim_start
+    this.timeline_data = timeline_data
+    this.start_at = this.get_timing_start_at(timeline_data)
+    this.clip_trim_start = this.get_timing_trim_start(timeline_data)
     this.clip_duration = timeline_data.duration
     this.pts_speed = `${1 / timeline_data.speed}*`
 
@@ -269,15 +292,26 @@ abstract class ClipBuilderBase {
       this.setpts_filter,
       ...this.video_input_filters,
     ]
+
+    let framerate = this.probe_info.framerate
+    if (this.clip.framerate) {
+      const { fps } = this.clip.framerate
+      framerate = fps
+      if (this.clip.framerate.smooth) {
+        video_input_filters.push(`minterpolate=fps=${fps}:mi_mode=mci:mc_mode=aobmc:me_mode=bidir:vsbmc=1`)
+        // video_input_filters.push(`minterpolate='mi_mode=mci:mc_mode=aobmc:vsbmc=1:fps=${fps}'`)
+      } else {
+        video_input_filters.push(`fps=${fps}`)
+      }
+    }
     return {
       id: this.clip.id,
       file: this.clip.file,
       start_at: this.start_at,
       trim_start: this.clip_trim_start,
-      // TODO parse framerate
-      // framerate: this.clip.framerate ?? this.probe_info.framerate,
-      framerate: this.probe_info.framerate,
       duration: this.clip_duration,
+      timeline_data: this.timeline_data,
+      framerate,
       video_input_filters,
       audio_input_filters: this.audio_input_filters,
       overlay_filter: `overlay=x=${this.x}:y=${this.y}:eof_action=pass`,
@@ -294,12 +328,11 @@ class ClipSampleBuilder extends ClipBuilderBase {
     super(clip, info)
   }
 
-  public timing(timeline_data: TimelineClip) {
-    return super.timing({
-      ...timeline_data,
-      trim_start: timeline_data.trim_start + this.sample_frame - timeline_data.start_at,
-      start_at: 0,
-    })
+  protected get_timing_start_at(timeline_data: TimelineClip) {
+    return 0
+  }
+  protected get_timing_trim_start(timeline_data: TimelineClip) {
+    return timeline_data.trim_start + this.sample_frame - timeline_data.start_at
   }
 }
 
@@ -323,8 +356,6 @@ async function render(context: Context, ffmpeg_builder: FfmpegBuilderBase) {
   const clips = context.template.clips.concat(text_image_clips)
   const geometry_info_map = compute_geometry(context, clips)
   const {total_duration, timeline} = compute_timeline(context)
-  // console.log('timeline', timeline)
-  // console.log('total_duration', total_duration)
 
   // TODO can we reuse a clip_builder here?
   ffmpeg_builder.background_cmd(background_size.width, background_size.height, total_duration)
@@ -347,7 +378,6 @@ async function render(context: Context, ffmpeg_builder: FfmpegBuilderBase) {
 
 
   const ffmpeg_cmd = ffmpeg_builder.build()
-  // console.log(ffmpeg_cmd)
   if (context.ffmpeg_log_cmd) ffmpeg_builder.write_ffmpeg_cmd(output.ffmpeg_cmd)
 
   const pretty_duration = fmt_human_readable_duration(total_duration)

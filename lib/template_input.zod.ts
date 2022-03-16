@@ -139,6 +139,8 @@ export interface ClipBase {
     allow_offset_start?: boolean
   }[]
 
+  duration?: Timestamp | KeypointReference
+
   /** Trim the duration of a clip */
   trim?: {
 

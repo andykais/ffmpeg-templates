@@ -72,6 +72,7 @@ const ClipBase = z.object({
     stop: z.union([Timestamp, KeypointReference]).optional(),
     variable_length: z.union([z.literal('start'), z.literal('stop')]).optional(),
   }).strict().optional(),
+  duration: z.union([Timestamp, KeypointReference]).optional(),
 }).strict()
 
 const MediaClip = ClipBase.extend({
@@ -107,8 +108,6 @@ const TextClip = ClipBase.extend({
     outline_size: z.number().min(0).default(0),
     align: z.enum(['left', 'right', 'center']).default('center'),
   }).strict().default({}),
-
-  duration: z.union([Timestamp, KeypointReference]).optional(),
 }).strict().transform(val => ({ ...val, type: 'text' as const }))
 
 interface TimelineClipParsed extends Required<Omit<t.TimelineClip, 'next' | 'id'>> {
