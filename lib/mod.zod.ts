@@ -42,7 +42,7 @@ abstract class FfmpegBuilderBase {
   private input_index = 0
   private clip_data: object[] = []
 
-  private output_framerate = 0
+  private output_framerate: undefined | number = undefined
 
   public abstract get_output_file(): string
 
@@ -98,7 +98,7 @@ abstract class FfmpegBuilderBase {
 
     this.input_audio(data, this.complex_filter_inputs, this.audio_links, this.input_index)
 
-    this.output_framerate = Math.max(this.output_framerate, data.framerate)
+    this.output_framerate = Math.max(this.output_framerate ?? 0, data.framerate)
 
     this.input_index++
   }
@@ -115,7 +115,7 @@ abstract class FfmpegBuilderBase {
       ...this.ffmpeg_inputs,
       ...this.get_vframe_flags(),
       '-filter_complex', complex_filter.join(';\n'),
-      '-r', this.output_framerate.toString(),
+      '-r', (this.output_framerate ?? 60).toString(),
       '-map', this.last_link,
       ...map_audio_flags,
       this.get_output_file(),
@@ -180,10 +180,12 @@ class FfmpegSampleBuilder extends FfmpegBuilderBase {
   public clip(clip_builder: ClipBuilderBase) {
     const data = clip_builder.build()
     // ignore clips that start after or finish before the preview frame
-    console.log(data.id)
-    console.log('  data.start_at > this.sample_frame', data.start_at > this.sample_frame )
-    console.log('  data.start_at + data.duration < this.sample_frame', data.timeline_data.start_at, data.timeline_data.start_at + data.duration, '<', this.sample_frame, (data.timeline_data.start_at + data.duration) < this.sample_frame)
-    if (data.timeline_data.start_at > this.sample_frame || (data.timeline_data.start_at + data.duration) < this.sample_frame) {
+    // console.log(data.id)
+    // console.log('  data.start_at > this.sample_frame', data.start_at > this.sample_frame )
+    // console.log('  data.start_at + data.duration < this.sample_frame', data.timeline_data.start_at, data.timeline_data.start_at + data.duration, '<', this.sample_frame, (data.timeline_data.start_at + data.duration) < this.sample_frame)
+    const not_present_in_sample_frame = data.timeline_data.start_at > this.sample_frame || (data.timeline_data.start_at + data.duration) < this.sample_frame
+    // console.log('not_present_in_sample_frame', not_present_in_sample_frame)
+    if (not_present_in_sample_frame) {
       return
     } else {
       return super.clip(clip_builder)
@@ -251,7 +253,7 @@ abstract class ClipBuilderBase {
     if (this.start_at === 0) this.setpts_filter = `setpts=${this.pts_speed}PTS-STARTPTS`
     else this.setpts_filter = `setpts=${this.pts_speed}PTS-STARTPTS+${this.start_at}/TB`
 
-    this.audio_input_filters.push(`adelay=${this.start_at}`)
+    this.audio_input_filters.push(`adelay=${this.start_at * 1000}:all=1`)
     const atempo = this.compute_tempo(timeline_data.speed)
     // a.k.a. speed == 1
     // TODO it seems like theres some weird floating point math happening in some cases

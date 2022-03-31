@@ -53,13 +53,12 @@ function build_tree(
     const clip = context.get_clip(timeline_clip.id)
     const clip_info = context.clip_info_map.get_or_throw(clip.id)
 
-    const variable_length = clip.trim?.variable_length === undefined
-      ? clip_info.type === 'image'
-        ? clip.duration
-          ? undefined
-          : 'stop'
-        : undefined
-      : clip.trim.variable_length
+    let variable_length: 'start' | 'stop' | undefined = undefined
+    if (clip.trim?.variable_length) variable_length = clip.trim.variable_length
+    else if (clip_info.type === 'image') {
+      if (clip.trim?.stop) variable_length = undefined
+      else if (clip.duration === undefined) variable_length = 'stop'
+    }
 
     let clip_duration = clip_info.duration
     if (clip.duration) {
@@ -71,16 +70,21 @@ function build_tree(
 
     const trim = clip.trim ?? {}
 
-    let trim_stop = 0
-    // TODO: we should support {type: "keypoint", name: "MY_KEYPOINT", offset: "00:00:01"} schema
-    if (trim.stop) {
-      clip_duration = parse_duration(context, trim.stop)
-    }
-    clip_end_at += clip_duration
-
     let trim_start = 0
     if (trim.start) trim_start += parse_duration(context, trim.start)
     clip_duration -= trim_start
+
+
+    let trim_stop = 0
+    // TODO: we should support {type: "keypoint", name: "MY_KEYPOINT", offset: "00:00:01"} schema
+    if (trim.stop) {
+      const stop_at = parse_duration(context, trim.stop, {
+        keypoint: timestamp => timestamp - clip_start_at
+      })
+      if (clip.id === 'BAD_ONION_1') console.log('stop:', stop_at)
+      clip_duration = stop_at
+    }
+    clip_end_at += clip_duration
 
     if (clip_duration < 0) throw new errors.InputError(`Invalid trim on clip ${clip.id}. Clip is not long enough.`)
 
@@ -94,6 +98,7 @@ function build_tree(
 
       if (anchored_keypoint === undefined) {
         keypoints[keypoint.name] = new_keypoint
+        console.log('setting kp', new_keypoint)
         context.set_keypoint(keypoint.name, new_keypoint)
       } else {
         if (anchored_keypoint > clip_start_at) {
@@ -164,6 +169,7 @@ function build_tree(
 }
 
 function calculate_min_duration(timeline_tree: TimelineTree) {
+  // let node_duration = 0
   let node_duration = timeline_tree.start_at
   if (timeline_tree.node !== undefined) {
     // skip these for now
@@ -178,11 +184,13 @@ function calculate_min_duration(timeline_tree: TimelineTree) {
   const branch_durations: number[] = [0]
   for (const branch of timeline_tree.branches) {
     const total_duration = calculate_min_duration(branch)
-    branch_durations.push(total_duration)
+    // console.log('min duration for', timeline_tree.node?.clip_id, 'is', total_duration)
+    branch_durations.push(total_duration - node_duration)
   }
 
   const max_branch_duration = Math.max(...branch_durations)
   const total_duration = max_branch_duration + node_duration
+  // console.log('below', timeline_tree.node?.clip_id, 'starting at', timeline_tree.start_at, 'w/ duration', timeline_tree.node?.duration, 'durations:', branch_durations, 'total', total_duration)
   return total_duration
 }
 
@@ -220,12 +228,14 @@ function compute_timeline(context: Context) {
   const keypoints: Keypoints = {}
   const initial_tree_node = {offset:'0', z_index: 0, next_order: 'parallel', next: context.template.timeline} as const
   const timeline_tree = build_tree(context, initial_tree_node, keypoints, 0)
+  console.log(timeline_tree.branches)
+  // console.log('timeline_tree', timeline_tree.branches[1].branches)
   const total_duration = calculate_min_duration(timeline_tree)
 
   const timeline = calculate_timeline_clips(timeline_tree, total_duration)
 
   timeline.sort((a, b) => a.z_index - b.z_index)
-  console.log('keypoints:', context.get_keypoint('first_fist'))
+  // console.log('keypoints:', context.get_keypoint('first_fist'))
 
   console.log()
   console.log('timeline:')
