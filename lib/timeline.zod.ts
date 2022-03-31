@@ -38,7 +38,9 @@ function build_tree(
   start_at: number,
 ) {
   let total_duration = start_at
-  const offset = parse_duration(context, timeline_clip.offset)
+  const offset = parse_duration(context, timeline_clip.offset, {
+    keypoint: timestamp => timestamp - start_at // (cheeky, we actually need to ignore start_at when we have a keypoint offset)
+  })
   let clip_start_at = start_at + offset
   let clip_end_at = clip_start_at
 
