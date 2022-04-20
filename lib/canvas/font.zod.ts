@@ -189,6 +189,7 @@ async function create_text_image(
       ...text_clip.layout,
       relative_to: text_clip.id,
     },
+    duration: text_clip.duration,
     keypoints: [],
     volume: '100%',
     speed: '100%',
