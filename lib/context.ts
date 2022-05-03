@@ -3,6 +3,7 @@ import * as errors from './errors.ts'
 import { Logger } from './logger.ts'
 import { ClipInfoMap } from './probe.zod.ts'
 import { AbstractClipMap } from './util.ts'
+import { PreviewServer } from './preview/server.ts'
 import type { LogLevel } from './logger.ts'
 import type * as inputs from './template_input.zod.ts'
 import type { TemplateParsed, MediaClipParsed } from './parsers/template.zod.ts'
@@ -29,6 +30,7 @@ class InstanceContext {
   public cwd: string
   public ffmpeg_log_cmd: boolean
   public ffmpeg_verbosity = 'error'
+  public preview_server: PreviewServer
 
 
   public constructor(options: ContextOptions) {
@@ -42,6 +44,11 @@ class InstanceContext {
       video: path.join(options.output_folder, 'output.mp4'),
     }
     this.clip_info_map = new ClipInfoMap(this)
+    this.preview_server = new PreviewServer(this)
+  }
+
+  async launch_server() {
+    await this.preview_server.start()
   }
 }
 
@@ -66,12 +73,16 @@ class Context {
   get ffmpeg_log_cmd() { return this.instance.ffmpeg_log_cmd }
   get ffmpeg_verbosity() { return this.instance.ffmpeg_verbosity }
 
-  get_keypoint(name: string) {
+  public event(event: string, data: any) {
+    this.instance.preview_server.notify(event, data)
+  }
+
+  public get_keypoint(name: string) {
     const timestamp = this.keypoints[name]
     if (timestamp === undefined) throw new errors.InputError(`Keypoint ${name} does not exist. Clip keypoints must be defined before they are referenced.`)
     return timestamp
   }
-  set_keypoint(name: string, timestamp: number) {
+  public set_keypoint(name: string, timestamp: number) {
     this.keypoints[name] = timestamp
   }
 

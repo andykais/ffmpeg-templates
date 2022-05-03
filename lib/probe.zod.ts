@@ -96,7 +96,11 @@ class ClipInfoMap extends AbstractClipMap<ClipInfo> {
         return this.get_or_throw(id)
       }
     }
-    if (Object.hasOwn(this.in_flight_info_map, file)) return this.in_flight_info_map[file]
+    if (Object.hasOwn(this.in_flight_info_map, file)) {
+      const result = await this.in_flight_info_map[file]
+      this.set(id, result)
+      return result
+    }
     this.in_flight_info_map[file] = probe(this.instance, clip, stats)
     const clip_info = await this.in_flight_info_map[file]
     this.set(id, clip_info)

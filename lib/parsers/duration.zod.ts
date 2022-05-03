@@ -6,6 +6,7 @@ type Seconds = number
 
 interface CaseLambdas {
   keypoint?: (timestamp: number) => number
+  default?: (timestamp: number) => number
 }
 
 // TODO we evaluate right to left. We need to evaluate left to right! E.g. 3 - 1 - 2 is 0, not 6!
@@ -17,13 +18,7 @@ interface CaseLambdas {
 // "00:00:03.0000 + {CLIP_0.trim.start}"
 const duration_var_regex = /\{([a-zA-Z0-9._-]+)\}/
 const parens_regex = /^\(.*\)/
-function parse_duration(context: Context, duration_expr: string | inputs.KeypointReference, case_lambdas?: CaseLambdas): Seconds {
-  if (typeof duration_expr === 'object') {
-    if (case_lambdas?.keypoint === undefined) throw new Error('Keypoints must be supported for this duration parse.')
-    const keypoint_timestamp = context.get_keypoint(duration_expr.keypoint)
-    const offset = parse_duration(context, duration_expr.offset ?? '0')
-    return case_lambdas.keypoint(keypoint_timestamp + offset)
-  }
+function parse_duration_expr(context: Context, duration_expr: string ): Seconds {
   try {
     let current_duration_expr = duration_expr.trim()
     const [parens_expr] = current_duration_expr.match(parens_regex) ?? [null]
@@ -73,6 +68,22 @@ function parse_duration(context: Context, duration_expr: string | inputs.Keypoin
     if (e.name === 'TypeError') {
       throw new InputError(`Invalid duration "${duration_expr}". Cannot parse`)
     } else throw e
+  }
+}
+
+function parse_duration(context: Context, duration_expr: string | inputs.KeypointReference, case_lambdas?: CaseLambdas): Seconds {
+  if (typeof duration_expr === 'object') {
+    if (case_lambdas?.keypoint === undefined) throw new Error('Keypoints must be supported for this duration parse.')
+    const keypoint_timestamp = context.get_keypoint(duration_expr.keypoint)
+    const offset = parse_duration_expr(context, duration_expr.offset ?? '0')
+    return case_lambdas.keypoint(keypoint_timestamp + offset)
+  } else {
+    const result = parse_duration_expr(context, duration_expr)
+    if (case_lambdas?.default) {
+      return case_lambdas.default(result)
+    } else {
+      return result
+    }
   }
 }
 

@@ -80,12 +80,12 @@ function build_tree(
     let trim_stop = 0
     // TODO: we should support {type: "keypoint", name: "MY_KEYPOINT", offset: "00:00:01"} schema
     if (trim.stop) {
-      const stop_at = parse_duration(context, trim.stop, {
-        keypoint: timestamp => timestamp - clip_start_at
+      clip_duration = parse_duration(context, trim.stop, {
+        keypoint: timestamp => timestamp - clip_start_at,
+        default: timestamp => timestamp - trim_start
       })
-      if (clip.id === 'BAD_ONION_1') console.log('stop:', stop_at)
-      clip_duration = stop_at
     }
+    console.log(clip.id, { trim_start, clip_duration })
     clip_end_at += clip_duration
 
     if (clip_duration < 0) throw new errors.InputError(`Invalid trim on clip ${clip.id}. Clip is not long enough.`)
@@ -100,7 +100,6 @@ function build_tree(
 
       if (anchored_keypoint === undefined) {
         keypoints[keypoint.name] = new_keypoint
-        console.log('setting kp', new_keypoint)
         context.set_keypoint(keypoint.name, new_keypoint)
       } else {
         if (anchored_keypoint > clip_start_at) {
@@ -122,9 +121,10 @@ function build_tree(
     }
     if (clip_duration < 0) throw new errors.InputError(`Invalid trim on clip ${clip.id}. Clip is not long enough`)
 
+    console.log(clip.id, { trim_start, clip_duration })
     timeline_tree.start_at = clip_start_at
     clip_end_at = clip_start_at + clip_duration
-    console.log(`node ${clip.id} duration:`, clip_duration)
+    // console.log(`node ${clip.id} duration:`, clip_duration)
     timeline_tree.node = {
       clip_id: clip.id,
       z_index: timeline_clip.z_index,
@@ -230,7 +230,7 @@ function compute_timeline(context: Context) {
   const keypoints: Keypoints = {}
   const initial_tree_node = {offset:'0', z_index: 0, next_order: 'parallel', next: context.template.timeline} as const
   const timeline_tree = build_tree(context, initial_tree_node, keypoints, 0)
-  console.log(timeline_tree.branches)
+  // console.log(timeline_tree.branches)
   // console.log('timeline_tree', timeline_tree.branches[1].branches)
   const total_duration = calculate_min_duration(timeline_tree)
 
@@ -239,8 +239,8 @@ function compute_timeline(context: Context) {
   timeline.sort((a, b) => a.z_index - b.z_index)
   // console.log('keypoints:', context.get_keypoint('first_fist'))
 
-  console.log()
-  console.log('timeline:')
+  // console.log()
+  // console.log('timeline:')
   for (const timeline_clip of timeline) {
     console.log(`  ${timeline_clip.clip_id} start_at:`, timeline_clip.start_at, 'trim_start:', timeline_clip.trim_start, 'duration:', timeline_clip.duration, 'out of duration:', context.clip_info_map.get_or_else(timeline_clip.clip_id).duration)
   }

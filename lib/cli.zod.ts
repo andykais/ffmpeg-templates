@@ -118,6 +118,10 @@ export default async function (...deno_args: string[]) {
   }
   */
 
+  if (args.preview) {
+    // instance.launch_server()
+  }
+
   const result = await try_render_video(instance, template_filepath, args.preview, context_options)
   if (result && args.open) open(result.output.preview)
 
