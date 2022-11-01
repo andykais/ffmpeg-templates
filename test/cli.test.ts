@@ -1,7 +1,7 @@
 import * as path from 'https://deno.land/std@0.91.0/path/mod.ts'
 import * as fs from 'https://deno.land/std@0.91.0/fs/mod.ts'
-import ffmpeg_templates from '../lib/cli.ts'
-import { render_sample_frame } from '../lib/mod.ts'
+import ffmpeg_templates from '../lib/cli.zod.ts'
+import { render_sample_frame } from '../lib/mod.zod.ts'
 import { createHash } from 'https://deno.land/std@0.91.0/hash/mod.ts'
 import { assertEquals } from "https://deno.land/std@0.97.0/testing/asserts.ts";
 
@@ -41,10 +41,30 @@ Deno.test('speed', async () => {
   assertEquals(ffmpeg_cmd, ffmpeg_cmd_fixture)
 })
 
-Deno.test('empty preview', async () => {
-  await rmrf('test/resources/empty_preview')
-  await ffmpeg_templates('test/resources/empty_preview.yml', '--debug', '--quiet', '--preview')
-  const ffmpeg_cmd = await Deno.readTextFile('test/resources/ffmpeg-templates-projects/test/resources/empty_preview/ffmpeg.sh')
-  const ffmpeg_cmd_fixture = await Deno.readTextFile('test/fixtures/empty_preview/ffmpeg.sh')
-  assertEquals(ffmpeg_cmd, ffmpeg_cmd_fixture)
+Deno.test({
+  name: 'empty preview',
+  fn: async () => {
+    await rmrf('test/resources/empty_preview')
+    await ffmpeg_templates('test/resources/empty_preview.yml', '--debug', '--quiet', '--preview')
+    const ffmpeg_instructions = {
+      loglevel: 'error',
+      vframes: 1,
+      inputs: {
+        i: 'video.mp4',
+        crop: {
+          w:100,
+          h:200,
+          x:'x',
+          y:'y',
+          keep_aspect:1
+        }
+      }
+    }
+    const ffmpeg_cmd = await Deno.readTextFile('test/resources/ffmpeg-templates-projects/test/resources/empty_preview/ffmpeg.sh')
+    console.log(ffmpeg_cmd)
+    const ffmpeg_cmd_fixture = await Deno.readTextFile('test/fixtures/empty_preview/ffmpeg.sh')
+    console.log(ffmpeg_cmd_fixture)
+    assertEquals(ffmpeg_cmd, ffmpeg_cmd_fixture)
+  },
+  // only: true
 })

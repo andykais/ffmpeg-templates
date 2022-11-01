@@ -138,7 +138,9 @@ const Template = z.object({
   timeline: TimelineClip.array().min(1).optional(),
   preview: Timestamp.default('0'),
 }).transform(val => ({
-  timeline: val.clips.map(c => TimelineClip.parse({ id: c.id })),
+  timeline: val.clips
+    .map(c => TimelineClip.parse({ id: c.id }))
+    .concat(val.captions.map(c => TimelineClip.parse({ id: c.id }))),
   ...val,
   size: { relative_to: val.clips[0].id, ...val.size, },
 }))

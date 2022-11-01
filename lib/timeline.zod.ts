@@ -84,6 +84,9 @@ function build_tree(
         keypoint: timestamp => timestamp - clip_start_at,
         default: timestamp => timestamp - trim_start
       })
+    } else if (clip.duration) {
+      // basically skip the trim_sjart if duration is explicit
+      clip_duration = parse_duration(context, clip.duration)
     }
     console.log(clip.id, { trim_start, clip_duration })
     clip_end_at += clip_duration
@@ -202,16 +205,33 @@ function calculate_timeline_clips(timeline_tree: TimelineTree, total_duration: n
   if (timeline_tree.node) {
     const { node } = timeline_tree
     let duration = node.duration
+    let trim_start = node.trim_start
 
     if (node.variable_length) {
-      const min_duration = Math.max(0, ...timeline_tree.branches.map(calculate_min_duration))
-      const possible_duration = total_duration - (timeline_tree.start_at + min_duration)
-      duration = Math.min(possible_duration, node.duration)
+      switch(node.variable_length) {
+        case 'start': {
+          console.log('what do?')
+          const min_duration = Math.max(0, ...timeline_tree.branches.map(calculate_min_duration))
+          const possible_duration = total_duration - (timeline_tree.start_at + min_duration)
+          const old_duration = duration
+          duration = Math.min(possible_duration, node.duration)
+          trim_start += (old_duration - duration)
+          break
+        }
+        case 'stop': {
+          const min_duration = Math.max(0, ...timeline_tree.branches.map(calculate_min_duration))
+          const possible_duration = total_duration - (timeline_tree.start_at + min_duration)
+          duration = Math.min(possible_duration, node.duration)
+          break
+        }
+        default:
+          throw new Error(`Unknown variable_length enum '${node.variable_length}'`)
+      }
     }
 
     timeline_clips.push({
       start_at: timeline_tree.start_at,
-      trim_start: node.trim_start,
+      trim_start,
       clip_id: node.clip_id,
       z_index: node.z_index,
       duration,

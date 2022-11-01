@@ -112,7 +112,7 @@ abstract class FfmpegBuilderBase {
 
     return [
       'ffmpeg',
-      '-v', this.verbosity_flag,
+      '-loglevel', this.verbosity_flag,
       ...this.ffmpeg_inputs,
       ...this.get_vframe_flags(),
       '-filter_complex', complex_filter.join(';\n'),

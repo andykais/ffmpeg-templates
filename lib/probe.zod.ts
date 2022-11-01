@@ -134,7 +134,8 @@ async function probe(instance: InstanceContext, clip: MediaClipParsed, stats: De
 
   if (!video_stream) throw new ProbeError(`Input "${file}" has no video stream`)
   const has_audio = audio_stream !== undefined
-  let rotation = video_stream.tags?.rotate ? parseInt(video_stream.tags?.rotate) : 0
+  const rotation_str = video_stream.tags?.rotate ?? video_stream.side_data_list?.find((c:any) => c.rotation)?.rotation ?? '0'
+  let rotation = parseInt(rotation_str)
   // let rotation = video_stream.tags?.rotate ? (parseInt(video_stream.tags?.rotate) * Math.PI) / 180.0 : 0
   let { width, height } = video_stream
   ;({ width, height } = compute_rotated_size({ width, height }, rotation))

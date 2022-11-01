@@ -7,16 +7,22 @@ import type { Timestamp } from '../template_input.ts'
 type OnReadLine = (line: string) => void
 async function exec(cmd: string[]) {
   const decoder = new TextDecoder()
-  const proc = Deno.run({ cmd, stdout: 'piped' })
-  const result = await proc.status()
-  const output_buffer = await proc.output()
-  const output = decoder.decode(output_buffer)
-  // await proc.stdout.close()
-  // await proc.close()
-  if (result.success) {
-    return output
-  } else {
-    throw new CommandError(`Command "${cmd.join(' ')}" failed.\n\n${output}`)
+  const proc = Deno.run({ cmd, stdout: 'piped', stderr: 'piped' })
+  try {
+    const result = await proc.status()
+    const output_buffer = await proc.output()
+    const output = decoder.decode(output_buffer)
+    if (result.success) {
+      return output
+    } else {
+      const stderr = decoder.decode(await proc.stderrOutput())
+      throw new CommandError(`Command "${cmd.join(' ')}" failed.\n\n${output}\n$${stderr}`)
+    }
+  } catch (e) {
+
+  } finally {
+    proc.stderr.close()
+    proc.close()
   }
 }
 
