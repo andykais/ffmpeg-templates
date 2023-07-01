@@ -61,9 +61,10 @@ abstract class FfmpegBuilderBase {
 
   public clip_count() { return this.clip_data.length }
 
-  public background_cmd(background_width: number, background_height: number, total_duration: number) {
+  public background_cmd(background_width: number, background_height: number, total_duration: number, background_color?: string) {
+    background_color ??= 'black'
     const link = '[base]'
-    const filter_input = `color=s=${background_width}x${background_height}:color=black:duration=${total_duration}`
+    const filter_input = `color=s=${background_width}x${background_height}:color=${background_color}:duration=${total_duration}`
     this.complex_filter_inputs.push(`${filter_input}${link}`)
     this.last_link = link
   }
@@ -361,7 +362,7 @@ async function render(context: Context, ffmpeg_builder: FfmpegBuilderBase) {
   const {total_duration, timeline} = compute_timeline(context)
 
   // TODO can we reuse a clip_builder here?
-  ffmpeg_builder.background_cmd(background_size.width, background_size.height, total_duration)
+  ffmpeg_builder.background_cmd(background_size.width, background_size.height, total_duration, context.template.size.background_color)
 
   for (const timeline_clip of timeline) {
     const clip = context.get_clip(timeline_clip.clip_id)

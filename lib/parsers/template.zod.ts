@@ -125,7 +125,8 @@ const TimelineClip: z.ZodSchema<TimelineClipParsed, z.ZodTypeDef, t.TimelineClip
 }))
 
 const Template = z.object({
-  size: Size.default({}),
+  // TODO is this a shared reference?
+  size: Size.merge(z.object({ background_color: Color.optional() })).default({}),
   clips: MediaClip
     .array()
     .min(1)

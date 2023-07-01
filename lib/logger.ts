@@ -27,7 +27,7 @@ class Logger {
       return
     }
     this.writing_progress_bar = true
-    const console_width = await Deno.consoleSize(Deno.stdout.rid).columns
+    const console_width = await Deno.consoleSize().columns
     // const unicode_bar = '\u2588'
     const unicode_bar = '#'
     const execution_time_seconds = (performance.now() - execution_start_time) / 1000

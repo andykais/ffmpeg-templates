@@ -98,6 +98,27 @@ async function create_text_image(
 
   const lines_metrics = paragraph.getLineMetrics()
   const border_style: 'contour' | 'block' = 'contour'
+
+  // Welp. This works, but strokeText has different letter spacing than the paragrpah api.
+  // What that means is in reality, it looks like shit for most fonts.
+  // I opened an issue here https://bugs.chromium.org/p/skia/issues/detail?id=12954
+  if (font.outline_size) {
+    if (font_buffer) {
+      canvas.loadFont(font_buffer, { family: 'custom_font' })
+      ctx.font = `${font.size}px custom_font`
+    } else {
+      ctx.font = `${font.size}px `
+    }
+    for (const line_metrics of lines_metrics) {
+      const line_text = text_clip.text.slice(line_metrics.startIndex, line_metrics.endIndex)
+      ctx.lineWidth = font.outline_size
+      ctx.strokeStyle = font.outline_color
+      const x = line_metrics.left + padding.left
+      const y = line_metrics.baseline
+      ctx.strokeText(line_text, x, y, line_metrics.width + padding_horizontal)
+    }
+  }
+
   if (background_color) {
 
     let y = 0
@@ -134,25 +155,6 @@ async function create_text_image(
   }
   ;(ctx.canvas as any).drawParagraph(metrics.paragraph, padding.left, padding.top)
 
-  // Welp. This works, but strokeText has different letter spacing than the paragrpah api.
-  // What that means is in reality, it looks like shit for most fonts.
-  // I opened an issue here https://bugs.chromium.org/p/skia/issues/detail?id=12954
-  if (font.outline_size) {
-    if (font_buffer) {
-      canvas.loadFont(font_buffer, { family: 'custom_font' })
-      ctx.font = `${font.size}px custom_font`
-    } else {
-      ctx.font = `${font.size}px `
-    }
-    for (const line_metrics of lines_metrics) {
-      const line_text = text_clip.text.slice(line_metrics.startIndex, line_metrics.endIndex)
-      ctx.lineWidth = font.outline_size
-      ctx.strokeStyle = font.outline_color
-      const x = line_metrics.left + padding.left
-      const y = line_metrics.baseline
-      ctx.strokeText(line_text, x, y, line_metrics.width + padding_horizontal)
-    }
-  }
   /*
   // DEBUG_START
   // ctx.fillStyle = 'gray'

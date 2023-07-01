@@ -261,7 +261,7 @@ export interface Template {
   /**
    * Size of the output clip. defaults to { width: '100%', height: '100%', relative_to: 'CLIP_0' }
    */
-  size?: Size
+  size?: Size & { background_color?: Color }
 
   /**
    * A list of clips that are available to the timeline

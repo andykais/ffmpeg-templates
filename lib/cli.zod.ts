@@ -32,24 +32,54 @@ function parse_cli_args(deno_args: string[]) {
   }
 }
 
+function unflatten(data_structure: Record<string, any>) {
+  for (const [key, value] of Object.entries(data_structure)) {
+    const is_dot_notation_key = key.includes('.')
+    const value_is_object = typeof value === 'object'
+
+    if (is_dot_notation_key) {
+      const [parent, ...children] = key.split('.')
+      if (children.length) {
+        data_structure[parent] = data_structure[parent] ?? {}
+        data_structure[parent][children.join('.')] = value
+        unflatten(data_structure[parent])
+      } else {
+        throw new Error('unexpected code path')
+      }
+      delete data_structure[key]
+    } else if (value_is_object){
+      unflatten(data_structure[key])
+    }
+  }
+
+  return data_structure
+}
+
 
 async function read_template(template_filepath: string): Promise<inputs.Template> {
   const decoder = new TextDecoder()
   const file_contents = decoder.decode(await Deno.readFile(template_filepath))
   let error_messages = []
-  try {
-    return yaml.parse(file_contents) as any
-  } catch (e) {
-    if (e instanceof SyntaxError || e instanceof YAMLError) error_messages.push(e.toString())
-    else throw e
-  }
-  try {
-    return JSON.parse(file_contents)
-  } catch (e) {
-    if (e instanceof SyntaxError) error_messages.push(e.toString())
-    else throw e
-  }
-  throw new errors.InputError(`template ${template_filepath} is not valid JSON or YAML\n${error_messages.join('\n')}`)
+  const structured_data_template = (() => {
+    try {
+      return yaml.parse(file_contents) as any
+    } catch (e) {
+      if (e instanceof SyntaxError || e instanceof YAMLError) error_messages.push(e.toString())
+      else throw e
+    }
+    try {
+      return JSON.parse(file_contents)
+    } catch (e) {
+      if (e instanceof SyntaxError) error_messages.push(e.toString())
+      else throw e
+    }
+    throw new errors.InputError(`template ${template_filepath} is not valid JSON or YAML\n${error_messages.join('\n')}`)
+  })();
+
+  // unflatten any dot string keys
+  unflatten(structured_data_template)
+
+  return structured_data_template
 }
 
 
@@ -58,6 +88,10 @@ async function try_render_video(instance: InstanceContext, template_filepath: st
   try {
     instance.logger.info(`Reading template file ${template_filepath}`)
     const template_input = await read_template(template_filepath)
+
+    console.log(instance.output_files.rendered_template)
+    await Deno.writeTextFile(instance.output_files.rendered_template, JSON.stringify(template_input))
+
     const result = sample_frame
       ? await render_sample_frame(instance, template_input, context_options)
       : await render_video(instance, template_input, context_options)

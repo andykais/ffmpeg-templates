@@ -23,6 +23,7 @@ class InstanceContext {
   public clip_info_map: ClipInfoMap
   public output_folder: string
   public output_files: {
+    rendered_template: string
     ffmpeg_cmd: string
     preview: string
     video: string
@@ -39,6 +40,7 @@ class InstanceContext {
     this.ffmpeg_log_cmd = options.ffmpeg_log_cmd
     this.output_folder = options.output_folder
     this.output_files = {
+      rendered_template: path.join(options.output_folder, 'rendered_template.json'),
       ffmpeg_cmd: path.join(options.output_folder, 'ffmpeg.sh'),
       preview: path.join(options.output_folder, 'preview.jpg'),
       video: path.join(options.output_folder, 'output.mp4'),
