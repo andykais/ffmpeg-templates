@@ -1,6 +1,6 @@
 import * as path from 'https://deno.land/std@0.91.0/path/mod.ts'
 import * as fs from 'https://deno.land/std@0.91.0/fs/mod.ts'
-import ffmpeg_templates,  from '../lib/cli.zod.ts'
+import ffmpeg_templates  from '../lib/cli.zod.ts'
 import { render_sample_frame } from '../lib/mod.zod.ts'
 import { type Template } from '../lib/template_input.zod.ts'
 import { createHash } from 'https://deno.land/std@0.91.0/hash/mod.ts'
@@ -25,16 +25,21 @@ async function assert_file_md5(path: string, md5checksum: string) {
 }
 
 
-function test(test_name: string, fn: () => Promise<void>, options: {skip?: boolean; only?: boolean} = {}) {
+interface TestContext {
+  test_name: string
+}
+type TestFunction = (t: TestContext) => Promise<void>
+function test(test_name: string, fn: TestFunction, options: {skip?: boolean; only?: boolean} = {}) {
+  const t = { test_name }
   Deno.test({
     name: test_name,
-    fn,
+    fn: () => fn(t),
     ignore: options.skip,
     ...options,
   })
 }
-test.skip = (test_name: string, fn: () => Promise<void>) => test(test_name, fn, {skip: true})
-test.only = (test_name: string, fn: () => Promise<void>) => test(test_name, fn, {only: true})
+test.skip = (test_name: string, fn: TestFunction) => test(test_name, fn, {skip: true})
+test.only = (test_name: string, fn: TestFunction) => test(test_name, fn, {only: true})
 
 // NOTE ffprobe info map cache is shared between tests
 
@@ -71,7 +76,7 @@ test('dot notation template', async () => {
 })
 
 test('size.background_color', async () => {
-  const template: Template = {
+  const template = {
     size: { background_color: 'red' },
     clips: [
       {
@@ -90,7 +95,7 @@ test('size.background_color', async () => {
 })
 
 test('captions.[].font.outline_style', async () => {
-  const template: Template = {
+  const template = {
     size: { background_color: 'red' },
     clips: [
       {
@@ -106,6 +111,48 @@ test('captions.[].font.outline_style', async () => {
   await Deno.writeTextFile(template_filepath, JSON.stringify(template))
   await ffmpeg_templates(template_filepath, '--debug', '--quiet', '--preview')
   const rendered_template = JSON.parse(await Deno.readTextFile('ffmpeg-templates-projects/size.background_color/rendered_template.json'))
+})
+
+test('preview default clip duration', async t => {
+  const template = {
+    size: { background_color: 'blue' },
+    clips: [
+      {
+        file: './assets/1636302951890.jpg',
+      },
+      {
+        file: './assets/Pexels Videos 2048452.mp4',
+        // 'layout.width': '75%',
+        'layout.height': '50%',
+        'layout.x': 'center',
+        'layout.y': 'center',
+        'crop.width': '600px',
+        'crop.height': '600px',
+      }
+    ],
+    preview: '5'
+  }
+  const template_filepath = `test/resources/${t.test_name}.yml`
+  await Deno.writeTextFile(template_filepath, JSON.stringify(template))
+  await ffmpeg_templates(template_filepath, '--debug', '--quiet', '--preview')
+  const rendered_template = JSON.parse(await Deno.readTextFile(`ffmpeg-templates-projects/${t.test_name}/rendered_template.json`))
+})
+
+test('clips.[].chromakey', async (t) => {
+  const template = {
+    size: { background_color: 'blue' },
+    clips: [
+      {
+        file: './assets/century-leaf-falling-autumn-maple-leaves-falling-maple-autumn-leaves-falling-autumn-leaves-falling-against-black-background-free-video.mp4',
+        'trim.start': '3',
+        'chromakey': 'black',
+      }
+    ]
+  }
+  const template_filepath = `test/resources/${t.test_name}.yml`
+  await Deno.writeTextFile(template_filepath, JSON.stringify(template))
+  await ffmpeg_templates(template_filepath, '--debug', '--quiet', '--preview')
+  const rendered_template = JSON.parse(await Deno.readTextFile(`ffmpeg-templates-projects/${t.test_name}/rendered_template.json`))
 })
 
 test('zoompan', async () => {

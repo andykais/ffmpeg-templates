@@ -228,6 +228,9 @@ export interface MediaClip extends ClipBase {
 
   /** File path to the clip. If it is a relative path, it will be relative to the location of the template file */
   file: string
+
+  /** Videos can be made transparent by telling ffmpeg which color to make transparent. Often called a 'chroma key' */
+  chromakey?: Color
 }
 
 
@@ -256,12 +259,15 @@ export interface TimelineClip {
   next?: TimelineClip[]
 }
 
+interface BackgroundSize extends Size {
+  background_color?: Color
+}
 
 export interface Template {
   /**
    * Size of the output clip. defaults to { width: '100%', height: '100%', relative_to: 'CLIP_0' }
    */
-  size?: Size & { background_color?: Color }
+  size?: BackgroundSize
 
   /**
    * A list of clips that are available to the timeline

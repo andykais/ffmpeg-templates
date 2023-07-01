@@ -1,5 +1,5 @@
 import * as path from 'https://deno.land/std@0.91.0/path/mod.ts'
-import { z } from 'https://deno.land/x/zod@v3.9.0/mod.ts'
+import { z } from 'https://deno.land/x/zod@v3.21.4/mod.ts'
 import * as t from '../template_input.zod.ts'
 import * as errors from '../errors.ts'
 import {exactly} from 'http://esm.sh/@detachhead/ts-helpers@9.0.0-9b4a478c3a63affa1f7f29aeabc2e5f76583ddfc/dist/utilityFunctions/misc'
@@ -78,6 +78,7 @@ const ClipBase = z.object({
 const MediaClip = ClipBase.extend({
   file: z.string(),
   volume: Percentage.default('100%'),
+  chromakey: Color.optional(),
 }).strict().transform(val => ({ ...val, type: 'media' as const }))
 
 const CssNumber = z.union([
@@ -126,6 +127,8 @@ const TimelineClip: z.ZodSchema<TimelineClipParsed, z.ZodTypeDef, t.TimelineClip
 
 const Template = z.object({
   // TODO is this a shared reference?
+  // size: z.mer([Size, z.object({ background_color: Color.optional() })]).default({}),
+  // Size.and(z.object({ background_color: Color.optional() })).default({}),
   size: Size.merge(z.object({ background_color: Color.optional() })).default({}),
   clips: MediaClip
     .array()
