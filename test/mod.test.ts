@@ -6,15 +6,15 @@ import { test } from './tools/test.ts'
 
 test('width scaling', async t => {
   const template = {
-    clips: [
-      {
+    clips: {
+      CLIP_0: {
         source: path.join(t.assets_folder, 'Pexels Videos 2048452.mp4')
       },
-      {
+      CLIP_1: {
         source: path.join(t.assets_folder, 'Video Of People Waiting For A Taxi On A Rainy Night.mp4'),
         ['layout.width']: '100%',
       }
-    ]
+    }
   }
 
   const { render_data } = await render_video(template, {cwd: Deno.cwd(), output_folder: t.artifacts_folder })
@@ -30,15 +30,15 @@ test('width scaling', async t => {
 
 test('render image with zero duration', async t => {
   const template = {
-    clips: [
-      {
+    clips: {
+      CLIP_0: {
         source: path.join(t.assets_folder, '1636302951890.jpg'),
       },
-      {
+      CLIP_1: {
         source: path.join(t.assets_folder, 'github_icon.png'),
         layout: { width: '25%', x: 'center' as const, y: 'center' as const }
       }
-    ]
+    }
   }
   const { render_data, output } = await render_image(template, {cwd: Deno.cwd(), output_folder: t.artifacts_folder, ffmpeg_log_cmd: true })
   const rendered_image_data = await Deno.readFile(output.current)
@@ -48,17 +48,17 @@ test('render image with zero duration', async t => {
 
 test('timeline all variable length clips', async t => {
   const template = {
-    clips: [
-      {
+    clips: {
+      CLIP_0: {
         source: path.join(t.assets_folder, 'Pexels Videos 2048452.mp4'),
         trim: { variable_length: 'stop' },
       },
-      {
+      CLIP_1: {
         source: path.join(t.assets_folder, 'Video Of People Waiting For A Taxi On A Rainy Night.mp4'),
         layout: { width: '50%', x: 'center' as const, y: 'center' as const },
         trim: { variable_length: 'stop' },
       }
-    ]
+    }
   }
   const { render_data, output } = await render_video(template, {cwd: Deno.cwd(), output_folder: t.artifacts_folder, ffmpeg_log_cmd: true })
   const { CLIP_0, CLIP_1 } = render_data.clips
@@ -69,17 +69,17 @@ test('timeline all variable length clips', async t => {
 
 test('timeline one variable length clip', async t => {
   const template = {
-    clips: [
-      {
+    clips: {
+      CLIP_0: {
         source: path.join(t.assets_folder, 'Pexels Videos 2048452.mp4'),
         duration: '00:05',
       },
-      {
+      CLIP_1: {
         source: path.join(t.assets_folder, 'Video Of People Waiting For A Taxi On A Rainy Night.mp4'),
         layout: { width: '50%', x: 'center' as const, y: 'center' as const },
         trim: { variable_length: 'stop' },
       }
-    ]
+    }
   }
   const { render_data, output } = await render_video(template, {cwd: Deno.cwd(), output_folder: t.artifacts_folder, ffmpeg_log_cmd: true })
   const { CLIP_0, CLIP_1 } = render_data.clips

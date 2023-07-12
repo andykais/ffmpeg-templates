@@ -129,11 +129,16 @@ const Template = z.object({
   // size: z.mer([Size, z.object({ background_color: Color.optional() })]).default({}),
   // Size.and(z.object({ background_color: Color.optional() })).default({}),
   size: Size.merge(z.object({ background_color: Color.optional() })).default({}),
-  clips: MediaClip
-    .array()
-    .min(1)
-    .transform(clips => clips.map((val, i) => ({ ...val, id: val.id ?? `CLIP_${i}` })))
-    .refine(clips => new Set(clips.map(c => c.id)).size === clips.length, { message: 'No duplicate clip ids allowed.' }),
+
+  clips: z.record(ClipId, MediaClip)
+    .refine(clips => Object.keys(clips).length > 0, { message: 'clips must contain at least one entry' })
+    .transform(clips => {
+      return Object.entries(clips).map(([clip_id, clip], i) => {
+        clip.id = clip_id
+        return clip as MediaClipParsed
+      })
+    }),
+
   captions: TextClip
     .array()
     .transform(clips => clips.map((val, i) => ({ ...val, id: val.id ?? `TEXT_${i}` })))
@@ -199,8 +204,8 @@ function parse_template(template_input: z.input<typeof Template> | unknown): z.i
 }
 
 export { parse_template }
+export type MediaClipParsed = z.infer<typeof MediaClip> & { id: string }
 export type TemplateParsed = z.infer<typeof Template>
-export type MediaClipParsed = TemplateParsed['clips'][0]
 export type TextClipParsed = TemplateParsed['captions'][0]
 export type SizeParsed = TemplateParsed['size']
 export type LayoutParsed = TemplateParsed['clips'][0]['layout']
