@@ -4,6 +4,7 @@ import { relative_path } from '../util.ts'
 import type * as inputs from '../template_input.zod.ts'
 import type * as parsed from '../parsers/template.zod.ts'
 import type { TimelineClip } from '../timeline.zod.ts'
+import type { ComputedGeometry } from '../geometry.zod.ts'
 import type { ClipInfo } from '../probe.zod.ts'
 
 import { ClipBuilderBase } from './clip_base.ts'
@@ -20,6 +21,12 @@ export interface ClipBuilderData {
   audio_input_filters: string[]
   overlay_filter: string
   probe_info: ClipInfo
+  geometry: ComputedGeometry
+}
+
+interface FfmpegInstructions {
+  total_duration: number | undefined
+  clips: Record<string, ClipBuilderData>
 }
 
 export abstract class FfmpegBuilderBase {
@@ -30,7 +37,8 @@ export abstract class FfmpegBuilderBase {
   private last_link: string | undefined = undefined
   private verbosity_flag = 'error'
   private input_index = 0
-  private clip_data: object[] = []
+  private clip_data: ClipBuilderData[] = []
+  private total_duration: number | undefined = undefined
 
   private output_framerate: undefined | number = undefined
 
@@ -44,17 +52,33 @@ export abstract class FfmpegBuilderBase {
 
   public abstract clip_builder(clip: inputs.MediaClip, info: ClipInfo): ClipBuilderBase
 
+  public serialize() {
+    return {
+      total_duration: this.total_duration,
+      clips: this.clip_data.reduce((record, clip) => {
+        record[clip.id] = clip
+        return record
+      }, {} as Record<string, ClipBuilderData>)
+    }
+  }
+
   public constructor(protected context: Context) {
     this.verbosity_flag = this.context.ffmpeg_log_cmd ? 'info' : 'error'
   }
 
   public clip_count() { return this.clip_data.length }
 
-  public background_cmd(background_width: number, background_height: number, total_duration: number, background_color?: string) {
+  public background_cmd(background_width: number, background_height: number, total_duration?: number, background_color?: string) {
     background_color ??= 'black'
     const link = '[base]'
-    const filter_input = `color=s=${background_width}x${background_height}:color=${background_color}:duration=${total_duration}`
-    this.complex_filter_inputs.push(`${filter_input}${link}`)
+    const filter_inputs = [
+      `color=s=${background_width}x${background_height}`,
+      `color=${background_color}`,
+    ]
+    this.total_duration = total_duration
+    if (total_duration !== undefined) filter_inputs.push(`duration=${total_duration}`)
+    // const filter_input = `color=s=${background_width}x${background_height}:color=${background_color}:duration=${total_duration}`
+    this.complex_filter_inputs.push(`${filter_inputs.join(':')}${link}`)
     this.last_link = link
   }
 

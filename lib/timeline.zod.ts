@@ -88,7 +88,7 @@ function build_tree(
       // basically skip the trim_sjart if duration is explicit
       clip_duration = parse_duration(context, clip.duration)
     }
-    console.log(clip.id, { trim_start, clip_duration })
+    // console.log(clip.id, { trim_start, clip_duration })
     clip_end_at += clip_duration
 
     if (clip_duration < 0) throw new errors.InputError(`Invalid trim on clip ${clip.id}. Clip is not long enough.`)
@@ -124,7 +124,7 @@ function build_tree(
     }
     if (clip_duration < 0) throw new errors.InputError(`Invalid trim on clip ${clip.id}. Clip is not long enough`)
 
-    console.log(clip.id, { trim_start, clip_duration })
+    // console.log(clip.id, { trim_start, clip_duration })
     timeline_tree.start_at = clip_start_at
     clip_end_at = clip_start_at + clip_duration
     // console.log(`node ${clip.id} duration:`, clip_duration)
@@ -173,33 +173,31 @@ function build_tree(
   return timeline_tree
 }
 
-function calculate_min_duration(timeline_tree: TimelineTree) {
-  // let node_duration = 0
-  let node_duration = timeline_tree.start_at
-  if (timeline_tree.node !== undefined) {
-    // skip these for now
-    // TODO support all clips having variable_length
-    if (timeline_tree.node.variable_length === undefined) {
-     node_duration += timeline_tree.node.duration
+function calculate_total_duration(timeline_tree: TimelineTree, ignore_variable_length = false) {
+  let total_duration = timeline_tree.start_at
+  if (timeline_tree.node) {
+    if (ignore_variable_length || !timeline_tree.node.variable_length) {
+      total_duration += timeline_tree.node.duration
     }
   }
-  // let max_total_duration = timeline_tree.start_at
-  // let min_total_duration = timeline_tree.start_at
 
-  const branch_durations: number[] = [0]
-  for (const branch of timeline_tree.branches) {
-    const total_duration = calculate_min_duration(branch)
-    // console.log('min duration for', timeline_tree.node?.clip_id, 'is', total_duration)
-    branch_durations.push(total_duration - node_duration)
+  const all_variable_length = timeline_tree.branches.every(branch => branch.node?.variable_length)
+  const branch_durations = timeline_tree.branches.map(branch => calculate_total_duration(branch, all_variable_length))
+
+  if (branch_durations.length === 0) {
+    return total_duration
   }
 
-  const max_branch_duration = Math.max(...branch_durations)
-  const total_duration = max_branch_duration + node_duration
-  // console.log('below', timeline_tree.node?.clip_id, 'starting at', timeline_tree.start_at, 'w/ duration', timeline_tree.node?.duration, 'durations:', branch_durations, 'total', total_duration)
+  if (all_variable_length) {
+    total_duration += Math.min(...branch_durations)
+  } else {
+    total_duration += Math.max(...branch_durations)
+  }
+
   return total_duration
 }
 
-function calculate_timeline_clips(timeline_tree: TimelineTree, total_duration: number): TimelineClip[] {
+function calculate_timeline_clips(timeline_tree: TimelineTree, total_duration: number, depth = 0): TimelineClip[] {
   const timeline_clips = []
 
   if (timeline_tree.node) {
@@ -210,16 +208,17 @@ function calculate_timeline_clips(timeline_tree: TimelineTree, total_duration: n
     if (node.variable_length) {
       switch(node.variable_length) {
         case 'start': {
-          console.log('what do?')
-          const min_duration = Math.max(0, ...timeline_tree.branches.map(calculate_min_duration))
-          const possible_duration = total_duration - (timeline_tree.start_at + min_duration)
-          const old_duration = duration
-          duration = Math.min(possible_duration, node.duration)
-          trim_start += (old_duration - duration)
+          throw new Error('unimplemented')
+          // const min_duration = Math.max(0, ...timeline_tree.branches.map(calculate_total_duration))
+          // const possible_duration = total_duration - (timeline_tree.start_at + min_duration)
+          // const old_duration = duration
+          // duration = Math.min(possible_duration, node.duration)
+          // trim_start += (old_duration - duration)
           break
         }
         case 'stop': {
-          const min_duration = Math.max(0, ...timeline_tree.branches.map(calculate_min_duration))
+          const min_durations = timeline_tree.branches.map(tree => calculate_total_duration(tree))
+          const min_duration = Math.max(0, ...min_durations)
           const possible_duration = total_duration - (timeline_tree.start_at + min_duration)
           duration = Math.min(possible_duration, node.duration)
           break
@@ -240,7 +239,7 @@ function calculate_timeline_clips(timeline_tree: TimelineTree, total_duration: n
   }
 
   for (const branch of timeline_tree.branches) {
-    timeline_clips.push(...calculate_timeline_clips(branch, total_duration))
+    timeline_clips.push(...calculate_timeline_clips(branch, total_duration, depth + 1))
   }
 
   return timeline_clips
@@ -250,9 +249,10 @@ function compute_timeline(context: Context) {
   const keypoints: Keypoints = {}
   const initial_tree_node = {offset:'0', z_index: 0, next_order: 'parallel', next: context.template.timeline} as const
   const timeline_tree = build_tree(context, initial_tree_node, keypoints, 0)
-  // console.log(timeline_tree.branches)
-  // console.log('timeline_tree', timeline_tree.branches[1].branches)
-  const total_duration = calculate_min_duration(timeline_tree)
+  let total_duration = calculate_total_duration(timeline_tree)
+  // The only time this should happen is when we only have images without durations specified.
+  // In that case, the first second is the only one that matters
+  if (!Number.isFinite(total_duration)) total_duration = 0
 
   const timeline = calculate_timeline_clips(timeline_tree, total_duration)
 
@@ -261,9 +261,9 @@ function compute_timeline(context: Context) {
 
   // console.log()
   // console.log('timeline:')
-  for (const timeline_clip of timeline) {
-    console.log(`  ${timeline_clip.clip_id} start_at:`, timeline_clip.start_at, 'trim_start:', timeline_clip.trim_start, 'duration:', timeline_clip.duration, 'out of duration:', context.clip_info_map.get_or_else(timeline_clip.clip_id).duration)
-  }
+  // for (const timeline_clip of timeline) {
+  //   console.log(`  ${timeline_clip.clip_id} start_at:`, timeline_clip.start_at, 'trim_start:', timeline_clip.trim_start, 'duration:', timeline_clip.duration, 'out of duration:', context.clip_info_map.get_or_else(timeline_clip.clip_id).duration)
+  // }
   return { total_duration, timeline }
 }
 

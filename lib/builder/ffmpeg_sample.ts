@@ -24,6 +24,10 @@ export class FfmpegSampleBuilder extends FfmpegBuilderBase {
   protected input_audio(data: ClipBuilderData, complex_filter_inputs: string[], audio_links: string[], input_index: number) {}
   protected map_audio(complex_filter: string[]) { return [] }
 
+  public background_cmd(background_width: number, background_height: number, total_duration?: number, background_color?: string) {
+    return super.background_cmd(background_width, background_height, undefined, background_color)
+  }
+
   public clip(clip_builder: ClipBuilderBase) {
     const data = clip_builder.build()
     // ignore clips that start after or finish before the preview frame

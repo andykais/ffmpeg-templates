@@ -161,9 +161,35 @@ function pretty_zod_errors(error: z.ZodError) {
   }).join('\n')
 }
 
+function unflatten(data_structure: Record<string, any>) {
+  for (const [key, value] of Object.entries(data_structure)) {
+    const is_dot_notation_key = key.includes('.')
+    const value_is_object = typeof value === 'object'
 
-function parse_template(template_input: z.input<typeof Template>, options: ContextOptions): z.infer<typeof Template> {
+    if (is_dot_notation_key) {
+      const [parent, ...children] = key.split('.')
+      if (children.length) {
+        data_structure[parent] = data_structure[parent] ?? {}
+        data_structure[parent][children.join('.')] = value
+        unflatten(data_structure[parent])
+      } else {
+        throw new Error('unexpected code path')
+      }
+      delete data_structure[key]
+    } else if (value_is_object){
+      unflatten(data_structure[key])
+    }
+  }
+
+  return data_structure
+}
+
+
+function parse_template(template_input: z.input<typeof Template> | unknown, options: ContextOptions): z.infer<typeof Template> {
   try {
+    // unflatten any dot string keys
+    unflatten(template_input as Record<string, any>)
+
     const result = Template.parse(template_input)
     result.clips.map(c => {
       c.file = path.resolve(options.cwd, c.file)

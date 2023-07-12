@@ -12,8 +12,8 @@ import type { Keypoints } from './timeline.zod.ts'
 interface ContextOptions {
   output_folder: string
   cwd: string
-  ffmpeg_log_cmd: boolean
-  log_level: LogLevel
+  ffmpeg_log_cmd?: boolean
+  log_level?: LogLevel
 }
 
 class ClipMap extends AbstractClipMap<MediaClipParsed> {}
@@ -35,9 +35,9 @@ class InstanceContext {
 
 
   public constructor(options: ContextOptions) {
-    this.logger = new Logger(options.log_level)
+    this.logger = new Logger(options.log_level ?? 'error')
     this.cwd = options.cwd
-    this.ffmpeg_log_cmd = options.ffmpeg_log_cmd
+    this.ffmpeg_log_cmd = options.ffmpeg_log_cmd ?? false
     this.output_folder = options.output_folder
     this.output_files = {
       rendered_template: path.join(options.output_folder, 'rendered_template.json'),

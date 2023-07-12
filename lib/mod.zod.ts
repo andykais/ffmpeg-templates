@@ -57,11 +57,9 @@ async function render(context: Context, ffmpeg_builder: FfmpegBuilderBase) {
 
     const clip_builder = ffmpeg_builder.clip_builder(clip, info)
     clip_builder
+      .geometry(geometry)
       .coordinates(geometry.x, geometry.y)
-      .scale(geometry.scale)
       .timing(timeline_clip)
-      .rotate(geometry.rotate)
-      .crop(geometry.crop)
 
 
     if (clip.chromakey) {
@@ -87,6 +85,7 @@ async function render(context: Context, ffmpeg_builder: FfmpegBuilderBase) {
 
   return {
     template: context.template,
+    render_data: ffmpeg_builder.serialize(),
     stats: {
       input_clips_count: clips.length,
       timeline_clips_count: timeline.length,
@@ -96,9 +95,10 @@ async function render(context: Context, ffmpeg_builder: FfmpegBuilderBase) {
   }
 }
 
-async function render_video(instance: InstanceContext, template: inputs.Template, options: ContextOptions) {
+async function render_video(template: inputs.Template | unknown, options: ContextOptions, instance?: InstanceContext) {
+  instance ??= new InstanceContext(options)
   const template_parsed = parse_template(template, options)
-  const context = new Context(instance, template, template_parsed, options)
+  const context = new Context(instance, template as inputs.Template, template_parsed, options)
   const ffmpeg_builder = new FfmpegVideoBuilder(context)
   const result = await render(context, ffmpeg_builder)
   const { stats, output } = result
@@ -107,9 +107,13 @@ async function render_video(instance: InstanceContext, template: inputs.Template
   return result
 }
 
-async function render_sample_frame(instance: InstanceContext, template: inputs.Template, options: ContextOptions) {
+/**
+  * @deprecated
+  */
+async function render_sample_frame(template: inputs.Template | unknown, options: ContextOptions, instance?: InstanceContext) {
+  instance ??= new InstanceContext(options)
   const template_parsed = parse_template(template, options)
-  const context = new Context(instance, template, template_parsed, options)
+  const context = new Context(instance, template as inputs.Template, template_parsed, options)
   const ffmpeg_builder = new FfmpegSampleBuilder(context)
   const result = await render(context, ffmpeg_builder)
   const { stats, output } = result
@@ -122,4 +126,8 @@ async function render_sample_frame(instance: InstanceContext, template: inputs.T
   return result
 }
 
-export { render_video, render_sample_frame }
+async function render_image(template: inputs.Template, options: ContextOptions, instance?: InstanceContext) {
+  return await render_sample_frame(template, options, instance)
+}
+
+export { render_video, render_sample_frame, render_image }

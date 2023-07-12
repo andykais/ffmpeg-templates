@@ -22,6 +22,7 @@ export abstract class ClipBuilderBase {
   }
   private x = 0
   private y = 0
+  private computed_geometry: ComputedGeometry | undefined
   private video_input_filters: string[] = []
   private audio_input_filters: string[] = []
 
@@ -68,6 +69,14 @@ export abstract class ClipBuilderBase {
     // TODO it seems like theres some weird floating point math happening in some cases
     if (atempo !== '') this.audio_input_filters.push(atempo)
     return this
+  }
+
+  public geometry(geometry: ComputedGeometry) {
+    this.computed_geometry = geometry
+    return this
+      .scale(geometry.scale)
+      .rotate(geometry.rotate)
+      .crop(geometry.crop)
   }
 
   public coordinates(x: number, y: number) {
@@ -127,10 +136,11 @@ export abstract class ClipBuilderBase {
       trim_start: this.clip_trim_start,
       duration: this.clip_duration,
       timeline_data: this.timeline_data,
+      geometry: this.computed_geometry!,
       framerate,
       video_input_filters,
       audio_input_filters: this.audio_input_filters,
-      overlay_filter: `overlay=x=${this.x}:y=${this.y}:eof_action=pass`,
+      overlay_filter: `overlay=x=${this.computed_geometry!.x}:y=${this.computed_geometry!.y}:eof_action=pass`,
       probe_info: this.probe_info,
     }
   }

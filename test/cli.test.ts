@@ -3,6 +3,7 @@ import * as fs from 'https://deno.land/std@0.91.0/fs/mod.ts'
 import ffmpeg_templates  from '../lib/cli.zod.ts'
 import { render_sample_frame } from '../lib/mod.zod.ts'
 import { type Template } from '../lib/template_input.zod.ts'
+import { test } from './tools/test.ts'
 import { createHash } from 'https://deno.land/std@0.91.0/hash/mod.ts'
 import { assertEquals } from "https://deno.land/std@0.97.0/testing/asserts.ts";
 
@@ -24,22 +25,6 @@ async function assert_file_md5(path: string, md5checksum: string) {
 
 }
 
-
-interface TestContext {
-  test_name: string
-}
-type TestFunction = (t: TestContext) => Promise<void>
-function test(test_name: string, fn: TestFunction, options: {skip?: boolean; only?: boolean} = {}) {
-  const t = { test_name }
-  Deno.test({
-    name: test_name,
-    fn: () => fn(t),
-    ignore: options.skip,
-    ...options,
-  })
-}
-test.skip = (test_name: string, fn: TestFunction) => test(test_name, fn, {skip: true})
-test.only = (test_name: string, fn: TestFunction) => test(test_name, fn, {only: true})
 
 // NOTE ffprobe info map cache is shared between tests
 
@@ -113,7 +98,7 @@ test('captions.[].font.outline_style', async () => {
   const rendered_template = JSON.parse(await Deno.readTextFile('ffmpeg-templates-projects/size.background_color/rendered_template.json'))
 })
 
-test('preview default clip duration', async t => {
+test.only('preview default clip duration', async t => {
   const template = {
     size: { background_color: 'blue' },
     clips: [
