@@ -97,7 +97,10 @@ async function render(context: Context, ffmpeg_builder: FfmpegBuilderBase) {
 
 async function render_video(template: inputs.Template | unknown, options: ContextOptions, instance?: InstanceContext) {
   instance ??= new InstanceContext(options)
-  const template_parsed = parse_template(template, options)
+  const template_parsed = parse_template(template)
+  template_parsed.clips.map(c => {
+    c.file = path.resolve(options.cwd, c.file)
+  })
   const context = new Context(instance, template as inputs.Template, template_parsed, options)
   const ffmpeg_builder = new FfmpegVideoBuilder(context)
   const result = await render(context, ffmpeg_builder)
@@ -112,7 +115,10 @@ async function render_video(template: inputs.Template | unknown, options: Contex
   */
 async function render_sample_frame(template: inputs.Template | unknown, options: ContextOptions, instance?: InstanceContext) {
   instance ??= new InstanceContext(options)
-  const template_parsed = parse_template(template, options)
+  const template_parsed = parse_template(template)
+  template_parsed.clips.map(c => {
+    c.file = path.resolve(options.cwd, c.file)
+  })
   const context = new Context(instance, template as inputs.Template, template_parsed, options)
   const ffmpeg_builder = new FfmpegSampleBuilder(context)
   const result = await render(context, ffmpeg_builder)

@@ -3,7 +3,6 @@ import { z } from 'https://deno.land/x/zod@v3.21.4/mod.ts'
 import * as t from '../template_input.zod.ts'
 import * as errors from '../errors.ts'
 import {exactly} from 'https://esm.sh/@detachhead/ts-helpers@9.0.0-9b4a478c3a63affa1f7f29aeabc2e5f76583ddfc/dist/utilityFunctions/misc'
-import type { ContextOptions } from '../context.ts'
 
 
 const ClipId = z.string().regex(/[a-zA-Z0-9-_]/).refine(v => v !== 'BACKGROUND', { message: '"BACKGROUND" is a reserved id.'})
@@ -185,15 +184,12 @@ function unflatten(data_structure: Record<string, any>) {
 }
 
 
-function parse_template(template_input: z.input<typeof Template> | unknown, options: ContextOptions): z.infer<typeof Template> {
+function parse_template(template_input: z.input<typeof Template> | unknown): z.infer<typeof Template> {
   try {
     // unflatten any dot string keys
     unflatten(template_input as Record<string, any>)
 
     const result = Template.parse(template_input)
-    result.clips.map(c => {
-      c.file = path.resolve(options.cwd, c.file)
-    })
     return result
   } catch (e) {
     if (e instanceof z.ZodError) throw new errors.InputError(`Invalid template format:\n${pretty_zod_errors(e)}`)
