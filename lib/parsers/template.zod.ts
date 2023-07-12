@@ -2,7 +2,7 @@ import * as path from 'https://deno.land/std@0.91.0/path/mod.ts'
 import { z } from 'https://deno.land/x/zod@v3.21.4/mod.ts'
 import * as t from '../template_input.zod.ts'
 import * as errors from '../errors.ts'
-import {exactly} from 'http://esm.sh/@detachhead/ts-helpers@9.0.0-9b4a478c3a63affa1f7f29aeabc2e5f76583ddfc/dist/utilityFunctions/misc'
+import {exactly} from 'https://esm.sh/@detachhead/ts-helpers@9.0.0-9b4a478c3a63affa1f7f29aeabc2e5f76583ddfc/dist/utilityFunctions/misc'
 import type { ContextOptions } from '../context.ts'
 
 

@@ -1,0 +1,5 @@
+{
+  "tasks": {
+    "test:watch": "deno test --watch --unstable --allow-read --allow-write --allow-run=ffprobe,ffmpeg --allow-env"
+  }
+}
