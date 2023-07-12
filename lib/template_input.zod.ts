@@ -226,8 +226,8 @@ export interface MediaClip extends ClipBase {
   /** Audio volume of the clip, this number is relative to the other clip's volume values. Defaults to 1. */
   volume?: Percentage
 
-  /** File path to the clip. If it is a relative path, it will be relative to the location of the template file */
-  file: string
+  /** Source path to the clip. If it is a relative path, it will be relative to the location of the template file */
+  source: string
 
   /** Videos can be made transparent by telling ffmpeg which color to make transparent. Often called a 'chroma key' */
   chromakey?: Color
@@ -295,9 +295,9 @@ export interface Template {
 
 // const template: Template = {
 //   clips: [
-//     { id: 'VERTICAL', file: 'phone-video.mp4' },
-//     { id: 'SPLIT_L',  file: 'splitscreen.mp4' },
-//     { id: 'SPLIT_R',  file: 'splitscreen.mp4' },
+//     { id: 'VERTICAL', source: 'phone-video.mp4' },
+//     { id: 'SPLIT_L',  source: 'splitscreen.mp4' },
+//     { id: 'SPLIT_R',  source: 'splitscreen.mp4' },
 //   ],
 
 //   timeline: [

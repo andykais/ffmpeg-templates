@@ -131,7 +131,7 @@ export abstract class ClipBuilderBase {
     }
     return {
       id: this.clip.id,
-      file: this.clip.file,
+      source: this.clip.source,
       start_at: this.start_at,
       trim_start: this.clip_trim_start,
       duration: this.clip_duration,

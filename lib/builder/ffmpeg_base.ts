@@ -11,7 +11,7 @@ import { ClipBuilderBase } from './clip_base.ts'
 
 export interface ClipBuilderData {
   id: string
-  file: string
+  source: string
   start_at: number
   trim_start: number
   duration: number
@@ -90,7 +90,7 @@ export abstract class FfmpegBuilderBase {
         this.ffmpeg_inputs.push(
           '-ss', data.trim_start.toString(),
           '-t', data.duration.toString(),
-          '-i', data.file,
+          '-i', data.source,
         )
         break
       case 'image':
@@ -98,7 +98,7 @@ export abstract class FfmpegBuilderBase {
           '-framerate', data.framerate.toString(),
           '-loop', '1',
           '-t', data.duration.toString(),
-          '-i', data.file
+          '-i', data.source
         )
         break
       case 'audio':

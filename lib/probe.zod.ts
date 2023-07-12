@@ -85,35 +85,35 @@ class ClipInfoMap extends AbstractClipMap<ClipInfo> {
 
   public async probe(clip: MediaClipParsed) {
     await this.lazy_init()
-    const { id, file } = clip
-    const stats = await Deno.stat(file)
+    const { id, source } = clip
+    const stats = await Deno.stat(source)
     // some platforms dont set mtime (like windows). We can cross that bridge when we get to it
     if (stats.mtime === null) throw new Error('unexpected null mtime. Cannot infer when files have updated.')
-    if (this.clip_info_cache_map[file]) {
-      const cached_timestamp = this.clip_info_cache_map[file].timestamp
+    if (this.clip_info_cache_map[source]) {
+      const cached_timestamp = this.clip_info_cache_map[source].timestamp
       if (cached_timestamp === stats.mtime.toString()) {
-        this.set(id, this.clip_info_cache_map[file])
+        this.set(id, this.clip_info_cache_map[source])
         return this.get_or_throw(id)
       }
     }
-    if (Object.hasOwn(this.in_flight_info_map, file)) {
-      const result = await this.in_flight_info_map[file]
+    if (Object.hasOwn(this.in_flight_info_map, source)) {
+      const result = await this.in_flight_info_map[source]
       this.set(id, result)
       return result
     }
-    this.in_flight_info_map[file] = probe(this.instance, clip, stats)
-    const clip_info = await this.in_flight_info_map[file]
+    this.in_flight_info_map[source] = probe(this.instance, clip, stats)
+    const clip_info = await this.in_flight_info_map[source]
     this.set(id, clip_info)
-    this.clip_info_cache_map[file] = clip_info
-    delete this.in_flight_info_map[file]
+    this.clip_info_cache_map[source] = clip_info
+    delete this.in_flight_info_map[source]
     await Deno.writeTextFile(this.probe_info_filepath, JSON.stringify(this.clip_info_cache_map))
     return clip_info
   }
 }
 
 async function probe(instance: InstanceContext, clip: MediaClipParsed, stats: Deno.FileInfo): Promise<ClipInfo> {
-  instance.logger.info(`Probing asset ${path.relative(Deno.cwd(), clip.file)}`)
-  const { id, file } = clip
+  instance.logger.info(`Probing asset ${path.relative(Deno.cwd(), clip.source)}`)
+  const { id, source } = clip
   const timestamp = stats.mtime!.toString()
 
   const result = await exec([
@@ -126,13 +126,13 @@ async function probe(instance: InstanceContext, clip: MediaClipParsed, stats: De
     '-show_entries',
     'stream=width,height,display_aspect_ratio,codec_type,codec_name,avg_frame_rate:stream_tags=rotate',
     // 'format=duration',
-    file,
+    source,
   ])
   const info = JSON.parse(result)
   const video_stream = info.streams.find((s: any) => s.codec_type === 'video')
   const audio_stream = info.streams.find((s: any) => s.codec_type === 'audio')
 
-  if (!video_stream) throw new ProbeError(`Input "${file}" has no video stream`)
+  if (!video_stream) throw new ProbeError(`Input "${source}" has no video stream`)
   const has_audio = audio_stream !== undefined
   const rotation_str = video_stream.tags?.rotate ?? video_stream.side_data_list?.find((c:any) => c.rotation)?.rotation ?? '0'
   let rotation = parseInt(rotation_str)
@@ -150,7 +150,7 @@ async function probe(instance: InstanceContext, clip: MediaClipParsed, stats: De
     const framerate = 60
     return {
       type: 'image' as const,
-      filepath: file,
+      filepath: source,
       id,
       width,
       height,
@@ -167,7 +167,7 @@ async function probe(instance: InstanceContext, clip: MediaClipParsed, stats: De
     // 2. ffprobe packets: https://stackoverflow.com/a/33346572/3795137 but this is a ton of output, so were using ffmpeg
     // I picked #2 because #1 is very slow to complete, it has to iterate the whole video, often at regular playback speed
     let packet_str_buffer: string[] = []
-    const out = await exec(['ffprobe', '-v', 'error', '-show_packets', '-i', file], (line) => {
+    const out = await exec(['ffprobe', '-v', 'error', '-show_packets', '-i', source], (line) => {
       if (line === '[PACKET]') packet_str_buffer = []
       packet_str_buffer.push(line)
     })
@@ -175,7 +175,7 @@ async function probe(instance: InstanceContext, clip: MediaClipParsed, stats: De
     const duration = parseFloat(packet.dts_time)
     return {
       type: 'video' as const,
-      filepath: file,
+      filepath: source,
       id,
       width,
       height,

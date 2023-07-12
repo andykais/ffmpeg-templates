@@ -8,10 +8,10 @@ test('width scaling', async t => {
   const template = {
     clips: [
       {
-        file: path.join(t.assets_folder, 'Pexels Videos 2048452.mp4')
+        source: path.join(t.assets_folder, 'Pexels Videos 2048452.mp4')
       },
       {
-        file: path.join(t.assets_folder, 'Video Of People Waiting For A Taxi On A Rainy Night.mp4'),
+        source: path.join(t.assets_folder, 'Video Of People Waiting For A Taxi On A Rainy Night.mp4'),
         ['layout.width']: '100%',
       }
     ]
@@ -32,10 +32,10 @@ test('render image with zero duration', async t => {
   const template = {
     clips: [
       {
-        file: path.join(t.assets_folder, '1636302951890.jpg'),
+        source: path.join(t.assets_folder, '1636302951890.jpg'),
       },
       {
-        file: path.join(t.assets_folder, 'github_icon.png'),
+        source: path.join(t.assets_folder, 'github_icon.png'),
         layout: { width: '25%', x: 'center' as const, y: 'center' as const }
       }
     ]
@@ -50,11 +50,11 @@ test('timeline all variable length clips', async t => {
   const template = {
     clips: [
       {
-        file: path.join(t.assets_folder, 'Pexels Videos 2048452.mp4'),
+        source: path.join(t.assets_folder, 'Pexels Videos 2048452.mp4'),
         trim: { variable_length: 'stop' },
       },
       {
-        file: path.join(t.assets_folder, 'Video Of People Waiting For A Taxi On A Rainy Night.mp4'),
+        source: path.join(t.assets_folder, 'Video Of People Waiting For A Taxi On A Rainy Night.mp4'),
         layout: { width: '50%', x: 'center' as const, y: 'center' as const },
         trim: { variable_length: 'stop' },
       }
@@ -71,11 +71,11 @@ test('timeline one variable length clip', async t => {
   const template = {
     clips: [
       {
-        file: path.join(t.assets_folder, 'Pexels Videos 2048452.mp4'),
+        source: path.join(t.assets_folder, 'Pexels Videos 2048452.mp4'),
         duration: '00:05',
       },
       {
-        file: path.join(t.assets_folder, 'Video Of People Waiting For A Taxi On A Rainy Night.mp4'),
+        source: path.join(t.assets_folder, 'Video Of People Waiting For A Taxi On A Rainy Night.mp4'),
         layout: { width: '50%', x: 'center' as const, y: 'center' as const },
         trim: { variable_length: 'stop' },
       }

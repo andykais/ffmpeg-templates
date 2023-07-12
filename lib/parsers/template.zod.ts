@@ -75,7 +75,7 @@ const ClipBase = z.object({
 }).strict()
 
 const MediaClip = ClipBase.extend({
-  file: z.string(),
+  source: z.string(),
   volume: Percentage.default('100%'),
   chromakey: Color.optional(),
 }).strict().transform(val => ({ ...val, type: 'media' as const }))
