@@ -39,7 +39,8 @@ async function create_text_image(
   const {width: max_width, height: max_height} = compute_size(context, text_clip.layout)
   // const max_width = parse_unit(text_clip.layout.width ?? '100%', { percentage: (p) => p * size.background_width })
   // const max_height = parse_unit(text_clip.layout.height, { percentage: (p) => p * size.background_height })
-  const text_clip_input = context.template_input.captions?.find((c, i)=> c.id ?? `TEXT_${i}` === text_clip.id)
+  const text_clip_input = Object.entries(context.template.captions)
+    .find(([clip_id, clip], i) => clip_id === text_clip.id)?.[1]
   if (text_clip_input === undefined) throw new Error(`unexpected code path. Input clip ${text_clip.id} does not exist`)
   // TODO canvas width/height should be smarter.
   // [X] width & height should be determined by the actual text size.

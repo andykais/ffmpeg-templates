@@ -277,7 +277,8 @@ export interface Template {
   /**
    * A list of text captions that are available to the timeline
    */
-  captions?: TextClip[]
+  // captions?: TextClip[]
+  captions?: Record<ClipID, TextClip>
 
   /**
    * Specify when clips are played and which should be layered on top of others using this field.

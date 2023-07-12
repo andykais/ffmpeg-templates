@@ -139,10 +139,23 @@ const Template = z.object({
       })
     }),
 
-  captions: TextClip
-    .array()
-    .transform(clips => clips.map((val, i) => ({ ...val, id: val.id ?? `TEXT_${i}` })))
-    .default([]),
+  // captions: TextClip
+  //   .array()
+  //   .transform(clips => clips.map((val, i) => ({ ...val, id: val.id ?? `TEXT_${i}` })))
+  //   .default([]),
+
+  captions: z.record(ClipId, TextClip)
+    // .transform(clips => clips.map((val, i) => ({ ...val, id: val.id ?? `TEXT_${i}` })))
+    // .default({})
+    .transform(clips => {
+      return Object.entries(clips)
+        .map(([clip_id, clip], i) => {
+          clip.id = clip_id
+          return clip as TextClipParsed
+        })
+    })
+    .default({}),
+
   timeline: TimelineClip.array().min(1).optional(),
   preview: Timestamp.default('0'),
 }).transform(val => ({
@@ -205,8 +218,8 @@ function parse_template(template_input: z.input<typeof Template> | unknown): z.i
 
 export { parse_template }
 export type MediaClipParsed = z.infer<typeof MediaClip> & { id: string }
+export type TextClipParsed = z.infer<typeof TextClip> & { id: string }
 export type TemplateParsed = z.infer<typeof Template>
-export type TextClipParsed = TemplateParsed['captions'][0]
 export type SizeParsed = TemplateParsed['size']
 export type LayoutParsed = TemplateParsed['clips'][0]['layout']
 export type TimelineParsed = TemplateParsed['timeline']
