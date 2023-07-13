@@ -206,6 +206,7 @@ function parse_template(template_input: z.input<typeof Template> | unknown): z.i
   try {
     // unflatten any dot string keys
     unflatten(template_input as Record<string, any>)
+    console.log(template_input)
 
     const result = Template.parse(template_input)
     return result
