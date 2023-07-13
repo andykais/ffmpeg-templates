@@ -2,6 +2,7 @@ import * as path from 'https://deno.land/std@0.91.0/path/mod.ts'
 import { z } from 'https://deno.land/x/zod@v3.21.4/mod.ts'
 import * as t from '../template_input.zod.ts'
 import * as errors from '../errors.ts'
+import { parse_unit } from './unit.ts'
 import {exactly} from 'https://esm.sh/@detachhead/ts-helpers@9.0.0-9b4a478c3a63affa1f7f29aeabc2e5f76583ddfc/dist/utilityFunctions/misc'
 
 
@@ -22,9 +23,21 @@ const KeypointReference = z.object({
   offset: Timestamp.optional(),
 })
 
+const DetailedSizeUnit = z.object({
+  min: z.union([Pixels, Percentage]).optional(),
+  max: z.union([Pixels, Percentage]).optional(),
+  value: z.union([Pixels, Percentage]).optional(),
+})
+  .refine(unit => Object.keys(unit).length > 0, { message: 'size unit must define at least one field (min, max, value)'})
+  .refine(unit => {
+    const max = parse_unit(unit.max, { undefined: () => Infinity })
+    const min = parse_unit(unit.min, { undefined: () => 0 })
+    return max > min
+  }, { message: 'size unit min must be smaller than size unit max' })
+const SizeUnit = z.union([Pixels, Percentage, DetailedSizeUnit]).optional()
 const Size = z.object({
-  width: z.union([Pixels, Percentage]).optional(),
-  height: z.union([Pixels, Percentage]).optional(),
+  width: SizeUnit.optional(),
+  height: SizeUnit.optional(),
   relative_to: ClipId.optional(),
 }).strict()
 
@@ -168,7 +181,9 @@ const Template = z.object({
 
 // this is a typescript exacty type assertion. It does nothing at runtime
 // it ensures that our zod validator and our typescript spec stay in sync
-exactly({} as z.input<typeof Template>, {} as t.Template)
+type TemplateInput = t.Template
+type ZodTemplateInput = z.input<typeof Template>
+exactly({} as ZodTemplateInput, {} as TemplateInput)
 
 
 function pretty_zod_errors(error: z.ZodError) {

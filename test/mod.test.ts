@@ -41,9 +41,7 @@ test('render image with zero duration', async t => {
     }
   }
   const { render_data, output } = await render_image(template, {cwd: Deno.cwd(), output_folder: t.artifacts_folder, ffmpeg_log_cmd: true })
-  const rendered_image_data = await Deno.readFile(output.current)
-  const fixture_image_data = await Deno.readFile(path.join(t.fixtures_folder, 'preview.jpg'))
-  t.assert.equals(fixture_image_data, rendered_image_data)
+  await t.assert.file(output.current, path.join(t.fixtures_folder, 'preview.jpg'))
 })
 
 test('timeline all variable length clips', async t => {
@@ -105,5 +103,40 @@ test('dot notation only caption', async t => {
     'captions.CENTER_TEXT.layout.y': 'center',
   }
   const { render_data, output } = await render_image(template, {cwd: Deno.cwd(), output_folder: t.artifacts_folder, ffmpeg_log_cmd: true })
-  console.log(output.current)
+  await t.assert.file(output.current, path.join(t.fixtures_folder, 'preview.jpg'))
+})
+
+test('layout max width & height (constrain)', async t => {
+  const template = {
+    size: { width: '400px', height: '400px' },
+    clips: {
+      background_image: {
+        source: path.join(t.assets_folder, '1636302951890.jpg'),
+        'layout.width.max': '100%',
+        'layout.height.max': '100%',
+      }
+    },
+  }
+  const { render_data, output } = await render_image(template, {cwd: Deno.cwd(), output_folder: t.artifacts_folder, ffmpeg_log_cmd: true })
+  const { background_image } = render_data.clips
+  t.assert.equals(background_image.geometry.scale.width, 400)
+  t.assert.equals(background_image.geometry.scale.height, 300)
+})
+
+test('layout min width & height (fill)', async t => {
+  const template = {
+    size: { width: '400px', height: '400px' },
+    clips: {
+      background_image: {
+        source: path.join(t.assets_folder, '1636302951890.jpg'),
+        'layout.width.value': '100%',
+        'layout.width.min': '100%',
+        'layout.height.min': '100%',
+      }
+    },
+  }
+  const { render_data, output } = await render_image(template, {cwd: Deno.cwd(), output_folder: t.artifacts_folder, ffmpeg_log_cmd: true })
+  const { background_image } = render_data.clips
+  t.assert.equals(background_image.geometry.scale.width, 533)
+  t.assert.equals(background_image.geometry.scale.height, 400)
 })

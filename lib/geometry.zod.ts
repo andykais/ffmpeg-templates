@@ -2,6 +2,7 @@ import { InputError } from './errors.ts'
 import { parse_unit } from './parsers/unit.ts'
 import { AbstractClipMap } from './util.ts'
 import type { Context } from './context.ts'
+import type { DetailedSizeUnit } from './template_input.zod.ts'
 import type { TemplateParsed, MediaClipParsed, LayoutParsed, SizeParsed } from './parsers/template.zod.ts'
 
 interface ComputedGeometry {
@@ -19,7 +20,7 @@ interface ComputedGeometry {
 class ClipGeometryMap extends AbstractClipMap<ComputedGeometry> {}
 
 function compute_rotated_size(size: { width: number; height: number }, rotation?: number) {
-  if (!rotation) return size
+  if (!rotation) return { width: size.width, height: size.height }
   const radians = (rotation * Math.PI) / 180.0
   const [height, width] = [
     Math.abs(size.width * Math.sin(radians)) + Math.abs(size.height * Math.cos(radians)),
@@ -36,13 +37,25 @@ function compute_background_size(context: Context) {
   const { rotate } = context.get_clip(size.relative_to)
   const relative_to_dimensions = compute_rotated_size(info, rotate)
 
-  const background_width = parse_unit(size.width, {
+  let background_width = parse_unit(size.width, {
     percentage: (p) => Math.floor(p * relative_to_dimensions.width),
-    undefined: ()  => relative_to_dimensions.width
+    undefined: ()  => relative_to_dimensions.width,
+    min: p => {
+      throw new Error('unimplemented')
+    },
+    max: p => {
+      throw new Error('unimplemented')
+    }
   })
   const background_height = parse_unit(size.height, {
     percentage: (p) => Math.floor(p * relative_to_dimensions.height),
-    undefined: ()  => relative_to_dimensions.height
+    undefined: ()  => relative_to_dimensions.height,
+    min: p => {
+      throw new Error('unimplemented')
+    },
+    max: p => {
+      throw new Error('unimplemented')
+    }
   })
   return { width: background_width, height: background_height }
 }
@@ -53,17 +66,67 @@ function compute_size(context: Context, size: SizeParsed, aspect_ratio?: number,
   const relative_to_dimensions = compute_rotated_size(info, info.rotation)
   default_size = default_size ?? {width: info.width, height: info.height}
 
-  const input_width = parse_unit(size.width, {
-    percentage: (p) => Math.floor(p * info.width),
-    undefined: () => null
+  // console.log({info,relative_to_dimensions})
+  let min_width: number | undefined
+  let max_width: number | undefined
+  let input_width = parse_unit(size.width, {
+    percentage: (p) => Math.floor(p * relative_to_dimensions.width),
+    undefined: () => null,
+    min: p => {
+      min_width = p
+      return p
+    },
+    max: p => {
+      max_width = p
+      return p
+    },
   })
+  let min_height: number | undefined
+  let max_height: number | undefined
   const input_height = parse_unit(size.height, {
-    percentage: (p) => Math.floor(p * info.height),
-    undefined: () => null
+    percentage: (p) => Math.floor(p * relative_to_dimensions.height),
+    undefined: () => null,
+    min: p => {
+      min_height = p
+      return p
+    },
+    max: p => {
+      max_height = p
+      return p
+    },
   })
+
   let width = input_width ?? ((input_height && aspect_ratio) ? input_height * aspect_ratio : default_size.width)
   let height = input_height ?? ((input_width && aspect_ratio) ? input_width / aspect_ratio : default_size.height)
   // ffmpeg will round down the scale filter, so we need to round down early to avoid "Invalid too big or non positive size for width '...' or height '...'" errors with crops
+
+  if (max_width && width > max_width) {
+    const scale = width / max_width
+    height /= scale
+    width = max_width
+    // console.log('shrinking by max_width', {width, height, scale})
+  }
+
+  if (max_height && height > max_height) {
+    const scale = height / max_height
+    width /= scale
+    height = max_height
+    // console.log('shrinking by max_height', {width, height, scale})
+  }
+
+  if (min_width && width < min_width) {
+    const scale = width / min_width
+    height /= scale
+    width = min_width
+    // console.log('growing by min_width', {width, height, scale})
+  }
+  if (min_height && height < min_height) {
+    const scale = height / min_height
+    width /= scale
+    height = min_height
+    // console.log('growing by min_height', {width, height, scale})
+  }
+
   ;[width, height] = [width, height].map(Math.floor)
   return { width, height }
 }
@@ -134,7 +197,7 @@ function compute_geometry(
         ? {width, height}
         : context.get_clip_dimensions(clip.crop.relative_to)
 
-      const parse_dimension = (relative_side: number, default_side: number, side?: string) => parse_unit(side, {
+      const parse_dimension = (relative_side: number, default_side: number, side?: string | DetailedSizeUnit) => parse_unit(side, {
         percentage: (p) => Math.floor(p * relative_side),
         undefined: () => default_side
       })

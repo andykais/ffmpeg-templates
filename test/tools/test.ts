@@ -3,8 +3,15 @@ import { path, assert } from './deps.ts'
 
 const TEST_DIR = path.dirname(path.dirname(path.fromFileUrl(import.meta.url)))
 
+async function assert_file_equals(actual_filepath: string, expected_filepath: string) {
+  const actual_file_data = await Deno.readFile(actual_filepath)
+  const expected_file_data = await Deno.readFile(expected_filepath)
+  assert.assertEquals(actual_file_data, expected_file_data)
+}
+
 interface Asserts {
   equals: typeof assert.assertEquals
+  file: typeof assert_file_equals
 }
 
 interface TestContext {
@@ -39,7 +46,8 @@ function test(test_name: string, fn: TestFunction, options: {skip?: boolean; onl
       fixtures_folder,
       assets_folder,
       assert: {
-        equals: assert.assertEquals
+        equals: assert.assertEquals,
+        file: assert_file_equals,
       }
     }
 

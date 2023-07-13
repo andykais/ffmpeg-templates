@@ -50,7 +50,7 @@ export abstract class FfmpegBuilderBase {
 
   protected abstract map_audio(complex_filter: string[]): string[]
 
-  public abstract clip_builder(clip: inputs.MediaClip, info: ClipInfo): ClipBuilderBase
+  public abstract clip_builder(clip: parsed.MediaClipParsed, info: ClipInfo): ClipBuilderBase
 
   public serialize() {
     return {

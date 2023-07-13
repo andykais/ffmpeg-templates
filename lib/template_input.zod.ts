@@ -51,9 +51,16 @@ export interface KeypointReference {
   offset?: Timestamp
 }
 
+export interface DetailedSizeUnit {
+  min?: Pixels | Percentage
+  max?: Pixels | Percentage
+  value?: Pixels | Percentage
+}
+export type SizeUnit = Pixels | Percentage | DetailedSizeUnit
+
 export interface Size {
- width?: Pixels | Percentage
- height?: Pixels | Percentage
+ width?: SizeUnit
+ height?: SizeUnit
  relative_to?: ClipID
 }
 
