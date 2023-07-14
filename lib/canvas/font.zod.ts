@@ -189,7 +189,7 @@ async function create_text_image(
     source: text_image_asset,
     layout: {
       ...text_clip.layout,
-      relative_to: text_clip.id,
+      relative_to: text_clip.layout.relative_to ?? text_clip.id,
     },
     duration: text_clip.duration,
     keypoints: [],
