@@ -72,6 +72,13 @@ export interface Layout extends Size {
   y?: AlignY | { offset?: Percentage | Pixels; align?: AlignY }
 }
 
+export interface Border {
+  /**
+    * Accepts a percentage (0% being a right angle, 100% being full rounded)
+    */
+  radius?: Percentage
+}
+
 export interface ClipBase {
   /** Defaults to CLIP_<index> for media clips and TEXT_<index> for text clips */
   id?: ClipID
@@ -87,6 +94,11 @@ export interface ClipBase {
    * Crop will trim edges of a clip accordingly. Layout alignment will respect the crop
    */
   crop?: Layout
+
+  /**
+    * Border radius
+    */
+  border?: Border
 
   /** Zoom and pan a clip */
   zoompan?: {

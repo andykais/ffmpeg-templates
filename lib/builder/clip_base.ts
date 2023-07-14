@@ -20,8 +20,6 @@ export abstract class ClipBuilderBase {
     trim_start: 0,
     duration: NaN,
   }
-  private x = 0
-  private y = 0
   private computed_geometry: ComputedGeometry | undefined
   private video_input_filters: string[] = []
   private audio_input_filters: string[] = []
@@ -44,6 +42,7 @@ export abstract class ClipBuilderBase {
       // `adelay=${start_at * 1000}:all=1`,
       `volume=${volume}`, // TODO use anullsink for audio_volume === 0 to avoid extra processing
     )
+
   }
 
   protected get_timing_start_at(timeline_data: TimelineClip) {
@@ -77,13 +76,9 @@ export abstract class ClipBuilderBase {
       .scale(geometry.scale)
       .rotate(geometry.rotate)
       .crop(geometry.crop)
+      .border(geometry)
   }
 
-  public coordinates(x: number, y: number) {
-    this.x = x
-    this.y = y
-    return this
-  }
   public chromakey(colorkey: string) {
     this.video_input_filters.push(`colorkey=${colorkey}:0.3:`)
     return this
@@ -91,6 +86,20 @@ export abstract class ClipBuilderBase {
 
   public scale(scale: { width: number; height: number }) {
     this.video_input_filters.push(`scale=${scale.width}:${scale.height}`)
+    return this
+  }
+
+  public border(geometry: ComputedGeometry) {
+    if (this.clip.border?.radius) {
+      const final_width = geometry?.crop?.width ?? geometry.scale.width
+      const radius = parse_unit(this.clip.border.radius, {
+        undefined: () => { throw new Error('unexpected code path') },
+        pixels: () => { throw new Error('unexpected code path') },
+        percentage: p => (final_width / 2) * p,
+      })
+      const transparency = 255
+      this.video_input_filters.push(`format=yuva420p`, `geq=lum='p(X,Y)':a='if(gt(abs(W/2-X),W/2-${radius})*gt(abs(H/2-Y),H/2-${radius}),if(lte(hypot(${radius}-(W/2-abs(W/2-X)),${radius}-(H/2-abs(H/2-Y))),${radius}),${transparency},0),${transparency})'`)
+    }
     return this
   }
 

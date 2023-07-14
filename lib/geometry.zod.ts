@@ -66,7 +66,6 @@ function compute_size(context: Context, size: SizeParsed, aspect_ratio?: number,
   const relative_to_dimensions = compute_rotated_size(info, info.rotation)
   default_size = default_size ?? {width: info.width, height: info.height}
 
-  // console.log({info,relative_to_dimensions})
   let min_width: number | undefined
   let max_width: number | undefined
   let input_width = parse_unit(size.width, {

@@ -19,10 +19,12 @@ async function exec(cmd: string[]) {
       throw new CommandError(`Command "${cmd.join(' ')}" failed.\n\n${output}\n$${stderr}`)
     }
   } catch (e) {
-
+    throw e
   } finally {
-    proc.stderr.close()
     proc.close()
+    try {
+      proc.stderr.close()
+    } catch (e) {}
   }
 }
 

@@ -7,6 +7,7 @@ import {exactly} from 'https://esm.sh/@detachhead/ts-helpers@9.0.0-9b4a478c3a63a
 
 
 const ClipId = z.string().regex(/[a-zA-Z0-9-_]/).refine(v => v !== 'BACKGROUND', { message: '"BACKGROUND" is a reserved id.'})
+const ClipIdReference = z.string().regex(/[a-zA-Z0-9-_]/)
 
 const Pixels = z.string().regex(/\d+px/)
 
@@ -38,7 +39,7 @@ const SizeUnit = z.union([Pixels, Percentage, DetailedSizeUnit]).optional()
 const Size = z.object({
   width: SizeUnit.optional(),
   height: SizeUnit.optional(),
-  relative_to: ClipId.optional(),
+  relative_to: ClipIdReference.optional(),
 }).strict()
 
 const AlignX = z.union([z.literal('left'), z.literal('right'), z.literal('center')])
@@ -57,6 +58,9 @@ const ClipBase = z.object({
   id: ClipId.optional(),
   layout: ClipLayout.default({}),
   crop: ClipLayout.optional(),
+  border: z.object({
+    radius: Percentage.optional(),
+  }).optional(),
   zoompan: z.object({
     keyframe: Timestamp,
     zoom: Percentage.optional(),
@@ -130,7 +134,7 @@ interface TimelineClipParsed extends Required<Omit<t.TimelineClip, 'next' | 'id'
 // note that we dont appear to have type assertion for lazy types.
 // we just have to be certain these types match!
 const TimelineClip: z.ZodSchema<TimelineClipParsed, z.ZodTypeDef, t.TimelineClip> = z.lazy(() => z.object({
-  id: ClipId,
+  id: ClipIdReference,
   offset: z.union([Timestamp, KeypointReference]).default('0'),
   z_index: z.number().default(0),
   next_order: z.union([z.literal('parallel'), z.literal('sequence')]).default('parallel'),

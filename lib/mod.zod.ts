@@ -58,7 +58,6 @@ async function render(context: Context, ffmpeg_builder: FfmpegBuilderBase) {
     const clip_builder = ffmpeg_builder.clip_builder(clip, info)
     clip_builder
       .geometry(geometry)
-      .coordinates(geometry.x, geometry.y)
       .timing(timeline_clip)
 
 

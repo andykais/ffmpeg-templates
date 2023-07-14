@@ -144,6 +144,8 @@ export abstract class FfmpegBuilderBase {
       .map((c) => c.toString())
       .map((c) => (/[ \/]/.test(c) ? `"${c}"` : c))
       .join(' \\\n  ')
+      console.log('wrote', filepath)
+      console.log('includes reverse', cmd_str.includes('reverse'))
     await Deno.writeTextFile(filepath, cmd_str, { mode: 0o777 })
     this.context.logger.info(`Saved ffmpeg command to ${relative_path(filepath)}`)
   }
