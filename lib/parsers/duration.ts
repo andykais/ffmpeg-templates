@@ -3,6 +3,7 @@ import type * as template_parsed from './template.ts'
 
 type Seconds = number
 
+// TODO we evaluate right to left. We need to evaluate left to right! E.g. 3 - 1 - 2 is 0, not 6!
 // TODO add math expressions. These should be valid:
 // "00:00:00,0000"
 // "00:00:00.0000"
@@ -10,7 +11,7 @@ type Seconds = number
 // "00:00:03.0000 - 00:00:01.1 - 00:00:00.5"
 // "00:00:03.0000 + {CLIP_0.trim.start}"
 const duration_var_regex = /\{([a-zA-Z0-9._-]+)\}/
-const parens_regex = /^\(.*?\)/
+const parens_regex = /^\(.*\)/
 function parse_duration(duration_expr: string, template: template_parsed.Template): Seconds {
   try {
     let current_duration_expr = duration_expr.trim()
@@ -44,7 +45,7 @@ function parse_duration(duration_expr: string, template: template_parsed.Templat
             case '+':
               return duration_lhs + parse_duration(expr_rhs.join(' '), template)
             case '-':
-              return duration_lhs - parse_duration(expr_rhs.join(' '), template)
+              return duration_lhs - parse_duration(expr_rhs.join(' '), template) 
             case '/':
               return duration_lhs / parse_duration(expr_rhs.join(' '), template)
             case '*':
@@ -93,4 +94,16 @@ export {
   parse_aspect_ratio,
   parse_ffmpeg_packet,
 }
+
+// const template = {
+//   size: {
+//     width: '',
+//     height: '',
+//     relative_to: ''
+//   },
+//   timeline: {},
+//   preview: '',
+//   clips: []
+// }
+// console.log({ result: parse_duration('2 - (1 - (1))', template) })
 export type { Seconds }

@@ -84,10 +84,9 @@ function parse_template(template_input: template_input.Template, cwd: string): T
   const timeline = template_input.timeline ?? { '00:00:00': clips.map((clip) => [clip.id]) }
 
   const first_media_clip = clips.find(is_media_clip)
-  const is_pixel_unit = { percentage: () => true, pixels: () => false, undefined: () => true }
   const has_non_pixel_unit =
-    parse_unit(template_input.size?.width, is_pixel_unit) &&
-    parse_unit(template_input.size?.height, is_pixel_unit)
+    (template_input.size?.width?.endsWith('%') ?? true)
+    && (template_input.size?.height?.endsWith('%') ?? true)
   const relative_to_clip = clips.find((c) => c.id === template_input.size?.relative_to)
   if (relative_to_clip && !is_media_clip(relative_to_clip)) {
     throw new InputError(`Cannot specify a font clip as a relative size source`)

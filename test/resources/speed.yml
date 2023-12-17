@@ -1,11 +1,15 @@
 clips:
   - file: './assets/Pexels Videos 2048452.mp4'
-    trim: { end: 'fit' }
-    layout: { x: { align: 'right' }, height: '100%' }
-    crop: { right: '50%' }
+    crop:
+      width: 50%
+    trim:
+      variable_length: 'stop'
 
   - file: './assets/Video Of People Waiting For A Taxi On A Rainy Night.mp4'
-    trim: { end: 'fit' }
-    layout: { x: { align: 'left' }, height: '100%' }
     speed: '200%' # despite the speed change, these clips should end at the same time
-    crop: { left: '50%' }
+    layout:
+      x: 'left'
+      height: 100%
+    crop: { width: '50%' }
+    trim:
+      variable_length: 'stop'
