@@ -79,6 +79,9 @@ export interface Border {
   radius?: Percentage
 }
 
+type Transformation =
+  | { flip: 'horizontal' | 'vertical' }
+
 export interface ClipBase {
   /** Defaults to CLIP_<index> for media clips and TEXT_<index> for text clips */
   id?: ClipID
@@ -179,6 +182,8 @@ export interface ClipBase {
      */
     variable_length?: 'start' | 'stop'
   }
+
+  transform?: Transformation[]
 }
 
 /**

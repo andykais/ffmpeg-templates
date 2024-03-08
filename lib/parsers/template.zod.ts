@@ -89,6 +89,8 @@ const ClipBase = z.object({
     variable_length: z.union([z.literal('start'), z.literal('stop')]).optional(),
   }).strict().optional(),
   duration: z.union([Timestamp, KeypointReference]).optional(),
+  // TODO this becomes a z.union once there is more than one option
+  transform: z.object({ flip: z.enum(['horizontal', 'vertical']) }).array().optional(),
 }).strict()
 
 const MediaClip = ClipBase.extend({

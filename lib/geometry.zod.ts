@@ -167,6 +167,7 @@ function compute_geometry(
   clips: MediaClipParsed[]
 ) {
   const clip_geometry_map = new ClipGeometryMap()
+  // console.log(clips)
   for (const clip of clips) {
     const clip_info = context.clip_info_map.get_or_throw(clip.id)
     const { layout, } = clip
@@ -260,7 +261,9 @@ function compute_geometry(
       case 'top':
         break
       case 'bottom':
+        console.log('bottom text?', clip.id, 'before:', y)
         y = relative_to.height - crop_size.height + y
+        console.log('bottom text?', clip.id, 'after:', y)
         break
       case 'center':
         y = relative_to.height / 2 - crop_size.height / 2 + y

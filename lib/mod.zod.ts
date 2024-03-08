@@ -47,6 +47,8 @@ async function render(context: Context, ffmpeg_builder: FfmpegBuilderBase) {
   const geometry_info_map = compute_geometry(context, clips)
   const {total_duration, timeline} = compute_timeline(context)
 
+  console.log(`creating clip ${total_duration} seconds long`)
+
   // TODO can we reuse a clip_builder here?
   ffmpeg_builder.background_cmd(background_size.width, background_size.height, total_duration, context.template.size.background_color)
 
@@ -73,6 +75,14 @@ async function render(context: Context, ffmpeg_builder: FfmpegBuilderBase) {
   if (context.ffmpeg_log_cmd) ffmpeg_builder.write_ffmpeg_cmd(output.ffmpeg_cmd)
 
   const pretty_duration = fmt_human_readable_duration(total_duration)
+  context.logger.info(`Timeline contains ${timeline.length} clips.`)
+  for (const clip of timeline) {
+    const pretty = {
+      duration: clip.duration.toFixed(2).padStart(8, '0'),
+      start_at: clip.start_at.toFixed(2).padStart(8, '0'),
+    }
+    context.logger.info(`  ${pretty.start_at} ${pretty.duration} - ${clip.clip_id}`)
+  }
   if (ffmpeg_builder instanceof FfmpegSampleBuilder) {
     const skipped_clips = timeline.length - ffmpeg_builder.clip_count()
     if (skipped_clips) context.logger.info(`Rendering ${pretty_duration} long preview image out of ${ffmpeg_builder.clip_count()} clip(s). Skipping ${timeline.length - ffmpeg_builder.clip_count()} clip(s) not visible in preview timestamp`)

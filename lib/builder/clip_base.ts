@@ -77,6 +77,7 @@ export abstract class ClipBuilderBase {
       .rotate(geometry.rotate)
       .crop(geometry.crop)
       .border(geometry)
+      .transform(this.clip)
   }
 
   public chromakey(colorkey: string) {
@@ -107,6 +108,25 @@ export abstract class ClipBuilderBase {
     if (rotate === undefined) return this
     const { degrees, width, height } = rotate
     this.video_input_filters.push(`rotate=${degrees}*PI/180:fillcolor=black@0:out_w=${width}:out_h=${height}`)
+    return this
+  }
+
+  public transform(clip: parsed.MediaClipParsed) {
+    if (!clip.transform) return this
+    for (const transformation of clip.transform) {
+      if (transformation.flip) {
+        if (transformation.flip === 'horizontal') {
+          this.video_input_filters.push(`hflip`)
+        }
+        else if (transformation.flip === 'vertical') {
+          this.video_input_filters.push(`vflip`)
+        } else {
+          throw new Error(`unexpected transformation ${JSON.stringify(transformation)}`)
+        }
+      } else {
+        throw new Error(`unexpected transformation ${JSON.stringify(transformation)}`)
+      }
+    }
     return this
   }
 

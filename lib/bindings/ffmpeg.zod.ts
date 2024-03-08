@@ -7,6 +7,7 @@ import type { Timestamp } from '../template_input.ts'
 type OnReadLine = (line: string) => void
 async function exec(cmd: string[]) {
   const decoder = new TextDecoder()
+  console.log(cmd)
   const proc = Deno.run({ cmd, stdout: 'piped', stderr: 'piped' })
   try {
     const result = await proc.status()
