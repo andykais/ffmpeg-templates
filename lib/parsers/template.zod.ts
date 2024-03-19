@@ -6,8 +6,12 @@ import { parse_unit } from './unit.ts'
 import {exactly} from 'https://esm.sh/@detachhead/ts-helpers@9.0.0-9b4a478c3a63affa1f7f29aeabc2e5f76583ddfc/dist/utilityFunctions/misc'
 
 
-const ClipId = z.string().regex(/[a-zA-Z0-9-_]/).refine(v => v !== 'BACKGROUND', { message: '"BACKGROUND" is a reserved id.'})
+const RESERVED_IDS = [
+  'BACKGROUND'
+]
+const ClipId = z.string().regex(/[a-zA-Z0-9-_]/).refine(v => RESERVED_IDS.every(id => id !== v), { message: `[${RESERVED_IDS}] are reserved ids.`})
 const ClipIdReference = z.string().regex(/[a-zA-Z0-9-_]/)
+const KeypointName = ClipId
 
 const Pixels = z.string().regex(/\d+px/)
 
@@ -19,8 +23,35 @@ const Color = z.string()
 
 const Timestamp = z.string() // I think we will delay parsing this till after we probe files because we need access to full file durations to resolve variables
 
+const KeypointDefinitionRecordEntry = z.object({
+  timestamp: Timestamp,
+  allow_trim_start: z.boolean().default(true),
+  allow_offset_start: z.boolean().default(true),
+}).strict()
+
+const KeypointDefinition = z.object({
+  name: KeypointName,
+  timestamp: Timestamp,
+  allow_trim_start: z.boolean().default(true),
+  allow_offset_start: z.boolean().default(true),
+})
+
+const KeypointsDefinitionList = KeypointDefinition.array()
+
+const KeypointsDefinitionRecord = z.record(KeypointName, KeypointDefinitionRecordEntry)
+  .transform(record => {
+    return [...Object.entries(record)].map(entry => {
+      return {...entry[1], name: entry[0]}
+  }) as t.KeypointDefinitionListItem[]
+})
+
+const KeypointsDefinitionsFlexStructure = z
+  .union([KeypointsDefinitionList, KeypointsDefinitionRecord])
+  .optional()
+  .transform(flex_structure => flex_structure ?? [])
+
 const KeypointReference = z.object({
-  keypoint: z.string(),
+  keypoint: KeypointName,
   offset: Timestamp.optional(),
 })
 
@@ -77,12 +108,7 @@ const ClipBase = z.object({
     fade_in: Timestamp.optional(),
     fade_out: Timestamp.optional(),
   }).strict().optional(),
-  keypoints: z.object({
-    name: z.string(),
-    timestamp: Timestamp,
-    allow_trim_start: z.boolean().default(true),
-    allow_offset_start: z.boolean().default(true),
-  }).strict().array().default([]),
+  keypoints: KeypointsDefinitionsFlexStructure,
   trim: z.object({
     start: Timestamp.optional(),
     stop: z.union([Timestamp, KeypointReference]).optional(),
@@ -240,7 +266,9 @@ function parse_template(template_input: z.input<typeof Template> | unknown): z.i
 export { parse_template }
 export type MediaClipParsed = z.infer<typeof MediaClip> & { id: string }
 export type TextClipParsed = z.infer<typeof TextClip> & { id: string }
+export type KeypointDefinitionParsed = z.infer<typeof KeypointDefinition>
 export type TemplateParsed = z.infer<typeof Template>
 export type SizeParsed = TemplateParsed['size']
 export type LayoutParsed = TemplateParsed['clips'][0]['layout']
 export type TimelineParsed = TemplateParsed['timeline']
+export type KeypointDefinition = KeypointDefinitionParsed

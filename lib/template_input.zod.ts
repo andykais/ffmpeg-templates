@@ -51,6 +51,22 @@ export interface KeypointReference {
   offset?: Timestamp
 }
 
+export interface KeypointDefinitionRecordEntry {
+  /** Point in time from the input clip. Timestamp should ignore trim.start */
+  timestamp: Timestamp
+
+  /** To align a clip keypoint, ffmpeg-templates is allowed to trim the start of a clip. (default is true) */
+  allow_trim_start?: boolean
+
+  /** To align a clip keypoint, ffmpeg-templates is allowed to increase the start time a clip. (default is true) */
+  allow_offset_start?: boolean
+}
+
+export interface KeypointDefinitionListItem extends KeypointDefinitionRecordEntry {
+  /** Identifying name of a keypoint. Share names between clips that you want to align. */
+  name: Keypoint
+}
+
 export interface DetailedSizeUnit {
   min?: Pixels | Percentage
   max?: Pixels | Percentage
@@ -147,19 +163,7 @@ export interface ClipBase {
     * Keypoints are important points in a clip. They are used specifically to offset multiple clips
     * in the timeline so their keypoints happen at the same moment.
     */
-  keypoints?: {
-    /** Identifying name of a keypoint. Share names between clips that you want to align. */
-    name: Keypoint
-
-    /** Point in time from the input clip. Timestamp should ignore trim.start */
-    timestamp: Timestamp
-
-    /** To align a clip keypoint, ffmpeg-templates is allowed to trim the start of a clip. (default is true) */
-    allow_trim_start?: boolean
-
-    /** To align a clip keypoint, ffmpeg-templates is allowed to increase the start time a clip. (default is true) */
-    allow_offset_start?: boolean
-  }[]
+  keypoints?: KeypointDefinitionListItem[] | Record<Keypoint, KeypointDefinitionRecordEntry>
 
   duration?: Timestamp | KeypointReference
 
