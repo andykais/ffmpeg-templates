@@ -76,8 +76,8 @@ export abstract class ClipBuilderBase {
       .scale(geometry.scale)
       .rotate(geometry.rotate)
       .crop(geometry.crop)
-      .border(geometry)
       .transform(this.clip)
+      .border(geometry)
   }
 
   public chromakey(colorkey: string) {
