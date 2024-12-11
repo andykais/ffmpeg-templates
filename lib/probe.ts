@@ -41,8 +41,6 @@ async function exec(cmd: string[], readline_cb?: OnReadLine) {
   }
 }
 
-class ClipZoompansMap extends AbstractClipMap<ClipInfo> {}
-
 // The cache key is the filename only
 // That means if the file is overwritten, the cache will not pick up that change
 // So for now, if you edit a file, you restart the watcher

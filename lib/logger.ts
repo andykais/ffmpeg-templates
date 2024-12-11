@@ -36,7 +36,7 @@ class Logger {
     const total_bar_width = console_width - prefix.length - suffix.length
     const bar = unicode_bar.repeat(Math.min(percentage, 1) * total_bar_width)
     const message = `\r${prefix}${bar.padEnd(total_bar_width, '-')}${suffix}`
-    await Deno.writeAll(Deno.stdout, this.encoder.encode(message))
+    await Deno.stdout.write(this.encoder.encode(message))
     this.writing_progress_bar = false
     if (this.queued_progress) {
       const args = this.queued_progress

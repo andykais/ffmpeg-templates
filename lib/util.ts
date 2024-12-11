@@ -1,3 +1,4 @@
+import {TextLineStream} from '@std/streams'
 import * as path from 'https://deno.land/std@0.91.0/path/mod.ts'
 import { InputError } from './errors.ts'
 import type * as template_input from './template_input.zod.ts'
@@ -17,5 +18,11 @@ function relative_path(filepath: string) {
   return path.relative(Deno.cwd(), filepath)
 }
 
+function readlines(stream: ReadableStream<Uint8Array>) {
+  return stream
+      .pipeThrough(new TextDecoderStream())
+      .pipeThrough(new TextLineStream())
 
-export { AbstractClipMap, relative_path }
+}
+
+export { AbstractClipMap, relative_path, readlines }

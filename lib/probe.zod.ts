@@ -1,13 +1,13 @@
-import * as path from 'https://deno.land/std@0.91.0/path/mod.ts'
-import * as io from 'https://deno.land/std@0.91.0/io/mod.ts'
+import * as path from '@std/path'
+import {readlines} from './util.ts'
 import { ProbeError, CommandError } from './errors.ts'
 import { AbstractClipMap } from './util.ts'
 import { parse_aspect_ratio, parse_ffmpeg_packet } from './parsers/ffmpeg_output.ts'
-import { compute_rotated_size } from './geometry.ts'
+import { compute_rotated_size } from './geometry.zod.ts'
 import type { InstanceContext } from './context.ts'
 import type * as template from './template_input.zod.ts'
 import type { MediaClipParsed } from './parsers/template.zod.ts'
-import type { Seconds } from './parsers/duration.ts'
+import type { Seconds } from './parsers/duration.zod.ts'
 
 const CLIP_INFO_FILENAME = 'probe_info.json'
 
@@ -29,16 +29,21 @@ interface ClipInfo {
 type OnReadLine = (line: string) => void
 async function exec(cmd: string[], readline_cb?: OnReadLine) {
   const decoder = new TextDecoder()
-  const proc = Deno.run({ cmd, stdout: 'piped' })
+  const proc_command = new Deno.Command(cmd[0], {
+    args: cmd.slice(1),
+    stdout: 'piped',
+  })
+  const proc = proc_command.spawn()
   if (readline_cb) {
-    for await (const line of io.readLines(proc.stdout)) {
+    for await (const line of readlines(proc.stdout)) {
       readline_cb(line)
     }
   }
-  const result = await proc.status()
+  const result = await proc.status
   const output_buffer = await proc.output()
-  const output = decoder.decode(output_buffer)
-  await proc.close()
+  const output = decoder.decode(output_buffer.stdout)
+  proc.unref()
+  // await proc.close()
   if (result.success) {
     return output
   } else {

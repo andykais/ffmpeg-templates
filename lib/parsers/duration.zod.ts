@@ -65,7 +65,7 @@ function parse_duration_expr(context: Context, duration_expr: string ): Seconds 
 
     return duration_lhs
   } catch (e) {
-    if (e.name === 'TypeError') {
+    if (e instanceof Error && e.name === 'TypeError') {
       throw new InputError(`Invalid duration "${duration_expr}". Cannot parse`)
     } else throw e
   }

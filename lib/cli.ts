@@ -2,7 +2,8 @@ import * as path from 'https://deno.land/std@0.91.0/path/mod.ts'
 import * as fs from 'https://deno.land/std@0.91.0/fs/mod.ts'
 import * as flags from 'https://deno.land/std@0.91.0/flags/mod.ts'
 import * as yaml from 'https://deno.land/std@0.91.0/encoding/yaml.ts'
-import { opn } from "https://denopkg.com/hashrock/deno-opn/opn.ts";
+import open from 'npm:open'
+// import { opn } from "https://denopkg.com/hashrock/deno-opn/opn.ts";
 import * as errors from './errors.ts'
 import { Logger } from './logger.ts'
 import { render_video, render_sample_frame, get_output_locations } from './mod.ts'
@@ -144,43 +145,21 @@ export default async function (...deno_args: string[]) {
   const logger = new Logger('info')
   if (args['quiet']) logger.set_level('error')
   const positional_args = args._.map((a) => a.toString())
-  const template_filepath = positional_args[0]
-  const output_folder = positional_args[1] ?? construct_output_folder(args, template_filepath)
-  await Deno.mkdir(output_folder, { recursive: true })
-  const options: RenderOptions = {
-    ffmpeg_verbosity: 'error',
-    cwd: path.resolve(path.dirname(template_filepath)),
-    debug_logs: args['debug'],
-  }
-  const output_locations = get_output_locations(output_folder)
+  const runners = [
+    new YamlRunner(),
+    new ScriptRunner(),
+  ]
 
-  if (!(await fs.exists(template_filepath)))
-    throw new errors.InputError(`Template file ${template_filepath} does not exist`)
-  if (args['preview'] && args['open']) {
-    await create_loading_placeholder_preview(output_locations.rendered_preview)
-    opn(output_locations.rendered_preview)
+  const filepath = positional_args[0]
+  const runner = runners.find(runner => {
+    runner.matches(filepath)
+  })
+  if (runner === undefined) {
+    throw new Error(`Failed to find matching runner for filepath: "${filepath}" with runners: ${runners.map(r => r.constructor.name)}`)
   }
-  await try_render_video(args, logger, template_filepath, output_folder, options)
-
-  if (args.watch) {
-    logger.info(`watching ${template_filepath} for changes`)
-    const watch = async () => {
-      let lock = false
-      for await (const event of Deno.watchFs(template_filepath)) {
-        if (event.kind === 'remove') watch()
-        if (event.kind === 'modify' && !lock) {
-          lock = true
-          setTimeout(() => {
-            logger.info(`template ${template_filepath} was changed. Starting render.`)
-            try_render_video(args, logger, template_filepath, output_folder, options).then(() => {
-              lock = false
-              logger.info(`watching ${template_filepath} for changes`)
-            })
-            // assume that all file modifications are completed in 50ms
-          }, 50)
-        }
-      }
-    }
-    await watch()
-  }
+  await runner.run({
+    filepath,
+    positional_args,
+    args
+  })
 }

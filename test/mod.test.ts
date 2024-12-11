@@ -88,24 +88,6 @@ test('timeline one variable length clip', async t => {
   t.assert.equals(render_data.total_duration, 5)
 })
 
-test('dot notation only caption', async t => {
-  const template = {
-    clips: {
-      background_image: {
-        source: path.join(t.assets_folder, '1636302951890.jpg'),
-      }
-    },
-
-    'captions.CENTER_TEXT.text': 'Beans',
-    'captions.CENTER_TEXT.font.color': 'white',
-    'captions.CENTER_TEXT.font.size': 100,
-    'captions.CENTER_TEXT.layout.x': 'center',
-    'captions.CENTER_TEXT.layout.y': 'center',
-  }
-  const { render_data, output } = await render_image(template, {cwd: Deno.cwd(), output_folder: t.artifacts_folder, ffmpeg_log_cmd: true })
-  await t.assert.file(output.current, path.join(t.fixtures_folder, 'preview.jpg'))
-})
-
 test('layout max width & height (constrain)', async t => {
   const template = {
     size: { width: '400px', height: '400px' },

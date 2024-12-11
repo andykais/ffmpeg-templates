@@ -47,7 +47,7 @@ async function render(context: Context, ffmpeg_builder: FfmpegBuilderBase) {
   const geometry_info_map = compute_geometry(context, clips)
   const {total_duration, timeline} = compute_timeline(context)
 
-  console.log(`creating clip ${total_duration} seconds long`)
+  // console.log(`creating clip ${total_duration} seconds long`)
 
   // TODO can we reuse a clip_builder here?
   ffmpeg_builder.background_cmd(background_size.width, background_size.height, total_duration, context.template.size.background_color)

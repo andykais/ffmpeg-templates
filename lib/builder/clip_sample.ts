@@ -9,10 +9,10 @@ export class ClipSampleBuilder extends ClipBuilderBase {
     super(clip, info)
   }
 
-  protected get_timing_start_at(timeline_data: TimelineClip) {
+  protected override get_timing_start_at(timeline_data: TimelineClip) {
     return 0
   }
-  protected get_timing_trim_start(timeline_data: TimelineClip) {
+  protected override get_timing_trim_start(timeline_data: TimelineClip) {
     return timeline_data.trim_start + this.sample_frame - timeline_data.start_at
   }
 }

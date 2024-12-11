@@ -4,6 +4,7 @@ import * as flags from 'https://deno.land/std@0.91.0/flags/mod.ts'
 import * as yaml from 'https://deno.land/std@0.91.0/encoding/yaml.ts'
 import { YAMLError } from 'https://deno.land/std@0.91.0/encoding/_yaml/error.ts'
 import { open } from 'https://deno.land/x/open@v0.0.2/index.ts'
+// import open from 'npm:open'
 import * as errors from './errors.ts'
 import { parse_template } from './parsers/template.zod.ts'
 import { render_video, render_sample_frame } from './mod.zod.ts'
@@ -11,6 +12,112 @@ import { Logger } from './logger.ts'
 import { InstanceContext } from './context.ts'
 import type * as inputs from './template_input.zod.ts'
 import type { ContextOptions } from './context.ts'
+
+
+export type Render = (context: {}) => inputs.Template
+export interface ScriptModule {
+  render: Render
+}
+
+abstract class Runner {
+  filepath!: string
+  args!: ReturnType<typeof parse_cli_args>
+  instance!: InstanceContext
+  context_options!: ContextOptions
+
+  constructor(opts: {
+    filepath: string
+    args: ReturnType<typeof parse_cli_args>
+    instance: InstanceContext
+    context_options: ContextOptions
+  }) {
+    Object.assign(this, opts)
+  }
+
+  abstract matches(filepath: string): boolean
+
+  abstract run(opts: {
+    filepath: string
+    args: ReturnType<typeof parse_cli_args>
+    instance: InstanceContext
+    context_options: ContextOptions
+  }): Promise<void>
+}
+
+export class YamlRunner extends Runner {
+
+  matches(filepath: string) {
+    return filepath.endsWith('.yml') || filepath.endsWith('.yaml')
+  }
+
+  run: Runner['run'] = async ({ filepath, args, instance, context_options }) => {
+    const template_filepath = filepath
+  if (args.preview) {
+    // instance.launch_server()
+  }
+
+  const result = await try_render_video(instance, template_filepath, args.preview, context_options)
+  if (result && args.open) open(result.output.preview)
+
+  if (args.watch) {
+    instance.logger.info(`watching ${template_filepath} for changes`)
+    await watch(template_filepath, async () => {
+      instance.logger.info(`template ${template_filepath} was changed. Starting render.`)
+      await try_render_video(instance, template_filepath, args.preview, context_options)
+      instance.logger.info(`watching ${template_filepath} for changes`)
+    })
+  }
+  }
+}
+
+export class ScriptRunner extends Runner {
+
+  matches(filepath: string) {
+    return filepath.endsWith('.ts') || filepath.endsWith('.js')
+  }
+
+  run: Runner['run'] = async () => {
+
+    const result = await this.try_render_video()
+    let open_promise: Promise<unknown> | undefined
+    if (result && this.args.open) {
+      open_promise = open(result.output.preview, {wait: true})
+    }
+
+    if (this.args.watch) {
+      this.instance.logger.info(`watching ${this.filepath} for changes`)
+      await watch(this.filepath, async () => {
+        this.instance.logger.info(`template ${this.filepath} was changed. Starting render.`)
+        await this.try_render_video()
+        this.instance.logger.info(`watching ${this.filepath} for changes`)
+      })
+    }
+
+    await open_promise
+  }
+
+  async try_render_video() {
+    const exact_path = path.join(this.context_options.cwd, this.filepath)
+    const render_script_module: ScriptModule = await import(`${exact_path}?`)
+    // create context here, w/ execution time. Move progress callback to logger
+    try {
+      this.instance.logger.info(`Reading template file ${this.filepath}`)
+      const template_input = await render_script_module.render({})
+
+      await Deno.writeTextFile(this.instance.output_files.rendered_template, JSON.stringify(template_input))
+
+      const should_sample_frame = this.args.preview
+      const result = should_sample_frame
+        ? await render_sample_frame(template_input, this.context_options, this.instance)
+        : await render_video(template_input, this.context_options, this.instance)
+      if (await fs.exists(result.output.current) === false) throw new Error('output file not produced')
+      return result
+    } catch(e) {
+      if (e instanceof errors.InputError) console.error(e)
+      else throw e
+    }
+  }
+}
 
 
 function parse_cli_args(deno_args: string[]) {
@@ -62,7 +169,6 @@ async function try_render_video(instance: InstanceContext, template_filepath: st
     instance.logger.info(`Reading template file ${template_filepath}`)
     const template_input = await read_template(template_filepath)
 
-    console.log(instance.output_files.rendered_template)
     await Deno.writeTextFile(instance.output_files.rendered_template, JSON.stringify(template_input))
 
     const result = sample_frame
@@ -124,20 +230,26 @@ export default async function (...deno_args: string[]) {
     await open(output.preview)
   }
   */
+  const filepath = template_filepath
+  const runners = [YamlRunner, ScriptRunner]
+  const runner = runners
+    .map(runner_class => new runner_class({
+      filepath,
+      args,
+      instance,
+      context_options,
+    }))
+    .find(runner => runner.matches(filepath))
 
-  if (args.preview) {
-    // instance.launch_server()
+  if (runner === undefined) {
+    throw new Error(`Failed to find matching runner for filepath: "${filepath}" with runners: [${runners.join('\,')}]`)
   }
-
-  const result = await try_render_video(instance, template_filepath, args.preview, context_options)
-  if (result && args.open) open(result.output.preview)
-
-  if (args.watch) {
-    instance.logger.info(`watching ${template_filepath} for changes`)
-    await watch(template_filepath, async () => {
-      instance.logger.info(`template ${template_filepath} was changed. Starting render.`)
-      await try_render_video(instance, template_filepath, args.preview, context_options)
-      instance.logger.info(`watching ${template_filepath} for changes`)
-    })
-  }
+  await runner.run({
+    filepath: template_filepath,
+    args,
+    instance,
+    context_options
+  })
 }
+
+
