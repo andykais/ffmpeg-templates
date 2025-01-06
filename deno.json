@@ -1,6 +1,7 @@
 {
   "tasks": {
-    "test:watch": "deno test --watch --unstable --allow-read --allow-write --allow-run=ffprobe,ffmpeg --allow-env --allow-ffi --allow-net=github.com,objects.githubusercontent.com"
+    "test:watch": "deno test --watch --fail-fast --unstable-ffi --allow-read --allow-write --allow-run=ffprobe,ffmpeg --allow-env=DENO_SKIA_LOCAL,DENO_SKIA_PATH,DENO_DIR,XDG_CACHE_HOME,HOME,CANVAS_DISABLE_SYSTEM_FONTS --allow-ffi --allow-net=github.com,objects.githubusercontent.com --import-map=test/import-map.json"
+    "test": "deno test --watch --fail-fast --unstable-ffi --allow-read --allow-write --allow-run=ffprobe,ffmpeg --allow-env=DENO_SKIA_LOCAL,DENO_SKIA_PATH,DENO_DIR,XDG_CACHE_HOME,HOME,CANVAS_DISABLE_SYSTEM_FONTS --allow-ffi --allow-net=github.com,objects.githubusercontent.com --import-map=test/import-map.json test/**/*.test.ts"
   },
   "imports": {
     "@gfx/canvas": "jsr:@gfx/canvas@^0.5.8",

@@ -1,10 +1,14 @@
 {
   "imports": {
-    "../lib/bindings/ffmpeg.ts": "./mock/bindings/ffmpeg.ts"
-  },
-  "scopes": {
-    "./mock/bindings/ffmpeg.ts": {
-      "../lib/bindings/ffmpeg.ts": "../lib/bindings/ffmpeg.ts"
-    }
+    "@gfx/canvas": "jsr:@gfx/canvas@^0.5.8",
+    "@gfx/canvas-wasm": "jsr:@gfx/canvas-wasm@^0.4.2",
+    "@std/io": "jsr:@std/io@^0.225.0",
+    "@std/path": "jsr:@std/path@^1.0.8",
+    "@std/streams": "jsr:@std/streams@^1.0.8",
+    "@types/culori": "npm:@types/culori@^2.1.1",
+    "culori": "npm:culori@^4.0.1",
+
+    "@std/assert": "jsr:@std/assert@^1.0.9",
+    "@std/fs": "jsr:@std/fs@^1.0.6"
   }
 }

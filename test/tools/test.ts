@@ -1,4 +1,5 @@
-import { path, assert } from './deps.ts'
+import * as path from '@std/path'
+import * as assert from '@std/assert'
 
 
 const TEST_DIR = path.dirname(path.dirname(path.fromFileUrl(import.meta.url)))

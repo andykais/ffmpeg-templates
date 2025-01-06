@@ -1,6 +1,6 @@
 import ffmpeg_templates from '../lib/cli.zod.ts'
 import { render_image, render_video } from '../lib/mod.zod.ts'
-import { path } from './tools/deps.ts'
+import * as path from '@std/path'
 import { test } from './tools/test.ts'
 
 
