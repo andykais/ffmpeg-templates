@@ -41,8 +41,10 @@ jobs:
           key: ${{ hashFiles(env.DENO_LOCKFILE) }}
 
       # SSH into github machine for quick iterative debugging
-      - name: Setup upterm session
-        uses: lhotari/action-upterm@v1
+      # - name: Setup upterm session
+      #   uses: lhotari/action-upterm@v1
+      - name: Setup tmate session
+        uses: mxschmitt/action-tmate@v3
 
       - name: Test
         run: deno task test
