@@ -22,12 +22,8 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - run: free -m
-
       - name: Setup Repo
         uses: actions/checkout@v3
-
-      - run: free -m
 
       - name: Setup FFMPEG
         uses: FedericoCarboni/setup-ffmpeg@v3
@@ -35,12 +31,8 @@ jobs:
         with:
           ffmpeg-version: 7.0.1
 
-      - run: free -m
-
       - name: Setup Deno
         uses: denoland/setup-deno@v2
-
-      - run: free -m
 
       - name: Cache Deno dependencies 
         uses: actions/cache@v4
@@ -48,7 +40,9 @@ jobs:
           path: ${{ env.DENO_DIR }}
           key: ${{ hashFiles(env.DENO_LOCKFILE) }}
 
-      - run: free -m
+      # SSH into github machine for quick iterative debugging
+      - name: Setup upterm session
+        uses: lhotari/action-upterm@v1
 
       - name: Test
         run: deno task test
