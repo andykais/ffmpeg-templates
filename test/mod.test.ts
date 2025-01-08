@@ -40,7 +40,7 @@ test('render image with zero duration', async t => {
       }
     }
   }
-  const { render_data, output } = await render_image(template, {cwd: Deno.cwd(), output_folder: t.artifacts_folder, ffmpeg_log_cmd: true })
+  const { render_data, output } = await render_image(template, {cwd: Deno.cwd(), output_folder: t.artifacts_folder, debug: true })
   await t.assert.file(output.current, path.join(t.fixtures_folder, 'preview.jpg'))
 })
 
@@ -58,7 +58,7 @@ test('timeline all variable length clips', async t => {
       }
     }
   }
-  const { render_data, output } = await render_video(template, {cwd: Deno.cwd(), output_folder: t.artifacts_folder, ffmpeg_log_cmd: true })
+  const { render_data, output } = await render_video(template, {cwd: Deno.cwd(), output_folder: t.artifacts_folder, debug: true })
   const { CLIP_0, CLIP_1 } = render_data.clips
   t.assert.equals(CLIP_0.probe_info.duration, 14.698667)
   t.assert.equals(CLIP_1.probe_info.duration, 14.997333)
@@ -79,7 +79,7 @@ test('timeline one variable length clip', async t => {
       }
     }
   }
-  const { render_data, output } = await render_video(template, {cwd: Deno.cwd(), output_folder: t.artifacts_folder, ffmpeg_log_cmd: true })
+  const { render_data, output } = await render_video(template, {cwd: Deno.cwd(), output_folder: t.artifacts_folder, debug: true })
   const { CLIP_0, CLIP_1 } = render_data.clips
   t.assert.equals(CLIP_0.probe_info.duration, 14.698667)
   t.assert.equals(CLIP_1.probe_info.duration, 14.997333)
@@ -99,7 +99,7 @@ test('layout max width & height (constrain)', async t => {
       }
     },
   }
-  const { render_data, output } = await render_image(template, {cwd: Deno.cwd(), output_folder: t.artifacts_folder, ffmpeg_log_cmd: true })
+  const { render_data, output } = await render_image(template, {cwd: Deno.cwd(), output_folder: t.artifacts_folder, debug: true })
   const { background_image } = render_data.clips
   t.assert.equals(background_image.geometry.scale.width, 400)
   t.assert.equals(background_image.geometry.scale.height, 300)
@@ -117,7 +117,7 @@ test('layout min width & height (fill)', async t => {
       }
     },
   }
-  const { render_data, output } = await render_image(template, {cwd: Deno.cwd(), output_folder: t.artifacts_folder, ffmpeg_log_cmd: true })
+  const { render_data, output } = await render_image(template, {cwd: Deno.cwd(), output_folder: t.artifacts_folder, debug: true })
   const { background_image } = render_data.clips
   t.assert.equals(background_image.geometry.scale.width, 533)
   t.assert.equals(background_image.geometry.scale.height, 400)
@@ -136,7 +136,7 @@ test('template transformation.flip', async t => {
       }
     },
   }
-  const { render_data, output } = await render_image(template, {cwd: Deno.cwd(), output_folder: t.artifacts_folder, ffmpeg_log_cmd: true })
+  const { render_data, output } = await render_image(template, {cwd: Deno.cwd(), output_folder: t.artifacts_folder, debug: true })
   const { background_image } = render_data.clips
   t.assert.equals(background_image.geometry.scale.width, 533)
   t.assert.equals(background_image.geometry.scale.height, 400)

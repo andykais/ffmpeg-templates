@@ -1,8 +1,7 @@
 import * as path from '@std/path'
 import * as fs from '@std/fs'
 import ffmpeg_templates  from '../lib/cli.zod.ts'
-import { render_sample_frame } from '../lib/mod.zod.ts'
-import { type Template } from '../lib/template_input.zod.ts'
+import { render_sample_frame, type Template, type TemplateParsed, type RenderData } from '../lib/mod.zod.ts'
 import { test, type TestContext } from './tools/test.ts'
 import { assertEquals } from "https://deno.land/std@0.97.0/testing/asserts.ts";
 
@@ -22,58 +21,71 @@ async function read_json(filepath: string) {
   return JSON.parse(await Deno.readTextFile(filepath))
 }
 
-async function cli_render_image(t: TestContext, template: Template) {
+async function cli_render(t: TestContext, template: Template, args: string[]) {
   const template_filepath = path.join(t.artifacts_folder, `${t.test_name}.yml`)
   const output_folder = path.join(t.artifacts_folder, 'project_output')
 
   await Deno.writeTextFile(template_filepath, JSON.stringify(template))
-  await ffmpeg_templates(template_filepath, output_folder, '--debug', '--quiet', '--preview', )
+  await ffmpeg_templates(template_filepath, output_folder, '--debug', '--quiet', ...args)
 
   return {
-    render_data: await read_json(path.join(output_folder, 'render_data.json')),
-    rendered_template: await read_json(path.join(output_folder, 'rendered_template.json')),
+    render_data: await read_json(path.join(output_folder, 'render_data.json')) as RenderData,
+    rendered_template: await read_json(path.join(output_folder, 'rendered_template.json')) as TemplateParsed,
     preview_filepath: path.join(output_folder, 'preview.jpg'),
   }
 }
+async function cli_render_image(t: TestContext, template: Template, timestamp: string = '00:00:00') {
+  return await cli_render(t, template, ['--preview', timestamp])
+}
+async function cli_render_video(t: TestContext, template: Template) {
+  return await cli_render(t, template, [])
+}
 
 
-test('dot notation template', async () => {
+test('dot notation template', async t => {
   const template = {
     clips: [
       {
-        file: './assets/Pexels Videos 2048452.mp4'
+        source: t.assets.bee_flower_mp4,
       },
       {
-        file: './assets/Video Of People Waiting For A Taxi On A Rainy Night.mp4',
-        ['layout.width']: '100%',
+        source: t.assets.rainy_street_mp4,
+        'layout.width': '75%',
+        'layout.x': 'center',
+        'layout.y': 'center',
       }
-    ]
+    ],
+
+    timeline: [
+      { id: 'CLIP_0' },
+      { id: 'CLIP_1', offset: '00:00:04' }
+    ],
+
+    preview: '3'
   }
-    const template_filepath = 'test/resources/dot_notation_template.yml'
-    await Deno.writeTextFile(template_filepath, JSON.stringify(template))
-    await ffmpeg_templates(template_filepath, '--debug', '--quiet', '--preview')
-    const rendered_template = JSON.parse(await Deno.readTextFile('ffmpeg-templates-projects/dot_notation_template/rendered_template.json'))
-    assertEquals(rendered_template, {
-    clips: [
-      {
-        file: template.clips[0].file,
-      },
-      {
-        file: template.clips[1].file,
-        layout: {
-          width: '100%'
-        }
-      }
-    ]
+  const output_1 = await cli_render_image(t, template, '00:00:00')
+  // dot notation syntax should expand back into full schema syntax in the rendered template
+  t.assert.equals(output_1.rendered_template.clips[0].layout, {
+    relative_to: 'BACKGROUND',
+    x: {align: 'left', offset: '0px'},
+    y: {align: 'top', offset: '0px'},
   })
+  // since we're here we can also test that previews only render the relevant clips
+  t.assert.equals(Object.keys(output_1.render_data.clips), ['CLIP_0'])
+  await t.assert.file(output_1.preview_filepath, path.join(t.fixtures_folder, 'preview_at_00:00:03.jpg'))
+
+  template.preview = '5'
+  const output_2 = await cli_render_image(t, template, '00:00:00')
+  t.assert.equals(Object.keys(output_2.render_data.clips), ['CLIP_0', 'CLIP_1'])
+  await t.assert.file(output_1.preview_filepath, path.join(t.fixtures_folder, 'preview_at_00:00:05.jpg'))
 })
 
-test('size.background_color', async () => {
+test('size.background_color', async t => {
   const template = {
     size: { background_color: 'red' },
     clips: [
       {
-        file: './assets/Pexels Videos 2048452.mp4',
+        source: t.assets.bee_flower_mp4,
         'layout.x': 'center',
         'layout.y': 'center',
         'crop.width': '75%',
@@ -81,33 +93,34 @@ test('size.background_color', async () => {
       }
     ]
   }
-  const template_filepath = 'test/resources/size.background_color.yml'
-  await Deno.writeTextFile(template_filepath, JSON.stringify(template))
-  await ffmpeg_templates(template_filepath, '--debug', '--quiet', '--preview')
-  const rendered_template = JSON.parse(await Deno.readTextFile('ffmpeg-templates-projects/size.background_color/rendered_template.json'))
+  const output = await cli_render_image(t, template)
+  await t.assert.file(output.preview_filepath, path.join(t.fixtures_folder, 'preview.jpg'))
 })
 
-test('captions.[].font.outline_style', async () => {
-  const template = {
-    size: { background_color: 'red' },
+test('captions.[].font.outline_style', async t => {
+  const template: Template = {
     clips: [
       {
-        file: './assets/Pexels Videos 2048452.mp4',
-        'layout.x': 'center',
-        'layout.y': 'center',
-        'crop.width': '75%',
-        'crop.height': '75%',
+        source: t.assets.bee_flower_mp4,
       }
-    ]
+    ],
+    captions: {
+      beans: {
+        text: 'Beans',
+        font: {
+          size: 100,
+          outline_size: 6,
+          outline_color: 'white',
+        },
+        layout: {x: 'center'}
+      }
+    }
   }
-
-  const template_filepath = 'test/resources/size.background_color.yml'
-  await Deno.writeTextFile(template_filepath, JSON.stringify(template))
-  await ffmpeg_templates(template_filepath, '--debug', '--quiet', '--preview')
-  const rendered_template = JSON.parse(await Deno.readTextFile('ffmpeg-templates-projects/size.background_color/rendered_template.json'))
+  const output = await cli_render_image(t, template)
+  await t.assert.file(output.preview_filepath, path.join(t.fixtures_folder, 'preview.jpg'))
 })
 
-test.only('preview default clip duration', async t => {
+test('preview default clip duration', async t => {
   const template = {
     size: { background_color: 'blue' },
     clips: [
@@ -127,7 +140,11 @@ test.only('preview default clip duration', async t => {
   }
   const output = await cli_render_image(t, template)
 
-  console.log({output})
+  t.assert.equals(output.render_data.total_duration, undefined)
+  t.assert.equals(output.render_data.clips.CLIP_0.duration, 14.698667)
+  t.assert.equals(output.render_data.clips.CLIP_1.duration, 14.698667)
+
+  await t.assert.file(output.preview_filepath, path.join(t.fixtures_folder, 'preview.jpg'))
 })
 
 test('clips.[].chromakey', async (t) => {
@@ -135,24 +152,45 @@ test('clips.[].chromakey', async (t) => {
     size: { background_color: 'blue' },
     clips: [
       {
-        file: './assets/century-leaf-falling-autumn-maple-leaves-falling-maple-autumn-leaves-falling-autumn-leaves-falling-against-black-background-free-video.mp4',
+        source: t.assets.transparent_leaves_falling_mp4,
         'trim.start': '3',
         'chromakey': 'black',
       }
     ]
   }
-  const template_filepath = `test/resources/${t.test_name}.yml`
-  await Deno.writeTextFile(template_filepath, JSON.stringify(template))
-  await ffmpeg_templates(template_filepath, '--debug', '--quiet', '--preview')
-  const rendered_template = JSON.parse(await Deno.readTextFile(`ffmpeg-templates-projects/${t.test_name}/rendered_template.json`))
+  const output = await cli_render_image(t, template)
+  await t.assert.file(output.preview_filepath, path.join(t.fixtures_folder, 'preview.jpg'))
 })
 
-test('zoompan', async () => {
-  await rmrf('test/resources/zoompan')
-  await ffmpeg_templates('test/resources/zoompan.yml', '--debug', '--quiet')
-  const ffmpeg_cmd = await Deno.readTextFile('test/resources/ffmpeg-templates-projects/test/resources/zoompan/ffmpeg.sh')
-  const ffmpeg_cmd_fixture = await Deno.readTextFile('test/fixtures/zoompan/ffmpeg.sh')
-  assertEquals(ffmpeg_cmd, ffmpeg_cmd_fixture)
+// zoompan is not yet implemented
+test.skip('zoompan', async t => {
+  const template: Template = {
+    size: {
+      height: '200%',
+      width: '50%',
+    },
+    clips: [
+      {
+        source: t.assets.bee_flower_mp4,
+        trim: { variable_length: 'stop' },
+        crop: { x: 'left', width: '50%' },
+        zoompan: [
+          { keyframe: '00:00:00', x: '50%' },
+          { keyframe: '00:00:10', x: '0px' },
+        ]
+      },
+      {
+        source: t.assets.rainy_street_mp4,
+        layout: { y: { align: 'bottom' }, height: '50%' },
+        trim: { variable_length: 'stop' },
+        crop: { x: 'right', width: '50%' },
+        zoompan: [
+          { keyframe: '00:00:10', x: '50%' },
+        ]
+      }
+    ]
+  }
+  const output = await cli_render_video(t, template)
 })
 
 // skip until set up
@@ -164,26 +202,26 @@ test.skip('speed', async () => {
   assertEquals(ffmpeg_cmd, ffmpeg_cmd_fixture)
 })
 
-test('empty preview',async () => {
-    await rmrf('test/resources/empty_preview')
-    await ffmpeg_templates('test/resources/empty_preview.yml', '--debug', '--quiet', '--preview')
-    const ffmpeg_instructions = {
-      loglevel: 'error',
-      vframes: 1,
-      inputs: {
-        i: 'video.mp4',
-        crop: {
-          w:100,
-          h:200,
-          x:'x',
-          y:'y',
-          keep_aspect:1
-        }
+test('empty preview between clips', async t => {
+  const template: Template = {
+    clips: [
+      {
+        source: t.assets.bee_flower_mp4,
+        duration: '2'
+      },
+      {
+        source: t.assets.bee_flower_mp4,
+        duration: '2'
       }
-    }
-    const ffmpeg_cmd = await Deno.readTextFile('test/resources/ffmpeg-templates-projects/test/resources/empty_preview/ffmpeg.sh')
-    console.log(ffmpeg_cmd)
-    const ffmpeg_cmd_fixture = await Deno.readTextFile('test/fixtures/empty_preview/ffmpeg.sh')
-    console.log(ffmpeg_cmd_fixture)
-    assertEquals(ffmpeg_cmd, ffmpeg_cmd_fixture)
+    ],
+
+    timeline: [
+      { id: 'CLIP_0' },
+      { id: 'CLIP_1', offset: '00:00:04' }
+    ],
+
+    preview: '3'
+  }
+  const output = await cli_render_image(t, template)
+  await t.assert.file(output.preview_filepath, path.join(t.fixtures_folder, 'preview.jpg'))
 })

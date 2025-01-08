@@ -31,7 +31,13 @@ function compute_zoompans(
   clip_info_map: ClipInfoMap,
   clip_geometry_map: ClipGeometryMap
 ): ClipZoompansMap {
-  throw new Error('unimplemented')
+  for (const [clip_id, clip] of context.template.clips.entries()) {
+    if (clip.zoompan) {
+      throw new Error('unimplemented')
+    }
+  }
+
+  return new ClipZoompansMap()
 }
 
 export { compute_zoompans }

@@ -29,6 +29,11 @@ interface FfmpegInstructions {
   clips: Record<string, ClipBuilderData>
 }
 
+export interface RenderData {
+  total_duration: number | undefined
+  clips: Record<string, ClipBuilderData>
+}
+
 export abstract class FfmpegBuilderBase {
   protected complex_filter_inputs: string[] = []
   protected complex_filter_overlays: string[] = []
@@ -52,7 +57,7 @@ export abstract class FfmpegBuilderBase {
 
   public abstract clip_builder(clip: parsed.MediaClipParsed, info: ClipInfo): ClipBuilderBase
 
-  public serialize() {
+  public serialize(): RenderData {
     return {
       total_duration: this.total_duration,
       clips: this.clip_data.reduce((record, clip) => {

@@ -17,7 +17,7 @@ test('caption word wrapping', async t => {
     'captions.CENTER_TEXT.layout.y': 'center',
     'captions.CENTER_TEXT.layout.width': '600px',
   }
-  const { output } = await render_image(template, {cwd: Deno.cwd(), output_folder: t.artifacts_folder, ffmpeg_log_cmd: true })
+  const { output } = await render_image(template, {cwd: Deno.cwd(), output_folder: t.artifacts_folder, debug: true })
   await t.assert.file(output.current, path.join(t.fixtures_folder, 'preview.jpg'))
 })
 
@@ -38,7 +38,7 @@ test('font outline', async t => {
     'captions.CENTER_TEXT.layout.y': 'center',
     'captions.CENTER_TEXT.layout.width': '600px',
   }
-  const { output } = await render_image(template, {cwd: Deno.cwd(), output_folder: t.artifacts_folder, ffmpeg_log_cmd: true })
+  const { output } = await render_image(template, {cwd: Deno.cwd(), output_folder: t.artifacts_folder, debug: true })
   await t.assert.file(output.current, path.join(t.fixtures_folder, 'preview.jpg'))
 })
 
@@ -61,7 +61,7 @@ test('font background', async t => {
     'captions.CENTER_TEXT.layout.y': 'center',
     'captions.CENTER_TEXT.layout.width': '600px',
   }
-  const { output } = await render_image(template, {cwd: Deno.cwd(), output_folder: t.artifacts_folder, ffmpeg_log_cmd: true })
+  const { output } = await render_image(template, {cwd: Deno.cwd(), output_folder: t.artifacts_folder, debug: true })
   await t.assert.file(output.current, path.join(t.fixtures_folder, 'preview.jpg'))
 })
 
@@ -80,7 +80,7 @@ test('dot notation only caption', async t => {
     'captions.CENTER_TEXT.layout.x': 'center',
     'captions.CENTER_TEXT.layout.y': 'center',
   }
-  const { render_data, output } = await render_image(template, {cwd: Deno.cwd(), output_folder: t.artifacts_folder, ffmpeg_log_cmd: true })
+  const { render_data, output } = await render_image(template, {cwd: Deno.cwd(), output_folder: t.artifacts_folder, debug: true })
   await t.assert.file(output.current, path.join(t.fixtures_folder, 'preview.jpg'))
 })
 

@@ -45,6 +45,7 @@ async function render(context: Context, ffmpeg_builder: FfmpegBuilderBase) {
 
   const clips = context.template.clips.concat(text_image_clips)
   const geometry_info_map = compute_geometry(context, clips)
+  const zoompans = compute_zoompans(context, context.clip_info_map, geometry_info_map)
   const {total_duration, timeline} = compute_timeline(context)
 
   // console.log(`creating clip ${total_duration} seconds long`)
@@ -149,3 +150,5 @@ async function render_image(template: inputs.Template, options: ContextOptions, 
 
 export { render_video, render_sample_frame, render_image }
 export type Template = inputs.Template
+export type { TemplateParsed } from './parsers/template.zod.ts'
+export type { RenderData } from './builder/ffmpeg_base.ts'

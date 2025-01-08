@@ -104,12 +104,11 @@ export class ScriptRunner extends Runner {
       this.instance.logger.info(`Reading template file ${this.filepath}`)
       const template_input = await render_script_module.render({})
 
-      await Deno.writeTextFile(this.instance.output_files.rendered_template, JSON.stringify(template_input))
-
       const should_sample_frame = this.args.preview
       const result = should_sample_frame
         ? await render_sample_frame(template_input, this.context_options, this.instance)
         : await render_video(template_input, this.context_options, this.instance)
+      await Deno.writeTextFile(this.instance.output_files.rendered_template, JSON.stringify(result.template))
       if (await fs.exists(result.output.current) === false) throw new Error('output file not produced')
       return result
     } catch(e) {
@@ -169,11 +168,10 @@ async function try_render_video(instance: InstanceContext, template_filepath: st
     instance.logger.info(`Reading template file ${template_filepath}`)
     const template_input = await read_template(template_filepath)
 
-    await Deno.writeTextFile(instance.output_files.rendered_template, JSON.stringify(template_input))
-
     const result = sample_frame
       ? await render_sample_frame(template_input, context_options, instance)
       : await render_video(template_input, context_options, instance)
+    await Deno.writeTextFile(instance.output_files.rendered_template, JSON.stringify(result.template))
     if (await fs.exists(result.output.current) === false) throw new Error('output file not produced')
     return result
   } catch(e) {

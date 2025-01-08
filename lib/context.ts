@@ -116,7 +116,7 @@ class Context {
     return execution_time_seconds
   }
 
-  public get_clip(clip_id: string) {
+  public get_clip(clip_id: string): MediaClipParsed {
     return this.clip_map.get_or_throw(clip_id)
   }
 }
