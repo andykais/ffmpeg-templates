@@ -1,13 +1,21 @@
 name: CI
 
+
 on:
   push:
     branches: ["main"]
   pull_request:
     branches: ["main"]
 
+
 permissions:
   contents: read
+
+
+env:
+  DENO_DIR: deno_dependency_cache
+  DENO_LOCKFILE: ${{ github.workspace }}/deno.lock
+
 
 jobs:
   test:
@@ -17,8 +25,21 @@ jobs:
       - name: Setup Repo
         uses: actions/checkout@v3
 
+      - name: Setup FFMPEG
+        uses: FedericoCarboni/setup-ffmpeg@v3
+        id: setup-ffmpeg
+        with:
+          ffmpeg-version: 7.0.1
+
       - name: Setup Deno
         uses: denoland/setup-deno@v2
 
+      - name: Cache Deno dependencies 
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.DENO_DIR }}
+          key: ${{ hashFiles(env.DENO_LOCKFILE) }}
+
       - name: Test
         run: deno task test
+
