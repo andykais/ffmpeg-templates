@@ -300,7 +300,7 @@ export interface Template {
   /**
    * A list of clips that are available to the timeline
    */
-  clips: Record<ClipID, MediaClip>
+  clips: Record<ClipID, MediaClip> | MediaClip[]
 
   /**
    * A list of text captions that are available to the timeline

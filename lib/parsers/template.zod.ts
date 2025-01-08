@@ -1,9 +1,9 @@
-import * as path from 'https://deno.land/std@0.91.0/path/mod.ts'
-import { z } from 'https://deno.land/x/zod@v3.21.4/mod.ts'
+import * as path from '@std/path'
+import { z } from 'zod'
 import * as t from '../template_input.zod.ts'
 import * as errors from '../errors.ts'
 import { parse_unit } from './unit.ts'
-import {exactly} from 'https://esm.sh/@detachhead/ts-helpers@9.0.0-9b4a478c3a63affa1f7f29aeabc2e5f76583ddfc/dist/utilityFunctions/misc'
+import * as tsafe from 'npm:tsafe@1.8.5'
 
 
 const RESERVED_IDS = [
@@ -169,20 +169,34 @@ const TimelineClip: z.ZodSchema<TimelineClipParsed, z.ZodTypeDef, t.TimelineClip
   next: TimelineClip.array().default([]),
 }))
 
+const TemplateClipsArray = z.array(MediaClip).min(1)
+  // MediaClip.array().min(1)
+  .transform(clips => {
+    const clips_array: MediaClipParsed[] = []
+    for (const [index, clip] of clips.entries()) {
+      const clip_id = clip.id ?? `CLIP_${index}`
+      clips_array.push({...clip, id: clip_id})
+    }
+    return clips_array
+  })
+const TemplateClipsMap = z.record(ClipId, MediaClip)
+  .refine(clips => Object.keys(clips).length > 0, { message: 'clips must contain at least one entry' })
+  .transform(clips => {
+    const clips_array: MediaClipParsed[] = Object.entries(clips)
+      .map(([clip_id, clip], i) => {
+        clip.id = clip_id
+        return clip as MediaClipParsed
+      })
+    return clips_array
+  })
+
 const Template = z.object({
   // TODO is this a shared reference?
   // size: z.mer([Size, z.object({ background_color: Color.optional() })]).default({}),
   // Size.and(z.object({ background_color: Color.optional() })).default({}),
   size: Size.merge(z.object({ background_color: Color.optional() })).default({}),
 
-  clips: z.record(ClipId, MediaClip)
-    .refine(clips => Object.keys(clips).length > 0, { message: 'clips must contain at least one entry' })
-    .transform(clips => {
-      return Object.entries(clips).map(([clip_id, clip], i) => {
-        clip.id = clip_id
-        return clip as MediaClipParsed
-      })
-    }),
+  clips: z.union([TemplateClipsArray, TemplateClipsMap]),
 
   // captions: TextClip
   //   .array()
@@ -215,8 +229,7 @@ const Template = z.object({
 // it ensures that our zod validator and our typescript spec stay in sync
 type TemplateInput = t.Template
 type ZodTemplateInput = z.input<typeof Template>
-exactly({} as ZodTemplateInput, {} as TemplateInput)
-
+tsafe.assert<tsafe.Equals<ZodTemplateInput, TemplateInput>>
 
 function pretty_zod_errors(error: z.ZodError) {
   return error.errors.map(e => {

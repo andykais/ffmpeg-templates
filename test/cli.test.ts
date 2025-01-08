@@ -3,7 +3,7 @@ import * as fs from '@std/fs'
 import ffmpeg_templates  from '../lib/cli.zod.ts'
 import { render_sample_frame } from '../lib/mod.zod.ts'
 import { type Template } from '../lib/template_input.zod.ts'
-import { test } from './tools/test.ts'
+import { test, type TestContext } from './tools/test.ts'
 import { assertEquals } from "https://deno.land/std@0.97.0/testing/asserts.ts";
 
 
@@ -17,6 +17,24 @@ async function rmrf(path: string) {
 }
 
 // NOTE ffprobe info map cache is shared between tests
+
+async function read_json(filepath: string) {
+  return JSON.parse(await Deno.readTextFile(filepath))
+}
+
+async function cli_render_image(t: TestContext, template: Template) {
+  const template_filepath = path.join(t.artifacts_folder, `${t.test_name}.yml`)
+  const output_folder = path.join(t.artifacts_folder, 'project_output')
+
+  await Deno.writeTextFile(template_filepath, JSON.stringify(template))
+  await ffmpeg_templates(template_filepath, output_folder, '--debug', '--quiet', '--preview', )
+
+  return {
+    render_data: await read_json(path.join(output_folder, 'render_data.json')),
+    rendered_template: await read_json(path.join(output_folder, 'rendered_template.json')),
+    preview_filepath: path.join(output_folder, 'preview.jpg'),
+  }
+}
 
 
 test('dot notation template', async () => {
@@ -82,6 +100,7 @@ test('captions.[].font.outline_style', async () => {
       }
     ]
   }
+
   const template_filepath = 'test/resources/size.background_color.yml'
   await Deno.writeTextFile(template_filepath, JSON.stringify(template))
   await ffmpeg_templates(template_filepath, '--debug', '--quiet', '--preview')
@@ -93,11 +112,10 @@ test.only('preview default clip duration', async t => {
     size: { background_color: 'blue' },
     clips: [
       {
-        file: './assets/1636302951890.jpg',
+        source: t.assets.berries_jpg,
       },
       {
-        file: './assets/Pexels Videos 2048452.mp4',
-        // 'layout.width': '75%',
+        source: t.assets.bee_flower_mp4,
         'layout.height': '50%',
         'layout.x': 'center',
         'layout.y': 'center',
@@ -107,10 +125,9 @@ test.only('preview default clip duration', async t => {
     ],
     preview: '5'
   }
-  const template_filepath = `test/resources/${t.test_name}.yml`
-  await Deno.writeTextFile(template_filepath, JSON.stringify(template))
-  await ffmpeg_templates(template_filepath, '--debug', '--quiet', '--preview')
-  const rendered_template = JSON.parse(await Deno.readTextFile(`ffmpeg-templates-projects/${t.test_name}/rendered_template.json`))
+  const output = await cli_render_image(t, template)
+
+  console.log({output})
 })
 
 test('clips.[].chromakey', async (t) => {
@@ -130,7 +147,7 @@ test('clips.[].chromakey', async (t) => {
   const rendered_template = JSON.parse(await Deno.readTextFile(`ffmpeg-templates-projects/${t.test_name}/rendered_template.json`))
 })
 
-test.only('zoompan', async () => {
+test('zoompan', async () => {
   await rmrf('test/resources/zoompan')
   await ffmpeg_templates('test/resources/zoompan.yml', '--debug', '--quiet')
   const ffmpeg_cmd = await Deno.readTextFile('test/resources/ffmpeg-templates-projects/test/resources/zoompan/ffmpeg.sh')

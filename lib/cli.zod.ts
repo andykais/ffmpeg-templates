@@ -205,7 +205,7 @@ export default async function (...deno_args: string[]) {
   const { template_filepath } = args
   const cwd = path.resolve(path.dirname(template_filepath))
   const log_level = args.quiet ? 'error' : 'info'
-  const context_options: ContextOptions = { output_folder: args.output_folder, cwd, ffmpeg_log_cmd: args.debug, log_level }
+  const context_options: ContextOptions = { output_folder: args.output_folder, cwd, debug: args.debug, log_level }
   const instance = new InstanceContext(context_options)
 
 

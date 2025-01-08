@@ -72,7 +72,9 @@ async function render(context: Context, ffmpeg_builder: FfmpegBuilderBase) {
 
 
   const ffmpeg_cmd = ffmpeg_builder.build()
-  if (context.ffmpeg_log_cmd) ffmpeg_builder.write_ffmpeg_cmd(output.ffmpeg_cmd)
+  if (context.debug) ffmpeg_builder.write_ffmpeg_cmd(output.ffmpeg_cmd)
+  const render_data = ffmpeg_builder.serialize()
+  if (context.debug) await Deno.writeTextFile(output.render_data, JSON.stringify(render_data))
 
   const pretty_duration = fmt_human_readable_duration(total_duration)
   context.logger.info(`Timeline contains ${timeline.length} clips.`)
@@ -94,7 +96,7 @@ async function render(context: Context, ffmpeg_builder: FfmpegBuilderBase) {
 
   return {
     template: context.template,
-    render_data: ffmpeg_builder.serialize(),
+    render_data,
     stats: {
       input_clips_count: clips.length,
       timeline_clips_count: timeline.length,

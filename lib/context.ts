@@ -12,7 +12,7 @@ import type { Keypoints } from './timeline.zod.ts'
 interface ContextOptions {
   output_folder: string
   cwd: string
-  ffmpeg_log_cmd?: boolean
+  debug?: boolean
   log_level?: LogLevel
 }
 
@@ -24,12 +24,13 @@ class InstanceContext {
   public output_folder: string
   public output_files: {
     rendered_template: string
+    render_data: string
     ffmpeg_cmd: string
     preview: string
     video: string
   }
   public cwd: string
-  public ffmpeg_log_cmd: boolean
+  public debug: boolean
   public ffmpeg_verbosity = 'error'
   public preview_server: PreviewServer
 
@@ -37,10 +38,11 @@ class InstanceContext {
   public constructor(options: ContextOptions) {
     this.logger = new Logger(options.log_level ?? 'error')
     this.cwd = options.cwd
-    this.ffmpeg_log_cmd = options.ffmpeg_log_cmd ?? false
+    this.debug = options.debug ?? false
     this.output_folder = options.output_folder
     this.output_files = {
       rendered_template: path.join(options.output_folder, 'rendered_template.json'),
+      render_data: path.join(options.output_folder, 'render_data.json'),
       ffmpeg_cmd: path.join(options.output_folder, 'ffmpeg.sh'),
       preview: path.join(options.output_folder, 'preview.jpg'),
       video: path.join(options.output_folder, 'output.mp4'),
@@ -72,7 +74,7 @@ class Context {
   get output_folder() { return this.instance.output_folder }
   get output_files() { return this.instance.output_files }
   get cwd() { return this.instance.cwd }
-  get ffmpeg_log_cmd() { return this.instance.ffmpeg_log_cmd }
+  get debug() { return this.instance.debug }
   get ffmpeg_verbosity() { return this.instance.ffmpeg_verbosity }
 
   public event(event: string, data: any) {
