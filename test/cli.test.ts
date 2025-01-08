@@ -3,7 +3,6 @@ import * as fs from '@std/fs'
 import ffmpeg_templates  from '../lib/cli.zod.ts'
 import { render_sample_frame, type Template, type TemplateParsed, type RenderData } from '../lib/mod.zod.ts'
 import { test, type TestContext } from './tools/test.ts'
-import { assertEquals } from "https://deno.land/std@0.97.0/testing/asserts.ts";
 
 
 async function rmrf(path: string) {
@@ -194,12 +193,12 @@ test.skip('zoompan', async t => {
 })
 
 // skip until set up
-test.skip('speed', async () => {
+test.skip('speed', async t => {
   await rmrf('test/resources/speed')
   await ffmpeg_templates('test/resources/speed.yml', '--debug', '--quiet')
   const ffmpeg_cmd = await Deno.readTextFile('test/resources/ffmpeg-templates-projects/test/resources/speed/ffmpeg.sh')
   const ffmpeg_cmd_fixture = await Deno.readTextFile('test/fixtures/speed/ffmpeg.sh')
-  assertEquals(ffmpeg_cmd, ffmpeg_cmd_fixture)
+  t.assert.equals(ffmpeg_cmd, ffmpeg_cmd_fixture)
 })
 
 test('empty preview between clips', async t => {

@@ -1,4 +1,4 @@
-import * as path from 'https://deno.land/std@0.91.0/path/mod.ts'
+import * as path from '@std/path'
 import * as skia_canvas from '@gfx/canvas'
 // @deno-types="@types/culori"
 import * as culori from 'culori'

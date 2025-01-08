@@ -1,10 +1,11 @@
-import * as path from 'https://deno.land/std@0.91.0/path/mod.ts'
-import * as fs from 'https://deno.land/std@0.91.0/fs/mod.ts'
-import * as flags from 'https://deno.land/std@0.91.0/flags/mod.ts'
-import * as yaml from 'https://deno.land/std@0.91.0/encoding/yaml.ts'
-import { YAMLError } from 'https://deno.land/std@0.91.0/encoding/_yaml/error.ts'
-import { open } from 'https://deno.land/x/open@v0.0.2/index.ts'
-// import open from 'npm:open'
+import * as path from '@std/path'
+import * as fs from '@std/fs'
+import * as flags from '@std/flags'
+import * as yaml from '@std/yaml'
+// import open from 'open'
+import {open} from '@opensrc/deno-open'
+// import { open } from 'https://deno.land/x/open@v0.0.2/index.ts'
+// // import open from 'npm:open'
 import * as errors from './errors.ts'
 import { parse_template } from './parsers/template.zod.ts'
 import { render_video, render_sample_frame } from './mod.zod.ts'
@@ -147,7 +148,7 @@ async function read_template(template_filepath: string): Promise<inputs.Template
     try {
       return yaml.parse(file_contents) as any
     } catch (e) {
-      if (e instanceof SyntaxError || e instanceof YAMLError) error_messages.push(e.toString())
+      if (e instanceof SyntaxError) error_messages.push(e.toString())
       else throw e
     }
     try {
@@ -183,7 +184,7 @@ async function try_render_video(instance: InstanceContext, template_filepath: st
 
 async function watch(filepath: string, fn: () => Promise<void>) {
   let lock = false
-  for await (const event of Deno.watchFs(filepath)) {
+  for await (const event of Deno.watchFs(path.dirname(filepath))) {
     if (event.kind === 'modify' && lock === false) {
       lock = true
       setTimeout(() => {
@@ -192,9 +193,7 @@ async function watch(filepath: string, fn: () => Promise<void>) {
         })
       }, 50) // assume that all file modifications are completed in 50ms
     }
-    if (event.kind === 'remove') break
   }
-  watch(filepath, fn)
 }
 
 

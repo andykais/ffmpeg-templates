@@ -1,5 +1,4 @@
-import * as path from 'https://deno.land/std@0.134.0/path/mod.ts'
-import { serve } from "https://deno.land/std@0.134.0/http/server.ts";
+import * as path from '@std/path'
 import type { InstanceContext } from '../context.ts'
 
 
@@ -53,7 +52,7 @@ class PreviewServer {
   }
 
   public async start() {
-    const server_promise = serve(this.request_handler, { port: this.port })
+    const server_promise = Deno.serve({port: this.port}, this.request_handler)
     this.instance.logger.info('launching preview server')
 
     this.instance.logger.info(`  local:   http://localhost:${this.port}`)

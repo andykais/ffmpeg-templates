@@ -1,4 +1,4 @@
-import * as path from 'https://deno.land/std@0.91.0/path/mod.ts'
+import * as path from '@std/path'
 import { relative_path } from '../util.ts'
 import type * as parsed from '../parsers/template.zod.ts'
 import type { ClipInfo } from '../probe.zod.ts'

@@ -1,4 +1,4 @@
-import * as path from 'https://deno.land/std@0.91.0/path/mod.ts'
+import * as path from '@std/path'
 import * as errors from './errors.ts'
 import { parse_unit } from './parsers/unit.ts'
 import { parse_template } from './parsers/template.zod.ts'

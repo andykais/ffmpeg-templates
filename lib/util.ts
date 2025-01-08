@@ -1,5 +1,5 @@
 import {TextLineStream} from '@std/streams'
-import * as path from 'https://deno.land/std@0.91.0/path/mod.ts'
+import * as path from '@std/path'
 import { InputError } from './errors.ts'
 import type * as template_input from './template_input.zod.ts'
 

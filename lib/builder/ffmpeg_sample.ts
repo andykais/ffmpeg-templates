@@ -1,4 +1,4 @@
-import * as path from 'https://deno.land/std@0.91.0/path/mod.ts'
+import * as path from '@std/path'
 import { parse_duration } from '../parsers/duration.zod.ts'
 import { Context } from '../context.ts'
 import { relative_path } from '../util.ts'
