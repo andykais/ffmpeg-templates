@@ -7,6 +7,8 @@ const TEST_DIR = path.dirname(path.dirname(path.fromFileUrl(import.meta.url)))
 async function assert_file_equals(actual_filepath: string, expected_filepath: string) {
   const actual_file_data = await Deno.readFile(actual_filepath)
   const expected_file_data = await Deno.readFile(expected_filepath)
+  console.log('expected_file_data length:', expected_file_data.length)
+  console.log('actual_file_data length:', actual_file_data.length)
   assert.assertEquals(actual_file_data, expected_file_data)
 }
 
