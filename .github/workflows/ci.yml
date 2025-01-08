@@ -22,12 +22,12 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: free -m
+      - run: free -m
 
       - name: Setup Repo
         uses: actions/checkout@v3
 
-      - name: free -m
+      - run: free -m
 
       - name: Setup FFMPEG
         uses: FedericoCarboni/setup-ffmpeg@v3
@@ -35,12 +35,12 @@ jobs:
         with:
           ffmpeg-version: 7.0.1
 
-      - name: free -m
+      - run: free -m
 
       - name: Setup Deno
         uses: denoland/setup-deno@v2
 
-      - name: free -m
+      - run: free -m
 
       - name: Cache Deno dependencies 
         uses: actions/cache@v4
@@ -48,7 +48,7 @@ jobs:
           path: ${{ env.DENO_DIR }}
           key: ${{ hashFiles(env.DENO_LOCKFILE) }}
 
-      - name: free -m
+      - run: free -m
 
       - name: Test
         run: deno task test
