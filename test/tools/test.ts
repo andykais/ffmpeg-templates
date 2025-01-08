@@ -7,9 +7,18 @@ const TEST_DIR = path.dirname(path.dirname(path.fromFileUrl(import.meta.url)))
 async function assert_file_equals(actual_filepath: string, expected_filepath: string) {
   const actual_file_data = await Deno.readFile(actual_filepath)
   const expected_file_data = await Deno.readFile(expected_filepath)
-  console.log('expected_file_data length:', expected_file_data.length)
-  console.log('actual_file_data length:', actual_file_data.length)
-  assert.assertEquals(actual_file_data, expected_file_data)
+  // NOTE we do not use assertEquals here because the std lib will check for equality and then perform a diff.
+  // We do not need the diff, and it causes issues on CI with memory allocations
+  if (actual_file_data.length !== expected_file_data.length) {
+    throw new assert.AssertionError(`Expected file size of ${expected_file_data.length} for ${expected_filepath} does not match actual file size of ${actual_file_data.length} for ${actual_filepath}`)
+  }
+  for (let i = 0; i < expected_file_data.length; i++) {
+    const expected_byte = expected_file_data[i]
+    const actual_byte = actual_file_data[i]
+    if (actual_byte !== expected_byte || !Object.is(actual_byte, expected_byte)) {
+      throw new assert.AssertionError(`Expected file ${expected_filepath} does not match actual file ${actual_filepath} at position ${i}`)
+    }
+  }
 }
 
 interface Asserts {

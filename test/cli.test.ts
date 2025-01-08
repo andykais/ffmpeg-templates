@@ -1,4 +1,3 @@
-console.log('memory usage:', Deno.memoryUsage())
 import * as path from '@std/path'
 import * as fs from '@std/fs'
 import ffmpeg_templates  from '../lib/cli.zod.ts'
@@ -72,7 +71,6 @@ test('dot notation template', async t => {
   })
   // since we're here we can also test that previews only render the relevant clips
   t.assert.equals(Object.keys(output_1.render_data.clips), ['CLIP_0'])
-  console.log('memory usage:', Deno.memoryUsage())
   await t.assert.file(output_1.preview_filepath, path.join(t.fixtures_folder, 'preview_at_00:00:03.jpg'))
 
   template.preview = '5'
