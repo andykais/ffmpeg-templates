@@ -2,9 +2,9 @@ import * as path from '@std/path'
 import * as skia_canvas from '@gfx/canvas'
 // @deno-types="@types/culori"
 import * as culori from 'culori'
-import { compute_size } from '../geometry.zod.ts'
+import { compute_size } from '../geometry.ts'
 import type { Context } from '../context.ts'
-import type { TextClipParsed, MediaClipParsed } from '../parsers/template.zod.ts'
+import type { TextClipParsed, MediaClipParsed } from '../parsers/template.ts'
 
 // first in the list gets highest priority
 const PRIORITIED_FONT_FAMILIES = [

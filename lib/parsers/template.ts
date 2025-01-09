@@ -1,6 +1,6 @@
 import * as path from '@std/path'
 import { z } from 'zod'
-import * as t from '../template_input.zod.ts'
+import * as t from '../template_input.ts'
 import * as errors from '../errors.ts'
 import { parse_unit } from './unit.ts'
 import * as tsafe from 'npm:tsafe@1.8.5'

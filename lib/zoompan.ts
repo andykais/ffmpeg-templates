@@ -1,10 +1,10 @@
 import { InputError } from './errors.ts'
 import { parse_unit, parse_percentage } from './parsers/unit.ts'
-import { parse_duration } from './parsers/duration.zod.ts'
+import { parse_duration } from './parsers/duration.ts'
 import { AbstractClipMap } from './util.ts'
-import type { ClipID } from './template_input.zod.ts'
-import type { ClipInfoMap } from './probe.zod.ts'
-import type { ClipGeometryMap } from './geometry.zod.ts'
+import type { ClipID } from './template_input.ts'
+import type { ClipInfoMap } from './probe.ts'
+import type { ClipGeometryMap } from './geometry.ts'
 import type {Context} from './context.ts'
 
 type ComputedZoompan = {

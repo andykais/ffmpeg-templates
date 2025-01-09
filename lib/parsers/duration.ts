@@ -1,5 +1,5 @@
 import { InputError } from '../errors.ts'
-import type * as inputs from '../template_input.zod.ts'
+import type * as inputs from '../template_input.ts'
 import type { Context } from '../context.ts'
 
 type Seconds = number

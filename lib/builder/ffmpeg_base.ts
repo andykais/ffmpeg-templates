@@ -1,11 +1,11 @@
 import * as errors from '../errors.ts'
 import { Context } from '../context.ts'
 import { relative_path } from '../util.ts'
-import type * as inputs from '../template_input.zod.ts'
-import type * as parsed from '../parsers/template.zod.ts'
-import type { TimelineClip } from '../timeline.zod.ts'
-import type { ComputedGeometry } from '../geometry.zod.ts'
-import type { ClipInfo } from '../probe.zod.ts'
+import type * as inputs from '../template_input.ts'
+import type * as parsed from '../parsers/template.ts'
+import type { TimelineClip } from '../timeline.ts'
+import type { ComputedGeometry } from '../geometry.ts'
+import type { ClipInfo } from '../probe.ts'
 
 import { ClipBuilderBase } from './clip_base.ts'
 

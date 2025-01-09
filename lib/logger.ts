@@ -1,4 +1,4 @@
-import { fmt_human_readable_duration } from './parsers/duration.zod.ts'
+import { fmt_human_readable_duration } from './parsers/duration.ts'
 
 type LogLevel = 'error' | 'warn' | 'info'
 

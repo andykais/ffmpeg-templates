@@ -2,8 +2,8 @@ import { InputError } from './errors.ts'
 import { parse_unit } from './parsers/unit.ts'
 import { AbstractClipMap } from './util.ts'
 import type { Context } from './context.ts'
-import type { DetailedSizeUnit } from './template_input.zod.ts'
-import type { TemplateParsed, MediaClipParsed, LayoutParsed, SizeParsed } from './parsers/template.zod.ts'
+import type { DetailedSizeUnit } from './template_input.ts'
+import type { TemplateParsed, MediaClipParsed, LayoutParsed, SizeParsed } from './parsers/template.ts'
 
 interface ComputedGeometry {
   x: number

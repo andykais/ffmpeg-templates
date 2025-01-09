@@ -1,4 +1,4 @@
-import { compute_rotated_size } from '../geometry.zod.ts'
+import { compute_rotated_size } from '../geometry.ts'
 
 
 function parse_aspect_ratio(aspect_ratio: string, rotation?: number) {

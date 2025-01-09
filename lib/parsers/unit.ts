@@ -1,4 +1,4 @@
-import type { DetailedSizeUnit } from '../template_input.zod.ts'
+import type { DetailedSizeUnit } from '../template_input.ts'
 import { InputError } from '../errors.ts'
 
 class UnitError extends InputError {}

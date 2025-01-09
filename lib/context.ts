@@ -1,13 +1,13 @@
 import * as path from '@std/path'
 import * as errors from './errors.ts'
 import { Logger } from './logger.ts'
-import { ClipInfoMap } from './probe.zod.ts'
+import { ClipInfoMap } from './probe.ts'
 import { AbstractClipMap } from './util.ts'
 import { PreviewServer } from './preview/server.ts'
 import type { LogLevel } from './logger.ts'
-import type * as inputs from './template_input.zod.ts'
-import type { TemplateParsed, MediaClipParsed } from './parsers/template.zod.ts'
-import type { Keypoints } from './timeline.zod.ts'
+import type * as inputs from './template_input.ts'
+import type { TemplateParsed, MediaClipParsed } from './parsers/template.ts'
+import type { Keypoints } from './timeline.ts'
 
 interface ContextOptions {
   output_folder: string

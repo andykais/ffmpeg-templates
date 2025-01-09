@@ -1,6 +1,6 @@
-import type { TimelineClip } from '../timeline.zod.ts'
-import type { ClipInfo } from '../probe.zod.ts'
-import type * as parsed from '../parsers/template.zod.ts'
+import type { TimelineClip } from '../timeline.ts'
+import type { ClipInfo } from '../probe.ts'
+import type * as parsed from '../parsers/template.ts'
 import { ClipBuilderBase } from './clip_base.ts'
 
 

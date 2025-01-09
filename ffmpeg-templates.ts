@@ -1,5 +1,5 @@
 import * as flags from '@std/flags'
-import ffmpeg_templates from './lib/cli.zod.ts'
+import ffmpeg_templates from './lib/cli.ts'
 
 
 const VERSION = 'v0.2.0'

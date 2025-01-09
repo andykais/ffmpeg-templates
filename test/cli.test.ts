@@ -1,7 +1,7 @@
 import * as path from '@std/path'
 import * as fs from '@std/fs'
-import ffmpeg_templates  from '../lib/cli.zod.ts'
-import { render_sample_frame, type Template, type TemplateParsed, type RenderData } from '../lib/mod.zod.ts'
+import ffmpeg_templates  from '../lib/cli.ts'
+import { render_sample_frame, type Template, type TemplateParsed, type RenderData } from '../lib/mod.ts'
 import { test, type TestContext } from './tools/test.ts'
 
 

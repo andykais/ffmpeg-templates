@@ -1,8 +1,8 @@
 import {readlines} from '../util.ts'
 import { InputError, CommandError } from '../errors.ts'
-import { parse_duration } from '../parsers/duration.zod.ts'
+import { parse_duration } from '../parsers/duration.ts'
 import type { Context } from '../context.ts'
-import type { Timestamp } from '../template_input.zod.ts'
+import type { Timestamp } from '../template_input.ts'
 
 type OnReadLine = (line: string) => void
 async function exec(cmd: string[]) {

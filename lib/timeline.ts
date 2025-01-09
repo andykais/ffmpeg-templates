@@ -1,8 +1,8 @@
 import * as errors from './errors.ts'
 import { parse_unit } from './parsers/unit.ts'
-import { parse_duration } from './parsers/duration.zod.ts'
-import type * as inputs from './template_input.zod.ts'
-import type * as parsed from './parsers/template.zod.ts'
+import { parse_duration } from './parsers/duration.ts'
+import type * as inputs from './template_input.ts'
+import type * as parsed from './parsers/template.ts'
 import type { Context } from './context.ts'
 
 

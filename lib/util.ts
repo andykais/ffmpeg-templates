@@ -1,7 +1,7 @@
 import {TextLineStream} from '@std/streams'
 import * as path from '@std/path'
 import { InputError } from './errors.ts'
-import type * as template_input from './template_input.zod.ts'
+import type * as template_input from './template_input.ts'
 
 
 abstract class AbstractClipMap<T> extends Map<template_input.ClipID, T> {

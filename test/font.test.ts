@@ -1,4 +1,4 @@
-import { render_image, render_video } from '../lib/mod.zod.ts'
+import { render_image, render_video } from '../lib/mod.ts'
 import { path } from './tools/deps.ts'
 import { test } from './tools/test.ts'
 

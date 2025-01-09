@@ -1,7 +1,7 @@
 import * as path from '@std/path'
 import { relative_path } from '../util.ts'
-import type * as parsed from '../parsers/template.zod.ts'
-import type { ClipInfo } from '../probe.zod.ts'
+import type * as parsed from '../parsers/template.ts'
+import type { ClipInfo } from '../probe.ts'
 
 import { FfmpegBuilderBase, type ClipBuilderData } from './ffmpeg_base.ts'
 import { ClipBuilderBase } from './clip_base.ts'
