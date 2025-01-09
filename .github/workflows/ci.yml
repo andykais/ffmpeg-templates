@@ -40,12 +40,14 @@ jobs:
           path: ${{ env.DENO_DIR }}
           key: ${{ hashFiles(env.DENO_LOCKFILE) }}
 
-      # SSH into github machine for quick iterative debugging
-      # - name: Setup upterm session
-      #   uses: lhotari/action-upterm@v1
-      - name: Setup tmate session
-        uses: mxschmitt/action-tmate@v3
+      # SSH into github machine for quick iterative debugging (note that this sort of sucks if you want to retrieve a file via ssh)
+      # - name: Setup tmate session
+      #   uses: mxschmitt/action-tmate@v3
 
       - name: Test
         run: deno task test
 
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          path: "./test/artifacts/dot notation template/project_output/preview.jpg"
