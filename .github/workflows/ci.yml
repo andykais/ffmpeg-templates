@@ -50,4 +50,4 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          path: "./test/artifacts/dot notation template/project_output/preview.jpg"
+          path: "./test/artifacts/render image with zero duration/preview.jpg"
