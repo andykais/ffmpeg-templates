@@ -12,7 +12,12 @@ import { type ClipBuilderData } from './ffmpeg_base.ts'
 import { ClipSampleBuilder } from './clip_sample.ts'
 
 export class FfmpegSampleBuilder extends FfmpegBuilderBase {
-  protected get_vframe_flags() { return ['-vframes', '1'] }
+  protected get_vframe_flags() {
+    return [
+      '-frames:v', '1',
+      '-update', '1',
+    ]
+  }
   protected sample_frame: number
 
   public constructor(context: Context) {

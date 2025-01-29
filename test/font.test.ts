@@ -1,5 +1,5 @@
 import { render_image, render_video } from '../lib/mod.ts'
-import { path } from './tools/deps.ts'
+import * as path from '@std/path'
 import { test } from './tools/test.ts'
 
 test('caption word wrapping', async t => {
