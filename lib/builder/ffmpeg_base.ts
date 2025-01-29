@@ -68,7 +68,7 @@ export abstract class FfmpegBuilderBase {
   }
 
   public constructor(protected context: Context) {
-    this.verbosity_flag = this.context.debug ? 'info' : 'error'
+    this.verbosity_flag = 'debug'
   }
 
   public clip_count() { return this.clip_data.length }
