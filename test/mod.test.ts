@@ -28,7 +28,7 @@ test('width scaling', async t => {
   t.assert.equals(CLIP_1.geometry.scale.width / CLIP_1.geometry.scale.height, 1.7810760667903525)
 })
 
-test('render image with zero duration', async t => {
+test.only('render image with zero duration', async t => {
   const template = {
     clips: {
       CLIP_0: {

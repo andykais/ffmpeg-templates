@@ -1,6 +1,12 @@
 import * as path from '@std/path'
 import * as assert from '@std/assert'
+import { crypto } from '@std/crypto'
+import { encodeHex } from '@std/encoding/hex'
 
+async function md5checksum(file_data: BufferSource) {
+  const hash_buffer = await crypto.subtle.digest('MD5', file_data)
+  return encodeHex(hash_buffer)
+}
 
 const TEST_DIR = path.dirname(path.dirname(path.fromFileUrl(import.meta.url)))
 
@@ -10,13 +16,22 @@ async function assert_file_equals(actual_filepath: string, expected_filepath: st
   // NOTE we do not use assertEquals here because the std lib will check for equality and then perform a diff.
   // We do not need the diff, and it causes issues on CI with memory allocations
   if (actual_file_data.length !== expected_file_data.length) {
-    throw new assert.AssertionError(`Expected file size of ${expected_file_data.length} for ${expected_filepath} does not match actual file size of ${actual_file_data.length} for ${actual_filepath}`)
+    const actual_hash = await md5checksum(actual_file_data)
+    const expected_hash = await md5checksum(expected_file_data)
+    throw new assert.AssertionError(`Expected file size of ${expected_file_data.length} for ${expected_filepath} does not match actual file size of ${actual_file_data.length} for ${actual_filepath}
+Expected MD5 checksum: ${expected_hash}
+Actual MD5 checksum:   ${actual_hash}`)
+
   }
   for (let i = 0; i < expected_file_data.length; i++) {
     const expected_byte = expected_file_data[i]
     const actual_byte = actual_file_data[i]
     if (actual_byte !== expected_byte || !Object.is(actual_byte, expected_byte)) {
-      throw new assert.AssertionError(`Expected file ${expected_filepath} does not match actual file ${actual_filepath} at position ${i}`)
+      const actual_hash = await md5checksum(actual_file_data)
+      const expected_hash = await md5checksum(expected_file_data)
+      throw new assert.AssertionError(`Expected file ${expected_filepath} does not match actual file ${actual_filepath} at position ${i}
+Expected MD5 checksum: ${expected_hash}
+Actual MD5 checksum:   ${actual_hash}`)
     }
   }
 }

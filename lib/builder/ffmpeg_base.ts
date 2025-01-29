@@ -138,6 +138,7 @@ export abstract class FfmpegBuilderBase {
       '-r', (this.output_framerate ?? 60).toString(),
       '-map', this.last_link,
       ...map_audio_flags,
+      '-bitexact',
       this.get_output_file(),
       '-y'
     ]

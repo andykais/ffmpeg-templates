@@ -15,6 +15,8 @@
     "open": "npm:open@^10.1.0",
     "zod": "npm:zod@^3.24.1",
 
-    "@std/assert": "jsr:@std/assert@^1.0.9"
+    "@std/assert": "jsr:@std/assert@^1.0.9",
+    "@std/crypto": "jsr:@std/crypto@^1.0.3",
+    "@std/encoding/hex": "jsr:@std/encoding@^0.214.0/hex"
   }
 }
