@@ -1,7 +1,7 @@
 {
   "tasks": {
     "test:watch": "deno test --watch --fail-fast --unstable-ffi --allow-read --allow-write --allow-run=ffprobe,ffmpeg --allow-env=DENO_SKIA_LOCAL,DENO_SKIA_PATH,DENO_DIR,XDG_CACHE_HOME,HOME,CANVAS_DISABLE_SYSTEM_FONTS --allow-ffi --allow-net=github.com,objects.githubusercontent.com --import-map=test/import-map.json"
-    "test": "deno test --fail-fast --unstable-ffi --allow-read --allow-write --allow-run=ffprobe,ffmpeg --allow-env=DENO_SKIA_LOCAL,DENO_SKIA_PATH,DENO_DIR,XDG_CACHE_HOME,HOME,CANVAS_DISABLE_SYSTEM_FONTS --allow-ffi --allow-net=github.com,objects.githubusercontent.com --import-map=test/import-map.json test/**/*.test.ts"
+    "test": "deno test --fail-fast --unstable-ffi --allow-read --allow-write --allow-run=ffprobe,ffmpeg --allow-env=DENO_SKIA_LOCAL,DENO_SKIA_PATH,DENO_DIR,XDG_CACHE_HOME,HOME,CANVAS_DISABLE_SYSTEM_FONTS --allow-ffi --allow-net=github.com,objects.githubusercontent.com --import-map=test/import-map.json ./test/mod.test.ts"
   },
   "imports": {
     "@detachhead/ts-helpers": "npm:@detachhead/ts-helpers@16.2.0",
