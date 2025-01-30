@@ -145,6 +145,7 @@ export abstract class ClipBuilderBase {
     const video_input_filters = [
       this.setpts_filter,
       ...this.video_input_filters,
+      'format=pix_fmts=yuv420p',
     ]
 
     let framerate = this.probe_info.framerate
