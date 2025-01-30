@@ -86,7 +86,7 @@ export abstract class ClipBuilderBase {
   }
 
   public scale(scale: { width: number; height: number }) {
-    this.video_input_filters.push(`scale=${scale.width}:${scale.height}`)
+    this.video_input_filters.push(`scale=${scale.width}:${scale.height}:flags=bicubic`)
     return this
   }
 
