@@ -28,7 +28,7 @@ test('width scaling', async t => {
   t.assert.equals(CLIP_1.geometry.scale.width / CLIP_1.geometry.scale.height, 1.7810760667903525)
 })
 
-test.only('render image with zero duration', async t => {
+test('render image with zero duration', async t => {
   const template = {
     clips: {
       CLIP_0: {
@@ -140,4 +140,24 @@ test('template transformation.flip', async t => {
   const { background_image } = render_data.clips
   t.assert.equals(background_image.geometry.scale.width, 533)
   t.assert.equals(background_image.geometry.scale.height, 400)
+})
+
+
+test.only('template SELF reference', async t => {
+  const template = {
+    size: { width: '400px', height: '400px' },
+    clips: {
+      background_image: {
+        source: path.join(t.assets_folder, '1636302951890.jpg'),
+        'layout.width.value': '100%',
+        'layout.width.min': '100%',
+        'crop.relative_to': 'SELF',
+        // 'transform': [{flip: 'horizontal' as const}],
+      }
+    },
+  }
+  const { render_data, output } = await render_image(template, {cwd: Deno.cwd(), output_folder: t.artifacts_folder, debug: true })
+  const { background_image } = render_data.clips
+  t.assert.equals(background_image.geometry.scale.width, 400)
+  t.assert.equals(background_image.geometry.scale.height, 300)
 })

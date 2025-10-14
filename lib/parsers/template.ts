@@ -7,7 +7,8 @@ import * as tsafe from 'npm:tsafe@1.8.5'
 
 
 const RESERVED_IDS = [
-  'BACKGROUND'
+  'BACKGROUND',
+  'SELF',
 ]
 const ClipId = z.string().regex(/[a-zA-Z0-9-_]/).refine(v => RESERVED_IDS.every(id => id !== v), { message: `[${RESERVED_IDS}] are reserved ids.`})
 const ClipIdReference = z.string().regex(/[a-zA-Z0-9-_]/)
@@ -196,7 +197,17 @@ const Template = z.object({
   // Size.and(z.object({ background_color: Color.optional() })).default({}),
   size: Size.merge(z.object({ background_color: Color.optional() })).default({}),
 
-  clips: z.union([TemplateClipsArray, TemplateClipsMap]),
+  clips: z.union([TemplateClipsArray, TemplateClipsMap]).transform(clips => {
+    for (const clip of clips) {
+      if (clip.layout.relative_to === 'SELF') {
+        clip.layout.relative_to = clip.id
+      }
+      if (clip.crop?.relative_to === 'SELF') {
+        clip.crop.relative_to = clip.id
+      }
+    }
+    return clips
+  }),
 
   // captions: TextClip
   //   .array()
