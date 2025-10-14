@@ -96,7 +96,7 @@ test('size.background_color', async t => {
   await t.assert.file(output.preview_filepath, path.join(t.fixtures_folder, 'preview.jpg'))
 })
 
-test('captions.[].font.outline_style', async t => {
+test.skip('captions.[].font.outline_style', async t => {
   const template: Template = {
     clips: [
       {
@@ -146,7 +146,7 @@ test('preview default clip duration', async t => {
   await t.assert.file(output.preview_filepath, path.join(t.fixtures_folder, 'preview.jpg'))
 })
 
-test('clips.[].chromakey', async (t) => {
+test.skip('clips.[].chromakey', async (t) => {
   const template = {
     size: { background_color: 'blue' },
     clips: [

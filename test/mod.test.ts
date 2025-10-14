@@ -143,7 +143,7 @@ test('template transformation.flip', async t => {
 })
 
 
-test.only('template SELF reference', async t => {
+test('template SELF reference', async t => {
   const template = {
     size: { width: '400px', height: '400px' },
     clips: {

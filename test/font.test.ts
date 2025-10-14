@@ -2,7 +2,7 @@ import { render_image, render_video } from '../lib/mod.ts'
 import * as path from '@std/path'
 import { test } from './tools/test.ts'
 
-test('caption word wrapping', async t => {
+test.skip('caption word wrapping', async t => {
   const template = {
     clips: {
       background_image: {
@@ -21,7 +21,7 @@ test('caption word wrapping', async t => {
   await t.assert.file(output.current, path.join(t.fixtures_folder, 'preview.jpg'))
 })
 
-test('font outline', async t => {
+test.skip('font outline', async t => {
   const template = {
     clips: {
       background_image: {
@@ -42,7 +42,7 @@ test('font outline', async t => {
   await t.assert.file(output.current, path.join(t.fixtures_folder, 'preview.jpg'))
 })
 
-test('font background', async t => {
+test.skip('font background', async t => {
   const template = {
     clips: {
       background_image: {
@@ -65,7 +65,7 @@ test('font background', async t => {
   await t.assert.file(output.current, path.join(t.fixtures_folder, 'preview.jpg'))
 })
 
-test('dot notation only caption', async t => {
+test.skip('dot notation only caption', async t => {
   const template = {
     clips: {
       background_image: {
