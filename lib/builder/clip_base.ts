@@ -145,7 +145,7 @@ export abstract class ClipBuilderBase {
     const video_input_filters = [
       this.setpts_filter,
       ...this.video_input_filters,
-      'format=pix_fmts=yuv420p',
+      // 'format=pix_fmts=yuv420p', // NOTE this was an attempt to keep the pixel formats consistent, but it means that PNG's lose their transparency. We should consider a more robust solution if a need arises
     ]
 
     let framerate = this.probe_info.framerate

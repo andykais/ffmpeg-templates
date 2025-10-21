@@ -2,7 +2,8 @@ import { render_image, render_video } from '../lib/mod.ts'
 import * as path from '@std/path'
 import { test } from './tools/test.ts'
 
-test.skip('caption word wrapping', async t => {
+test('caption word wrapping', async t => {
+  const FONT_FAMILY = path.join(t.assets_folder, 'SourceSansPro-Regular.ttf')
   const template = {
     clips: {
       background_image: {
@@ -11,6 +12,7 @@ test.skip('caption word wrapping', async t => {
     },
 
     'captions.CENTER_TEXT.text': 'Boy do I sure love Beans. Black beans, Kidney beans, coffee beans, you name it.\n Testing words that exceed the width:\n\nSupercalifragilisticexpialidocious',
+    'captions.CENTER_TEXT.font.family': FONT_FAMILY,
     'captions.CENTER_TEXT.font.color': 'white',
     'captions.CENTER_TEXT.font.size': 75,
     'captions.CENTER_TEXT.layout.x': 'center',
@@ -21,7 +23,7 @@ test.skip('caption word wrapping', async t => {
   await t.assert.file(output.current, path.join(t.fixtures_folder, 'preview.jpg'))
 })
 
-test.skip('font outline', async t => {
+test('font outline', async t => {
   const template = {
     clips: {
       background_image: {
@@ -42,7 +44,7 @@ test.skip('font outline', async t => {
   await t.assert.file(output.current, path.join(t.fixtures_folder, 'preview.jpg'))
 })
 
-test.skip('font background', async t => {
+test('font background', async t => {
   const template = {
     clips: {
       background_image: {
@@ -65,7 +67,7 @@ test.skip('font background', async t => {
   await t.assert.file(output.current, path.join(t.fixtures_folder, 'preview.jpg'))
 })
 
-test.skip('dot notation only caption', async t => {
+test('dot notation only caption', async t => {
   const template = {
     clips: {
       background_image: {

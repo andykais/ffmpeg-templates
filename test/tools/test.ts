@@ -56,6 +56,7 @@ export interface TestContext {
   artifacts_folder: string
   fixtures_folder: string
   assets_folder: string
+  fonts: { source_code_pro: string }
   assert: Asserts
   assets: typeof ASSETS
 }
@@ -85,6 +86,9 @@ function test(test_name: string, fn: TestFunction, options: {skip?: boolean; onl
       artifacts_folder,
       fixtures_folder,
       assets_folder,
+      fonts: {
+        source_code_pro: path.join(assets_folder, 'SourceSansPro-Regular.ttf')
+      },
       assets: ASSETS,
       assert: {
         equals: assert.assertEquals,
