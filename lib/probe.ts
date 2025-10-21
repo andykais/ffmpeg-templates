@@ -1,11 +1,16 @@
-import * as io from 'https://deno.land/std@0.91.0/io/mod.ts'
+import * as path from '@std/path'
+import {readlines} from './util.ts'
 import { ProbeError, CommandError } from './errors.ts'
+import { AbstractClipMap } from './util.ts'
 import { parse_aspect_ratio, parse_ffmpeg_packet } from './parsers/ffmpeg_output.ts'
-import { is_media_clip, AbstractClipMap } from './parsers/template.ts'
 import { compute_rotated_size } from './geometry.ts'
-import type { Logger } from './logger.ts'
-import type * as template_parsed from './parsers/template.ts'
+import type { InstanceContext } from './context.ts'
+import type * as template from './template_input.ts'
+import type { MediaClipParsed } from './parsers/template.ts'
 import type { Seconds } from './parsers/duration.ts'
+
+const CLIP_INFO_FILENAME = 'probe_info.json'
+
 
 interface ClipInfo {
   id: string
@@ -17,23 +22,28 @@ interface ClipInfo {
   has_audio: boolean
   duration: Seconds
   type: 'video' | 'audio' | 'image'
+  timestamp: string
 }
 
-class ClipInfoMap extends AbstractClipMap<ClipInfo> {}
 
 type OnReadLine = (line: string) => void
 async function exec(cmd: string[], readline_cb?: OnReadLine) {
   const decoder = new TextDecoder()
-  const proc = Deno.run({ cmd, stdout: 'piped' })
+  const proc_command = new Deno.Command(cmd[0], {
+    args: cmd.slice(1),
+    stdout: 'piped',
+  })
+  const proc = proc_command.spawn()
   if (readline_cb) {
-    for await (const line of io.readLines(proc.stdout)) {
+    for await (const line of readlines(proc.stdout)) {
       readline_cb(line)
     }
   }
-  const result = await proc.status()
+  const result = await proc.status
   const output_buffer = await proc.output()
-  const output = decoder.decode(output_buffer)
-  await proc.close()
+  const output = decoder.decode(output_buffer.stdout)
+  proc.unref()
+  // await proc.close()
   if (result.success) {
     return output
   } else {
@@ -41,109 +51,147 @@ async function exec(cmd: string[], readline_cb?: OnReadLine) {
   }
 }
 
-class ClipZoompansMap extends AbstractClipMap<ClipInfo> {}
 
-// The cache key is the filename only
-// That means if the file is overwritten, the cache will not pick up that change
-// So for now, if you edit a file, you restart the watcher
-// This is fair enough since its how most video editors function (and how often are people manipulating source files?)
-const clip_info_map_cache = new ClipInfoMap()
-async function probe_clips(
-  logger: Logger,
-  template: template_parsed.Template,
-  clips: template_parsed.Template['clips'],
-  use_cache = true
-): Promise<ClipInfoMap> {
-  // only probe media clips
-  const media_clips = clips.filter(is_media_clip)
+class ClipInfoMap extends AbstractClipMap<ClipInfo> {
+  // The cache key is the filename only
+  // That means if the file is overwritten, the cache will not pick up that change
+  // So for now, if you edit a file, you restart the watcher
+  // This is fair enough since its how most video editors function (and how often are people manipulating source files?)
+  // cache keys are filenames, public keys are ids
+  private clip_info_cache_map: { [file: string]: ClipInfo } = {}
+  private in_flight_info_map: { [file: string]: Promise<ClipInfo> } = {}
+  private probe_info_filepath
+  private init_cache: Promise<void> | null
 
-  const unique_files = new Set<string>()
-  // we only need to probe files once
-  const unique_media_clips = media_clips.filter((c) => unique_files.size < unique_files.add(c.filepath).size)
-
-  const probe_clips_promises = unique_media_clips.map(async (clip: template_parsed.MediaClip) => {
-    const { id, filepath } = clip
-    if (use_cache && clip_info_map_cache.has(filepath)) return clip_info_map_cache.get_or_else(filepath)
-    if (is_media_clip(clip.source_clip)) logger.info(`Probing file ${clip.file}`)
-    else logger.info(`Probing font asset ${clip.file}`)
-    const result = await exec([
-      'ffprobe',
-      '-v',
-      'error',
-      '-print_format',
-      'json',
-      '-show_streams',
-      '-show_entries',
-      'stream=width,height,display_aspect_ratio,codec_type,codec_name,avg_frame_rate:stream_tags=rotate',
-      // 'format=duration',
-      filepath,
-    ])
-    const info = JSON.parse(result)
-    const video_stream = info.streams.find((s: any) => s.codec_type === 'video')
-    const audio_stream = info.streams.find((s: any) => s.codec_type === 'audio')
-
-    if (!video_stream) throw new ProbeError(`Input "${clip.file}" has no video stream`)
-    const has_audio = audio_stream !== undefined
-    let rotation = video_stream.tags?.rotate ? (parseInt(video_stream.tags?.rotate) * Math.PI) / 180.0 : 0
-    let { width, height } = video_stream
-    ;({ width, height } = compute_rotated_size({ width, height }, rotation))
-
-    let aspect_ratio = width / height
-    if (video_stream.display_aspect_ratio) {
-      aspect_ratio = parse_aspect_ratio(video_stream.display_aspect_ratio, rotation)
-    }
-
-    if (['mjpeg', 'jpeg', 'jpg', 'png'].includes(video_stream.codec_name)) {
-      const duration = NaN
-      const framerate = 60
-      return {
-        type: 'image' as const,
-        filepath,
-        id,
-        width,
-        height,
-        aspect_ratio,
-        has_audio,
-        duration,
-        framerate,
-      }
-    } else {
-      const framerate = eval(video_stream.avg_frame_rate)
-      // ffprobe's duration is unreliable. The best solutions I have are:
-      // 1. ffmpeg guessing: https://stackoverflow.com/a/33115316/3795137
-      // 2. ffprobe packets: https://stackoverflow.com/a/33346572/3795137 but this is a ton of output, so were using ffmpeg
-      // I picked #2 because #1 is very slow to complete, it has to iterate the whole video, often at regular playback speed
-      let packet_str_buffer: string[] = []
-      const out = await exec(['ffprobe', '-v', 'error', '-show_packets', '-i', filepath], (line) => {
-        if (line === '[PACKET]') packet_str_buffer = []
-        packet_str_buffer.push(line)
-      })
-      const packet = parse_ffmpeg_packet(packet_str_buffer)
-      const duration = parseFloat(packet.dts_time)
-      return {
-        type: 'video' as const,
-        filepath,
-        id,
-        width,
-        height,
-        aspect_ratio,
-        has_audio,
-        framerate,
-        duration,
-      }
-    }
-  })
-
-  const probed_clips = await Promise.all(probe_clips_promises)
-  for (const probed_clip of probed_clips) {
-    clip_info_map_cache.set(probed_clip.filepath, probed_clip)
+  public constructor(private instance: InstanceContext) {
+    super()
+    this.probe_info_filepath = path.resolve(instance.output_folder, CLIP_INFO_FILENAME)
+    this.init_cache = null
   }
-  return media_clips.reduce((acc: ClipInfoMap, clip, i) => {
-    const clip_info = clip_info_map_cache.get_or_else(clip.filepath)
-    acc.set(clip.id, clip_info)
-    return acc
-  }, new ClipInfoMap())
+
+  async lazy_init() {
+    if (this.init_cache) {
+      return this.init_cache
+    } else {
+      return (async () => {
+        try {
+          const json_str = await Deno.readTextFile(this.probe_info_filepath)
+          type ClipInfoObject = { [file: string]: ClipInfo }
+          const clip_info_object: ClipInfoObject = JSON.parse(json_str)
+          for (const file of Object.keys(clip_info_object)) {
+            this.clip_info_cache_map[file] = clip_info_object[file]
+          }
+        } catch (e) {
+          if (e instanceof Deno.errors.NotFound === false) throw e
+        }
+      })()
+    }
+  }
+
+  public async probe(clip: MediaClipParsed) {
+    await this.lazy_init()
+    const { id, source } = clip
+    const stats = await Deno.stat(source)
+    // some platforms dont set mtime (like windows). We can cross that bridge when we get to it
+    if (stats.mtime === null) throw new Error('unexpected null mtime. Cannot infer when files have updated.')
+    if (this.clip_info_cache_map[source]) {
+      const cached_timestamp = this.clip_info_cache_map[source].timestamp
+      if (cached_timestamp === stats.mtime.toString()) {
+        this.set(id, this.clip_info_cache_map[source])
+        return this.get_or_throw(id)
+      }
+    }
+    if (Object.hasOwn(this.in_flight_info_map, source)) {
+      const result = await this.in_flight_info_map[source]
+      this.set(id, result)
+      return result
+    }
+    this.in_flight_info_map[source] = probe(this.instance, clip, stats)
+    const clip_info = await this.in_flight_info_map[source]
+    this.set(id, clip_info)
+    this.clip_info_cache_map[source] = clip_info
+    delete this.in_flight_info_map[source]
+    await Deno.writeTextFile(this.probe_info_filepath, JSON.stringify(this.clip_info_cache_map))
+    return clip_info
+  }
 }
 
-export { probe_clips }
-export type { ClipInfoMap }
+async function probe(instance: InstanceContext, clip: MediaClipParsed, stats: Deno.FileInfo): Promise<ClipInfo> {
+  instance.logger.info(`Probing asset ${path.relative(Deno.cwd(), clip.source)}`)
+  const { id, source } = clip
+  const timestamp = stats.mtime!.toString()
+
+  const result = await exec([
+    'ffprobe',
+    '-v',
+    'error',
+    '-print_format',
+    'json',
+    '-show_streams',
+    '-show_entries',
+    'stream=width,height,display_aspect_ratio,codec_type,codec_name,avg_frame_rate:stream_tags=rotate',
+    // 'format=duration',
+    source,
+  ])
+  const info = JSON.parse(result)
+  const video_stream = info.streams.find((s: any) => s.codec_type === 'video')
+  const audio_stream = info.streams.find((s: any) => s.codec_type === 'audio')
+
+  if (!video_stream) throw new ProbeError(`Input "${source}" has no video stream`)
+  const has_audio = audio_stream !== undefined
+  const rotation_str = video_stream.tags?.rotate ?? video_stream.side_data_list?.find((c:any) => c.rotation)?.rotation ?? '0'
+  let rotation = parseInt(rotation_str)
+  // let rotation = video_stream.tags?.rotate ? (parseInt(video_stream.tags?.rotate) * Math.PI) / 180.0 : 0
+  let { width, height } = video_stream
+  ;({ width, height } = compute_rotated_size({ width, height }, rotation))
+
+  let aspect_ratio = width / height
+  if (video_stream.display_aspect_ratio) {
+    aspect_ratio = parse_aspect_ratio(video_stream.display_aspect_ratio, rotation)
+  }
+
+  if (['mjpeg', 'jpeg', 'jpg', 'png'].includes(video_stream.codec_name)) {
+    const duration = Infinity
+    const framerate = 60
+    return {
+      type: 'image' as const,
+      filepath: source,
+      id,
+      width,
+      height,
+      aspect_ratio,
+      has_audio,
+      duration,
+      framerate,
+      timestamp,
+    }
+  } else {
+    const framerate = eval(video_stream.avg_frame_rate)
+    // ffprobe's duration is unreliable. The best solutions I have are:
+    // 1. ffmpeg guessing: https://stackoverflow.com/a/33115316/3795137
+    // 2. ffprobe packets: https://stackoverflow.com/a/33346572/3795137 but this is a ton of output, so were using ffmpeg
+    // I picked #2 because #1 is very slow to complete, it has to iterate the whole video, often at regular playback speed
+    let packet_str_buffer: string[] = []
+    const out = await exec(['ffprobe', '-v', 'error', '-show_packets', '-i', source], (line) => {
+      if (line === '[PACKET]') packet_str_buffer = []
+      packet_str_buffer.push(line)
+    })
+    const packet = parse_ffmpeg_packet(packet_str_buffer)
+    const duration = parseFloat(packet.dts_time)
+    return {
+      type: 'video' as const,
+      filepath: source,
+      id,
+      width,
+      height,
+      aspect_ratio,
+      has_audio,
+      framerate,
+      duration,
+      timestamp,
+    }
+  }
+}
+
+export { ClipInfoMap }
+export type { ClipInfo }

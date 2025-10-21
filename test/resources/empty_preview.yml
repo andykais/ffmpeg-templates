@@ -6,8 +6,8 @@ clips:
     duration: '2'
 
 timeline:
-  00:00:00: [['CLIP_0']]
-
-  00:00:04: [['CLIP_1']]
+  - id: CLIP_0
+  - id: CLIP_1
+    offset: '00:00:04'
 
 preview: '3'

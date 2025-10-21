@@ -1,13 +1,13 @@
 class InputError extends Error {
-  name = 'InputError'
+  override name = 'InputError'
 }
 
 class CommandError extends Error {
-  name = 'CommandError'
+  override name = 'CommandError'
 }
 
 class ProbeError extends Error {
-  name = 'ProbeError'
+  override name = 'ProbeError'
 }
 
 export { InputError, CommandError, ProbeError }

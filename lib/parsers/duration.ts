@@ -1,8 +1,15 @@
 import { InputError } from '../errors.ts'
-import type * as template_parsed from './template.ts'
+import type * as inputs from '../template_input.ts'
+import type { Context } from '../context.ts'
 
 type Seconds = number
 
+interface CaseLambdas {
+  keypoint?: (timestamp: number) => number
+  default?: (timestamp: number) => number
+}
+
+// TODO we evaluate right to left. We need to evaluate left to right! E.g. 3 - 1 - 2 is 0, not 6!
 // TODO add math expressions. These should be valid:
 // "00:00:00,0000"
 // "00:00:00.0000"
@@ -10,8 +17,8 @@ type Seconds = number
 // "00:00:03.0000 - 00:00:01.1 - 00:00:00.5"
 // "00:00:03.0000 + {CLIP_0.trim.start}"
 const duration_var_regex = /\{([a-zA-Z0-9._-]+)\}/
-const parens_regex = /^\(.*?\)/
-function parse_duration(duration_expr: string, template: template_parsed.Template): Seconds {
+const parens_regex = /^\(.*\)/
+function parse_duration_expr(context: Context, duration_expr: string ): Seconds {
   try {
     let current_duration_expr = duration_expr.trim()
     const [parens_expr] = current_duration_expr.match(parens_regex) ?? [null]
@@ -20,20 +27,19 @@ function parse_duration(duration_expr: string, template: template_parsed.Templat
     let expr_rhs: string[] = []
     if (parens_expr) {
       const duration_lhs_expr = current_duration_expr.substring(1, parens_expr.length - 1)
-      duration_lhs = parse_duration(duration_lhs_expr, template)
+      duration_lhs = parse_duration(context, duration_lhs_expr)
       ;[operator, ...expr_rhs] = current_duration_expr.substr(parens_expr.length).trim().split(' ').map(s => s.trim())
     } else {
       let duration_lhs_expr = ''
       ;[duration_lhs_expr, operator, ...expr_rhs] = current_duration_expr.split(' ').map(s => s.trim())
       const [_,variable_expr] = duration_lhs_expr.match(duration_var_regex) ?? []
       if (variable_expr) {
-        const [clip_id, ...fields] = variable_expr.split('.')
-        const clip = template.clips.find(c => c.id === clip_id)
-        if (clip) {
-          const duration_field_hopefully = fields.reduce((obj: any, key) => obj[key], clip)
-          if (duration_field_hopefully) duration_lhs = parse_duration(duration_field_hopefully, template)
-          else throw new InputError(`Invalid duration "${duration_lhs_expr}". Specified clip field for clip "${clip_id}" is undefined`)
+        const [variable_name, ...accessors] = variable_expr.split('.')
+        if (variable_name === 'keypoints') {
+          if (accessors.length !== 1) throw new InputError('invalid access to keypoint.')
+          return context.get_keypoint(accessors[0])
         }
+        throw new InputError('Duration variable syntax is unimplemented.')
       } else {
         duration_lhs = duration_lhs_expr.split(':').reverse().reduce((acc, s,i) => acc+parseFloat(s)*Math.pow(60,i), 0)
       }
@@ -42,13 +48,13 @@ function parse_duration(duration_expr: string, template: template_parsed.Templat
       if (operator && expr_rhs.length) {
         switch(operator) {
             case '+':
-              return duration_lhs + parse_duration(expr_rhs.join(' '), template)
+              return duration_lhs + parse_duration(context, expr_rhs.join(' '))
             case '-':
-              return duration_lhs - parse_duration(expr_rhs.join(' '), template)
+              return duration_lhs - parse_duration(context, expr_rhs.join(' ')) 
             case '/':
-              return duration_lhs / parse_duration(expr_rhs.join(' '), template)
+              return duration_lhs / parse_duration(context, expr_rhs.join(' '))
             case '*':
-              return duration_lhs * parse_duration(expr_rhs.join(' '), template)
+              return duration_lhs * parse_duration(context, expr_rhs.join(' '))
             default:
               throw new InputError(`Invalid duration "${duration_expr}". Expected "+,-,/,*" where "${operator}" was`)
         }
@@ -59,38 +65,45 @@ function parse_duration(duration_expr: string, template: template_parsed.Templat
 
     return duration_lhs
   } catch (e) {
-    if (e.name === 'TypeError') {
+    if (e instanceof Error && e.name === 'TypeError') {
       throw new InputError(`Invalid duration "${duration_expr}". Cannot parse`)
     } else throw e
   }
 }
 
-function parse_aspect_ratio(aspect_ratio: string, rotation?: number) {
-  const parts = aspect_ratio.split(':').map(part => parseInt(part))
-  if (parts.length !== 2 || parts.some(Number.isNaN))
-    throw new Error(`aspect ratio ${aspect_ratio} parsed incorrectly.`)
-  let [width, height] = parts
-  if (rotation) {
-    ;[height, width] = [
-      Math.abs(width * Math.sin(rotation)) + Math.abs(height * Math.cos(rotation)),
-      Math.abs(width * Math.cos(rotation)) + Math.abs(height * Math.sin(rotation)),
-    ].map(Math.floor)
+function parse_duration(context: Context, duration_expr: string | inputs.KeypointReference, case_lambdas?: CaseLambdas): Seconds {
+  if (typeof duration_expr === 'object') {
+    if (case_lambdas?.keypoint === undefined) throw new Error('Keypoints must be supported for this duration parse.')
+    const keypoint_timestamp = context.get_keypoint(duration_expr.keypoint)
+    const offset = parse_duration_expr(context, duration_expr.offset ?? '0')
+    return case_lambdas.keypoint(keypoint_timestamp + offset)
+  } else {
+    const result = parse_duration_expr(context, duration_expr)
+    if (case_lambdas?.default) {
+      return case_lambdas.default(result)
+    } else {
+      return result
+    }
   }
-  return width / height
 }
 
-function parse_ffmpeg_packet(packet_buffer: string[]) {
-  const object: { [key: string]: string } = {}
-  for (const line of packet_buffer) {
-    const [key, value] = line.split('=')
-    object[key] = value
+function fmt_human_readable_duration(seconds: number) {
+  let output = seconds
+  let unit = 's'
+  if (seconds > 60) {
+    output = seconds / 60
+    unit = 'm'
   }
-  return object
+
+  return `${output.toFixed(2)}${unit}`
 }
+
 
 export {
   parse_duration,
-  parse_aspect_ratio,
-  parse_ffmpeg_packet,
+  // parse_aspect_ratio,
+  // parse_ffmpeg_packet,
+  fmt_human_readable_duration,
 }
+
 export type { Seconds }

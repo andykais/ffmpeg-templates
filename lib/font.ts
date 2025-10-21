@@ -81,16 +81,20 @@ async function replace_font_clips_with_image_clips(
           'none',
           '-border',
           '12',
-          '(',
-          '+clone',
-          '-morphology',
-          'dilate',
-          `disk:${clip.font.background_radius}`,
-          ')',
-          '+swap',
-          '-composite'
         )
         // +swap -composite
+        if (clip.font.background_radius) {
+          magick_command.push(
+            '(',
+            '+clone',
+            '-morphology',
+            'dilate',
+            `disk:${clip.font.background_radius}`,
+            ')',
+            '+swap',
+            '-composite'
+          )
+        }
       }
       // TODO is this unnecessary? It effs with the width and point sizes (since we scale to the specified size)
       // if we do need to re-enable this, we will need a font-specific width param
@@ -98,6 +102,7 @@ async function replace_font_clips_with_image_clips(
       magick_command.push(filepath)
       // console.log(magick_command.join(' '))
 
+      console.log(magick_command.join(' '))
       const proc = Deno.run({ cmd: magick_command })
       const result = await proc.status()
       if (!result.success) {

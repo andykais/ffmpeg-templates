@@ -1,15 +1,13 @@
 import { InputError } from './errors.ts'
 import { parse_unit } from './parsers/unit.ts'
-import { AbstractClipMap } from './parsers/template.ts'
-import type { ClipID } from './template_input.ts'
-import type * as template_parsed from './parsers/template.ts'
-import type { ClipInfoMap } from './probe.ts'
+import { AbstractClipMap } from './util.ts'
+import type { Context } from './context.ts'
+import type { DetailedSizeUnit } from './template_input.ts'
+import type { TemplateParsed, MediaClipParsed, LayoutParsed, SizeParsed } from './parsers/template.ts'
 
 interface ComputedGeometry {
-  x: number | string
-  y: number | string
-  width: number
-  height: number
+  x: number
+  y: number
   scale: { width: number; height: number }
   rotate?: { degrees: number; width: number; height: number }
   crop?: {
@@ -22,7 +20,7 @@ interface ComputedGeometry {
 class ClipGeometryMap extends AbstractClipMap<ComputedGeometry> {}
 
 function compute_rotated_size(size: { width: number; height: number }, rotation?: number) {
-  if (!rotation) return size
+  if (!rotation) return { width: size.width, height: size.height }
   const radians = (rotation * Math.PI) / 180.0
   const [height, width] = [
     Math.abs(size.width * Math.sin(radians)) + Math.abs(size.height * Math.cos(radians)),
@@ -32,49 +30,149 @@ function compute_rotated_size(size: { width: number; height: number }, rotation?
   return { width, height }
 }
 
-function compute_background_size(template: template_parsed.Template, clip_info_map: ClipInfoMap) {
-  const { size } = template
+function compute_background_size(context: Context) {
+  const { size } = context.template
 
-  const compute_size = () => {
-    const info = clip_info_map.get_or_else(size.relative_to)
-    const { rotate } = template.clips.find((c) => c.id === size.relative_to)!
-    return compute_rotated_size(info, rotate)
-  }
-  const background_width = parse_unit(size.width, {
-    percentage: (p) => Math.floor(p * compute_size().width),
+  const info = context.clip_info_map.get_or_throw(size.relative_to)
+  const { rotate } = context.get_clip(size.relative_to)
+  const relative_to_dimensions = compute_rotated_size(info, rotate)
+
+  let background_width = parse_unit(size.width, {
+    percentage: (p) => Math.floor(p * relative_to_dimensions.width),
+    undefined: ()  => relative_to_dimensions.width,
+    min: p => {
+      throw new Error('unimplemented')
+    },
+    max: p => {
+      throw new Error('unimplemented')
+    }
   })
   const background_height = parse_unit(size.height, {
-    percentage: (p) => Math.floor(p * compute_size().height),
+    percentage: (p) => Math.floor(p * relative_to_dimensions.height),
+    undefined: ()  => relative_to_dimensions.height,
+    min: p => {
+      throw new Error('unimplemented')
+    },
+    max: p => {
+      throw new Error('unimplemented')
+    }
   })
-  return { background_width, background_height }
+  return { width: background_width, height: background_height }
+}
+
+
+function compute_size(context: Context, size: SizeParsed, aspect_ratio?: number, default_size?: { width: number; height: number }) {
+  const info = context.get_clip_dimensions(size.relative_to)
+  const relative_to_dimensions = compute_rotated_size(info, info.rotation)
+  default_size = default_size ?? {width: info.width, height: info.height}
+
+  let min_width: number | undefined
+  let max_width: number | undefined
+  let input_width = parse_unit(size.width, {
+    percentage: (p) => Math.floor(p * relative_to_dimensions.width),
+    undefined: () => null,
+    min: p => {
+      min_width = p
+      return p
+    },
+    max: p => {
+      max_width = p
+      return p
+    },
+  })
+  let min_height: number | undefined
+  let max_height: number | undefined
+  const input_height = parse_unit(size.height, {
+    percentage: (p) => Math.floor(p * relative_to_dimensions.height),
+    undefined: () => null,
+    min: p => {
+      min_height = p
+      return p
+    },
+    max: p => {
+      max_height = p
+      return p
+    },
+  })
+
+  let width = input_width ?? ((input_height && aspect_ratio) ? input_height * aspect_ratio : default_size.width)
+  let height = input_height ?? ((input_width && aspect_ratio) ? input_width / aspect_ratio : default_size.height)
+  // ffmpeg will round down the scale filter, so we need to round down early to avoid "Invalid too big or non positive size for width '...' or height '...'" errors with crops
+
+  if (max_width && width > max_width) {
+    const scale = width / max_width
+    height /= scale
+    width = max_width
+    // console.log('shrinking by max_width', {width, height, scale})
+  }
+
+  if (max_height && height > max_height) {
+    const scale = height / max_height
+    width /= scale
+    height = max_height
+    // console.log('shrinking by max_height', {width, height, scale})
+  }
+
+  if (min_width && width < min_width) {
+    const scale = width / min_width
+    height /= scale
+    width = min_width
+    // console.log('growing by min_width', {width, height, scale})
+  }
+  if (min_height && height < min_height) {
+    const scale = height / min_height
+    width /= scale
+    height = min_height
+    // console.log('growing by min_height', {width, height, scale})
+  }
+
+  ;[width, height] = [width, height].map(Math.floor)
+  return { width, height }
+}
+
+
+function compute_layout_coordinates(context: Context, layout: LayoutParsed, scale: {width: number; height: number}) {
+  const relative_to = context.get_clip_dimensions(layout.relative_to)
+  const parse_offset = (relative_to: number, offset: string) => parse_unit(offset, {
+    percentage: p => p * relative_to
+  })
+  let x = parse_offset(relative_to.width, layout.x.offset)
+  let y = parse_offset(relative_to.height, layout.y.offset)
+
+  switch (layout.x.align) {
+    case 'left':
+      break
+    case 'right':
+      x = relative_to.width - scale.width + x
+      break
+    case 'center':
+      x = relative_to.width / 2 - scale.width / 2 + x
+      break
+  }
+  switch (layout.y.align) {
+    case 'top':
+      break
+    case 'bottom':
+      y = relative_to.height - scale.height + y
+      break
+    case 'center':
+      y = relative_to.height / 2 - scale.height / 2 + y
+      break
+  }
+  return { x ,y }
 }
 
 function compute_geometry(
-  template: template_parsed.Template,
-  background_width: number,
-  background_height: number,
-  clip_info_map: ClipInfoMap
+  context: Context,
+  clips: MediaClipParsed[]
 ) {
   const clip_geometry_map = new ClipGeometryMap()
-  for (const clip of template.clips) {
-    const info = clip_info_map.get_or_else(clip.id)
-    const { layout } = clip
+  // console.log(clips)
+  for (const clip of clips) {
+    const clip_info = context.clip_info_map.get_or_throw(clip.id)
+    const { layout, } = clip
 
-    const input_width = parse_unit(layout?.width, {
-      percentage: (p) => p * background_width,
-      undefined: () => null,
-    })
-    const input_height = parse_unit(layout?.height, {
-      percentage: (p) => p * background_height,
-      undefined: () => null,
-    })
-
-    let width = input_width ?? (input_height ? input_height * info.aspect_ratio : info.width)
-    let height = input_height ?? (input_width ? input_width / info.aspect_ratio : info.height)
-    // ffmpeg will round down the scale filter, so we need to round down early to avoid "Invalid too big or non positive size for width '...' or height '...'" errors with crops
-    ;[width, height] = [width, height].map(Math.floor)
-
-    let scale = { width, height }
+    let {width, height} = compute_size(context, layout, clip_info.aspect_ratio, clip_info)
     let rotate: ComputedGeometry['rotate'] = undefined
     if (clip.rotate) {
       // we want scaling to happen before rotation because (on average) we scale down, and if we can scale
@@ -83,83 +181,121 @@ function compute_geometry(
       rotate = { degrees: clip.rotate, width, height }
     }
 
+    const parse_offset = (relative_to: number, offset: string) => parse_unit(offset, {
+      percentage: p => p * relative_to
+    })
     let crop: ComputedGeometry['crop']
     if (clip.crop && Object.keys(clip.crop).length) {
-      const width_relative_to_crop = width
-      const height_relative_to_crop = height
-      const { left, right, top, bottom } = clip.crop
-      let x_crop = 0
-      let y_crop = 0
-      let width_crop = scale.width
-      let height_crop = scale.height
+      // NOTE crop x & y are only  relative themselves. It doesnt make a ton of sense to make these relative to anything else,
+      // even though it makes sense to let width/height be relative to other things
+      // let crop_size = compute_size(context, clip.crop, clip_info.aspect_ratio)
 
-      if (right) {
-        const r = parse_unit(right, { percentage: (p) => p * width_relative_to_crop })
-        width_crop = width_crop - r
-        width -= r
+      // NOTE relative size is _correct_ for relative to itself,
+      // but it will be wrong if it is relative to another clip whose scale has changed.
+      // to fix this, geometry will need to keep a stateful dimensions map similar to how timeline variable_length clips work
+      const relative_size = clip.crop.relative_to === clip.id
+        ? {width, height}
+        : context.get_clip_dimensions(clip.crop.relative_to)
+
+      const parse_dimension = (relative_side: number, default_side: number, side?: string | DetailedSizeUnit) => parse_unit(side, {
+        percentage: (p) => Math.floor(p * relative_side),
+        undefined: () => default_side
+      })
+      const crop_size = {
+        width: parse_dimension(relative_size.width, width, clip.crop.width),
+        height: parse_dimension(relative_size.height, height, clip.crop.height),
       }
-      if (bottom) {
-        const b = parse_unit(bottom, { percentage: (p) => p * height_relative_to_crop })
-        height_crop = height_crop - b
-        height -= b
+      // if (width > crop_size.width) 
+      // if (width < crop_size.width) throw new InputError(`Invalid clip on clip ${clip.id}. Cannot specify a layout width (${width}) smaller than a crop width (${crop_size.width})`)
+      // if (height < crop_size.height) throw new InputError(`Invalid clip on clip ${clip.id}. Cannot specify a layout height (${height}) smaller than a crop height (${crop_size.height})`)
+
+      let x = parse_offset(crop_size.width, clip.crop.x.offset)
+      let y = parse_offset(crop_size.height, clip.crop.y.offset)
+      switch (clip.crop.x.align) {
+        case 'left':
+          break
+        case 'right':
+          x = width - crop_size.width + x
+          // x = relative_to.width - scale.width + x
+          break
+        case 'center':
+          x = width / 2 - crop_size.width / 2 + x
+          break
       }
-      if (left) {
-        const l = parse_unit(left, { percentage: (p) => p * width_relative_to_crop })
-        x_crop = l
-        width -= l
-        width_crop = width_crop - x_crop
+      switch (clip.crop.y.align) {
+        case 'top':
+          break
+        case 'bottom':
+          y = height - crop_size.height + y
+          break
+        case 'center':
+          y = height / 2 - crop_size.height / 2 + y
+          break
       }
-      if (top) {
-        const t = parse_unit(top, { percentage: (p) => p * height_relative_to_crop })
-        y_crop = t
-        height -= t
-        height_crop = height_crop - y_crop
+      if ((x + crop_size.width) > width) throw new InputError(`Invalid crop offset. Crop x position (${x}) cannot exceed crop width (${crop_size.width}) - max scale (${width})`)
+      if ((y + crop_size.height) > height) throw new InputError(`Invalid crop offset. Crop x position (${y}) cannot exceed crop height (${crop_size.height}) - max scale (${height})`)
+      crop = {
+        x,
+        y,
+        ...crop_size
       }
-      crop = { width: width_crop, height: height_crop, x: x_crop, y: y_crop }
+      // width += (width - crop_size.width)
     }
-    let x: number = 0
-    let y: number = 0
-    let x_align = 'left'
-    let y_align = 'top'
-    // if (typeof layout?.x?.offset) x = parse_pixels(layout.x.offset)
 
-    const parse_value = (relative_to: number) => (v: string | undefined) =>
-      parse_unit(v, { pixels: (x) => x, percentage: (x) => relative_to * x, undefined: () => 0 })
-    const parse_x = parse_value(background_width)
-    const parse_y = parse_value(background_height)
+    const relative_to = context.get_clip_dimensions(layout.relative_to)
+    let x = parse_offset(relative_to.width, layout.x.offset)
+    let y = parse_offset(relative_to.height, layout.y.offset)
 
-    if (typeof layout?.x === 'object') x = parse_x(layout.x.offset)
-    else if (typeof layout?.x === 'string') x = parse_x(layout.x)
-    x_align = typeof layout?.x === 'object' ? layout.x.align ?? 'left' : 'left'
-
-    if (typeof layout?.y === 'object') y = parse_y(layout.y.offset)
-    else if (typeof layout?.y === 'string') y = parse_y(layout.y)
-    y_align = typeof layout?.y === 'object' ? layout.y.align ?? 'left' : 'left'
-
-    switch (x_align) {
+    const crop_size = crop ?? {width, height}
+    switch (layout.x.align) {
       case 'left':
         break
       case 'right':
-        x = background_width - width + x
+        x = relative_to.width - (crop_size.width + x)
         break
       case 'center':
-        x = background_width / 2 - width / 2 + x
+        x = relative_to.width / 2 - (crop_size.width / 2 + x)
         break
     }
-    switch (y_align) {
+    switch (layout.y.align) {
       case 'top':
         break
       case 'bottom':
-        y = background_height - height + y
+        console.log('bottom text?', clip.id, 'before:', y)
+        y = relative_to.height - crop_size.height + y
+        console.log('bottom text?', clip.id, 'after:', y)
         break
       case 'center':
-        y = background_height / 2 - height / 2 + y
+        y = relative_to.height / 2 - crop_size.height / 2 + y
         break
     }
-    clip_geometry_map.set(clip.id, { x, y, width, height, scale, rotate, crop })
+
+    if (crop && crop.width > width) throw new InputError(`Invalid crop for clip ${clip.id}. Crop width (${crop.width}) cannot exceed layout width (${width})`)
+    if (crop && crop.height > height) throw new InputError(`Invalid crop for clip ${clip.id}. Crop height (${crop.height}) cannot exceed layout height (${height})`)
+    const geometry = {
+      x,
+      y,
+      scale: { width, height },
+      rotate,
+      crop,
+    }
+
+    clip_geometry_map.set(clip.id, geometry)
   }
+
   return clip_geometry_map
 }
 
-export { compute_rotated_size, compute_background_size, compute_geometry }
-export type { ClipGeometryMap }
+
+
+
+
+
+
+
+
+
+
+
+export { compute_rotated_size, compute_size, compute_background_size, compute_geometry }
+export type { ClipGeometryMap, ComputedGeometry }

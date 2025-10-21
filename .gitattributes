@@ -1,0 +1,2 @@
+# exclude deno.lock from git diff
+deno.lock -diff
